@@ -4,7 +4,8 @@ pub mod http_runner;
 use std::collections::HashMap;
 use rust_core::dto::{
     GrpcExecutionRequest, GrpcExecutionResponse, GrpcReflectionRequest, GrpcReflectionResponse,
-    HttpExecutionRequest, HttpExecutionResponse,
+    GrpcSamplePayloadRequest, GrpcSamplePayloadResponse, HttpExecutionRequest,
+    HttpExecutionResponse,
 };
 
 #[cfg(feature = "desktop")]
@@ -34,6 +35,14 @@ mod commands {
     ) -> GrpcReflectionResponse {
         grpc_runner::run_grpc_reflection(req, variables).await
     }
+
+    #[tauri::command]
+    pub async fn generate_grpc_sample_payload(
+        req: GrpcSamplePayloadRequest,
+        variables: HashMap<String, String>,
+    ) -> GrpcSamplePayloadResponse {
+        grpc_runner::run_grpc_sample_payload(req, variables).await
+    }
 }
 
 #[cfg(not(feature = "desktop"))]
@@ -60,6 +69,13 @@ mod commands {
     ) -> GrpcReflectionResponse {
         grpc_runner::run_grpc_reflection(req, variables).await
     }
+
+    pub async fn generate_grpc_sample_payload(
+        req: GrpcSamplePayloadRequest,
+        variables: HashMap<String, String>,
+    ) -> GrpcSamplePayloadResponse {
+        grpc_runner::run_grpc_sample_payload(req, variables).await
+    }
 }
 
 pub use commands::*;
@@ -71,7 +87,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             execute_http_request,
             execute_grpc_request,
-            discover_grpc_services
+            discover_grpc_services,
+            generate_grpc_sample_payload
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -5,6 +5,8 @@ import type {
   GrpcExecutionResponse,
   GrpcReflectionRequest,
   GrpcReflectionResponse,
+  GrpcSamplePayloadRequest,
+  GrpcSamplePayloadResponse,
 } from '@api-lab/api-types';
 
 async function isTauri(): Promise<boolean> {
@@ -96,5 +98,23 @@ export async function discoverNativeGrpcServices(
   return {
     services: [],
     error: 'gRPC reflection requires native desktop runtime. Please run inside the Tauri desktop client.',
+  };
+}
+
+export async function generateNativeGrpcSamplePayload(
+  req: GrpcSamplePayloadRequest,
+  variables: Record<string, string>
+): Promise<GrpcSamplePayloadResponse> {
+  if (await isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<GrpcSamplePayloadResponse>('generate_grpc_sample_payload', {
+      req,
+      variables,
+    });
+  }
+
+  return {
+    payload: {},
+    error: 'Sample payload generation requires native desktop runtime.',
   };
 }

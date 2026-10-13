@@ -1,10 +1,12 @@
 import React, { useRef } from 'react';
+import { tokenizeJsonLine, type VariableSource } from '../../utils/variableHighlight';
 
 interface JsonEditorProps {
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;
   className?: string;
+  variables?: VariableSource;
 }
 
 export const JsonEditor: React.FC<JsonEditorProps> = ({
@@ -12,6 +14,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   onChange,
   placeholder,
   className = '',
+  variables,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
@@ -48,55 +51,49 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     }
   }
 
-  // Highlight syntax tokens: keys, strings, numbers, booleans, variables {{VAR}}
+  // Highlight syntax tokens: keys, strings, numbers, booleans, variables {{VAR}} (defined vs undefined)
   function highlightJson(raw: string): React.ReactNode[] {
     const lines = raw.split('\n');
     return lines.map((line, lIdx) => {
-      const regex = /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\{\{[A-Za-z0-9_]+\}\}|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}[\],:])/g;
-
-      let lastIndex = 0;
-      const elements: React.ReactNode[] = [];
-      let match;
-
-      while ((match = regex.exec(line)) !== null) {
-        if (match.index > lastIndex) {
-          elements.push(line.substring(lastIndex, match.index));
-        }
-
-        const token = match[0];
-        let colorClass = 'text-zinc-200';
-
-        if (token.startsWith('{{') && token.endsWith('}}')) {
-          colorClass = 'text-amber-400 font-bold bg-amber-950/40 px-0.5 rounded';
-        } else if (token.endsWith(':')) {
-          colorClass = 'text-indigo-400 font-medium';
-        } else if (token.startsWith('"')) {
-          colorClass = 'text-emerald-300';
-        } else if (token === 'true' || token === 'false') {
-          colorClass = 'text-orange-400 font-medium';
-        } else if (token === 'null') {
-          colorClass = 'text-rose-400 font-medium italic';
-        } else if (/^-?\d/.test(token)) {
-          colorClass = 'text-cyan-400';
-        } else if (/[{}[\],]/.test(token)) {
-          colorClass = 'text-zinc-500 font-bold';
-        }
-
-        elements.push(
-          <span key={`${lIdx}-${match.index}`} className={colorClass}>
-            {token}
-          </span>
-        );
-        lastIndex = regex.lastIndex;
-      }
-
-      if (lastIndex < line.length) {
-        elements.push(line.substring(lastIndex));
-      }
-
+      const tokens = tokenizeJsonLine(line, variables);
       return (
         <React.Fragment key={lIdx}>
-          {elements}
+          {tokens.map((token, tIdx) => {
+            let colorClass = 'text-zinc-200';
+            if (token.type === 'variable') {
+              colorClass = token.isDefined
+                ? 'text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-800/50 px-0.5 rounded'
+                : 'text-rose-300 font-bold bg-rose-950/60 border border-rose-800/50 px-0.5 rounded';
+            } else if (token.type === 'key') {
+              colorClass = 'text-indigo-400 font-medium';
+            } else if (token.type === 'string') {
+              colorClass = 'text-emerald-300';
+            } else if (token.type === 'boolean') {
+              colorClass = 'text-orange-400 font-medium';
+            } else if (token.type === 'null') {
+              colorClass = 'text-rose-400 font-medium italic';
+            } else if (token.type === 'number') {
+              colorClass = 'text-cyan-400';
+            } else if (token.type === 'delimiter') {
+              colorClass = 'text-zinc-500 font-bold';
+            }
+
+            return (
+              <span
+                key={`${lIdx}-${tIdx}`}
+                className={colorClass}
+                title={
+                  token.type === 'variable'
+                    ? token.isDefined
+                      ? `Defined variable: ${token.varName}`
+                      : `Undefined variable: ${token.varName}`
+                    : undefined
+                }
+              >
+                {token.text}
+              </span>
+            );
+          })}
           {lIdx < lines.length - 1 && '\n'}
         </React.Fragment>
       );
