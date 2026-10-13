@@ -93,11 +93,13 @@ pub struct InvitationResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateCollectionDto {
     pub name: String,
+    pub settings: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateCollectionDto {
     pub name: Option<String>,
+    pub settings: Option<serde_json::Value>,
     pub sort_order: Option<i32>,
 }
 
@@ -244,6 +246,9 @@ pub struct GrpcMethodSummary {
     pub name: String,
     pub input_type: String,
     pub output_type: String,
+    pub is_client_streaming: bool,
+    pub is_server_streaming: bool,
+    pub stream_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

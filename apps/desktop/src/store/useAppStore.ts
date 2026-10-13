@@ -8,6 +8,12 @@ import type {
 } from '@api-lab/api-types';
 import { getAuthToken, setAuthToken } from '../api/client';
 
+export interface StreamMessageItem {
+  id: string;
+  timestamp: string;
+  payload: any;
+}
+
 interface AppState {
   token: string | null;
   user: UserSummary | null;
@@ -22,6 +28,14 @@ interface AppState {
 
   lastHttpResponse: HttpExecutionResponse | null;
   lastGrpcResponse: GrpcExecutionResponse | null;
+
+  // Streaming state
+  isStreaming: boolean;
+  activeStreamId: string | null;
+  streamMessages: StreamMessageItem[];
+  setIsStreaming: (isStreaming: boolean, streamId?: string | null) => void;
+  addStreamMessage: (msg: any) => void;
+  clearStreamMessages: () => void;
 
   // Modals
   authModalOpen: boolean;
@@ -59,6 +73,24 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastHttpResponse: null,
   lastGrpcResponse: null,
 
+  isStreaming: false,
+  activeStreamId: null,
+  streamMessages: [],
+  setIsStreaming: (isStreaming, streamId = null) =>
+    set({ isStreaming, activeStreamId: streamId }),
+  addStreamMessage: (msg) =>
+    set((state) => ({
+      streamMessages: [
+        ...state.streamMessages,
+        {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          timestamp: new Date().toLocaleTimeString(),
+          payload: msg,
+        },
+      ],
+    })),
+  clearStreamMessages: () => set({ streamMessages: [] }),
+
   authModalOpen: !getAuthToken(),
   authModalTab: 'login',
   envModalOpen: false,
@@ -91,6 +123,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeEndpoint: null,
       lastHttpResponse: null,
       lastGrpcResponse: null,
+      isStreaming: false,
+      activeStreamId: null,
+      streamMessages: [],
       authModalOpen: true,
       authModalTab: 'login',
     });
@@ -126,6 +161,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeEndpoint: null,
       lastHttpResponse: null,
       lastGrpcResponse: null,
+      isStreaming: false,
+      activeStreamId: null,
+      streamMessages: [],
     });
   },
 
@@ -137,6 +175,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeEndpointId: endpoint ? endpoint.id : null,
       lastHttpResponse: null,
       lastGrpcResponse: null,
+      isStreaming: false,
+      activeStreamId: null,
+      streamMessages: [],
     }),
 
   setLastHttpResponse: (res) => set({ lastHttpResponse: res }),

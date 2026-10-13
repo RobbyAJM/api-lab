@@ -118,3 +118,42 @@ export async function generateNativeGrpcSamplePayload(
     error: 'Sample payload generation requires native desktop runtime.',
   };
 }
+
+export async function executeNativeGrpcStream(
+  req: GrpcExecutionRequest,
+  variables: Record<string, string>,
+  streamId: string,
+  onMessage: (msg: any) => void
+): Promise<GrpcExecutionResponse> {
+  if (await isTauri()) {
+    const { invoke, Channel } = await import('@tauri-apps/api/core');
+    const channel = new Channel<any>();
+    channel.onmessage = (msg) => {
+      onMessage(msg);
+    };
+    return invoke<GrpcExecutionResponse>('execute_grpc_stream', {
+      req,
+      variables,
+      streamId,
+      channel,
+    });
+  }
+
+  return {
+    status_code: 14,
+    status_message: 'Native execution required',
+    response_time_ms: 0,
+    response_size_bytes: 0,
+    metadata: {},
+    body: [],
+    error: 'gRPC stream calls require native desktop runtime. Please run inside the Tauri desktop client.',
+  };
+}
+
+export async function cancelNativeGrpcStream(streamId: string): Promise<boolean> {
+  if (await isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<boolean>('cancel_grpc_stream', { streamId });
+  }
+  return false;
+}

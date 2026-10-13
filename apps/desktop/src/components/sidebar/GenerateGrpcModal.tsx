@@ -138,8 +138,30 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
 
       const result = await executeGrpcHierarchyCreation(collectionId, planned, apiCaller);
 
+      // Link server address to generated root folder in collection settings (Feature 3)
+      try {
+        const coll = await apiRequest<any>(`/collections/${collectionId}`);
+        const currentSources = coll.settings?.grpc_sources || {};
+        currentSources[result.rootFolderId] = {
+          server_address: serverAddress.trim(),
+          use_tls: useTls,
+        };
+        await apiRequest(`/collections/${collectionId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            settings: {
+              ...coll.settings,
+              grpc_sources: currentSources,
+            },
+          }),
+        });
+      } catch {
+        // ignore
+      }
+
       queryClient.invalidateQueries({ queryKey: ['folders', collectionId] });
       queryClient.invalidateQueries({ queryKey: ['endpoints', collectionId] });
+      queryClient.invalidateQueries({ queryKey: ['collections'] });
 
       setSuccessInfo(
         `Generated ${result.createdServiceFoldersCount} service folders and ${result.createdEndpointsCount} gRPC method endpoints under "${folderName.trim()}".`
@@ -164,7 +186,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
           <div className="flex items-center gap-2">
             <Radio size={16} className="text-purple-400" />
             <h2 className="text-xs font-semibold text-zinc-100">
-              Generate gRPC Collection from Reflection
+              Generate gRPC
             </h2>
           </div>
           <button
@@ -282,7 +304,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
               ) : (
                 <>
                   <FolderPlus size={12} />
-                  <span>Generate Collection</span>
+                  <span>Generate gRPC</span>
                 </>
               )}
             </button>

@@ -249,10 +249,23 @@ fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> Vec<G
                 .map(|m| {
                     let in_type = m.input_type.as_deref().unwrap_or("").trim_start_matches('.');
                     let out_type = m.output_type.as_deref().unwrap_or("").trim_start_matches('.');
+                    let client_streaming = m.client_streaming.unwrap_or(false);
+                    let server_streaming = m.server_streaming.unwrap_or(false);
+                    let stream_type = if client_streaming && server_streaming {
+                        "bidi_stream".to_string()
+                    } else if client_streaming || server_streaming {
+                        "omni_stream".to_string()
+                    } else {
+                        "unary".to_string()
+                    };
+
                     GrpcMethodSummary {
                         name: m.name.clone().unwrap_or_default(),
                         input_type: in_type.to_string(),
                         output_type: out_type.to_string(),
+                        is_client_streaming: client_streaming,
+                        is_server_streaming: server_streaming,
+                        stream_type,
                     }
                 })
                 .collect();
@@ -381,8 +394,9 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
 
     let mut tonic_req = tonic::Request::new(buf);
     for (k, v) in req.metadata {
-        if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(k.as_bytes()) {
-            if let Ok(val) = tonic::metadata::MetadataValue::try_from(v.as_str()) {
+        let key_lower = k.to_lowercase();
+        if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key_lower.as_bytes()) {
+            if let Ok(val) = tonic::metadata::MetadataValue::try_from(v.trim()) {
                 tonic_req.metadata_mut().insert(key, val);
             }
         }
@@ -485,6 +499,236 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
             body: serde_json::Value::Null,
             error: Some("gRPC request timed out".into()),
         },
+    }
+}
+
+pub async fn execute_streaming<F>(
+    req: GrpcExecutionRequest,
+    mut on_message: F,
+    mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+) -> GrpcExecutionResponse
+where
+    F: FnMut(serde_json::Value) + Send + 'static,
+{
+    let start = Instant::now();
+    let use_tls = req.use_tls.unwrap_or(false);
+
+    let channel = match create_channel(&req.server_address, use_tls).await {
+        Ok(c) => c,
+        Err(e) => {
+            return GrpcExecutionResponse {
+                status_code: 14,
+                status_message: format!("Connection failed: {e}"),
+                response_time_ms: start.elapsed().as_millis() as u64,
+                response_size_bytes: 0,
+                metadata: HashMap::new(),
+                body: serde_json::Value::Null,
+                error: Some(format!("Connection error: {e}")),
+            };
+        }
+    };
+
+    let pool = match fetch_pool_for_symbol(channel.clone(), &req.service).await {
+        Ok(p) => p,
+        Err(e) => {
+            return GrpcExecutionResponse {
+                status_code: 14,
+                status_message: "Reflection error".into(),
+                response_time_ms: start.elapsed().as_millis() as u64,
+                response_size_bytes: 0,
+                metadata: HashMap::new(),
+                body: serde_json::Value::Null,
+                error: Some(format!("Failed to retrieve service reflection: {e}")),
+            };
+        }
+    };
+
+    let service_desc = match pool.get_service_by_name(&req.service) {
+        Some(s) => s,
+        None => {
+            return GrpcExecutionResponse {
+                status_code: 12,
+                status_message: format!("Service '{}' not found", req.service),
+                response_time_ms: start.elapsed().as_millis() as u64,
+                response_size_bytes: 0,
+                metadata: HashMap::new(),
+                body: serde_json::Value::Null,
+                error: Some(format!("Service '{}' not found in server reflection", req.service)),
+            };
+        }
+    };
+
+    let method_desc = match service_desc.methods().find(|m| m.name() == req.method) {
+        Some(m) => m,
+        None => {
+            return GrpcExecutionResponse {
+                status_code: 12,
+                status_message: format!("Method '{}' not found", req.method),
+                response_time_ms: start.elapsed().as_millis() as u64,
+                response_size_bytes: 0,
+                metadata: HashMap::new(),
+                body: serde_json::Value::Null,
+                error: Some(format!("Method '{}' not found", req.method)),
+            };
+        }
+    };
+
+    let input_desc = method_desc.input();
+    let dynamic_input: DynamicMessage = match input_desc.deserialize(req.payload) {
+        Ok(msg) => msg,
+        Err(e) => {
+            return GrpcExecutionResponse {
+                status_code: 3,
+                status_message: format!("Invalid JSON: {e}"),
+                response_time_ms: start.elapsed().as_millis() as u64,
+                response_size_bytes: 0,
+                metadata: HashMap::new(),
+                body: serde_json::Value::Null,
+                error: Some(format!("Failed to parse payload: {e}")),
+            };
+        }
+    };
+
+    let mut buf = Vec::new();
+    if let Err(e) = prost::Message::encode(&dynamic_input, &mut buf) {
+        return GrpcExecutionResponse {
+            status_code: 3,
+            status_message: format!("Encoding error: {e}"),
+            response_time_ms: start.elapsed().as_millis() as u64,
+            response_size_bytes: 0,
+            metadata: HashMap::new(),
+            body: serde_json::Value::Null,
+            error: Some(format!("Failed to encode dynamic protobuf message: {e}")),
+        };
+    }
+
+    let mut grpc_client = tonic::client::Grpc::new(channel);
+    let path = format!("/{}/{}", req.service, req.method);
+    let http_path = match http::uri::PathAndQuery::from_maybe_shared(path.clone()) {
+        Ok(p) => p,
+        Err(e) => {
+            return GrpcExecutionResponse {
+                status_code: 3,
+                status_message: format!("Invalid RPC path: {e}"),
+                response_time_ms: start.elapsed().as_millis() as u64,
+                response_size_bytes: 0,
+                metadata: HashMap::new(),
+                body: serde_json::Value::Null,
+                error: Some(format!("Invalid path: {e}")),
+            };
+        }
+    };
+
+    let codec = DynamicRawCodec;
+    if let Err(e) = grpc_client.ready().await {
+        return GrpcExecutionResponse {
+            status_code: 14,
+            status_message: format!("Channel not ready: {e}"),
+            response_time_ms: start.elapsed().as_millis() as u64,
+            response_size_bytes: 0,
+            metadata: HashMap::new(),
+            body: serde_json::Value::Null,
+            error: Some(format!("Failed to prepare gRPC channel: {e}")),
+        };
+    }
+
+    let output_desc = method_desc.output();
+
+    // Call streaming based on whether method is client-streaming (bidi) or server-streaming (omni)
+    let is_client_streaming = method_desc.is_client_streaming();
+
+    let stream_res = if is_client_streaming {
+        let (tx, rx) = tokio::sync::mpsc::channel(10);
+        let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
+        let _ = tx.send(buf).await;
+        let mut tonic_req = tonic::Request::new(outbound);
+        for (k, v) in req.metadata {
+            let key_lower = k.to_lowercase();
+            if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key_lower.as_bytes()) {
+                if let Ok(val) = tonic::metadata::MetadataValue::try_from(v.trim()) {
+                    tonic_req.metadata_mut().insert(key, val);
+                }
+            }
+        }
+        grpc_client.streaming(tonic_req, http_path, codec).await
+    } else {
+        let mut tonic_req = tonic::Request::new(buf);
+        for (k, v) in req.metadata {
+            let key_lower = k.to_lowercase();
+            if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key_lower.as_bytes()) {
+                if let Ok(val) = tonic::metadata::MetadataValue::try_from(v.trim()) {
+                    tonic_req.metadata_mut().insert(key, val);
+                }
+            }
+        }
+        grpc_client.server_streaming(tonic_req, http_path, codec).await
+    };
+
+    match stream_res {
+        Ok(response) => {
+            let mut meta_map = HashMap::new();
+            for kv in response.metadata().iter() {
+                if let tonic::metadata::KeyAndValueRef::Ascii(k, v) = kv {
+                    if let Ok(str_val) = v.to_str() {
+                        meta_map.insert(k.as_str().to_string(), str_val.to_string());
+                    }
+                }
+            }
+
+            let mut inbound_stream = response.into_inner();
+            let mut received_messages = Vec::new();
+            let mut total_bytes = 0;
+
+            loop {
+                tokio::select! {
+                    _ = &mut cancel_rx => {
+                        break;
+                    }
+                    next_item = inbound_stream.next() => {
+                        match next_item {
+                            Some(Ok(bytes)) => {
+                                total_bytes += bytes.len();
+                                if let Ok(dynamic_output) = DynamicMessage::decode(output_desc.clone(), &bytes[..]) {
+                                    if let Ok(json_val) = serde_json::to_value(&dynamic_output) {
+                                        on_message(json_val.clone());
+                                        received_messages.push(json_val);
+                                    }
+                                }
+                            }
+                            Some(Err(_)) => {
+                                break;
+                            }
+                            None => {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            let elapsed = start.elapsed().as_millis() as u64;
+            GrpcExecutionResponse {
+                status_code: 0,
+                status_message: "Stream completed".into(),
+                response_time_ms: elapsed,
+                response_size_bytes: total_bytes,
+                metadata: meta_map,
+                body: serde_json::Value::Array(received_messages),
+                error: None,
+            }
+        }
+        Err(status) => {
+            let elapsed = start.elapsed().as_millis() as u64;
+            GrpcExecutionResponse {
+                status_code: status.code() as i32,
+                status_message: status.message().to_string(),
+                response_time_ms: elapsed,
+                response_size_bytes: 0,
+                metadata: HashMap::new(),
+                body: serde_json::Value::Null,
+                error: Some(format!("Streaming RPC error: {}", status.message())),
+            }
+        }
     }
 }
 
