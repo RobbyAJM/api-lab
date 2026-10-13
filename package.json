@@ -1,0 +1,13 @@
+{
+  "name": "api-lab-monorepo",
+  "private": true,
+  "scripts": {
+    "dev:desktop": "pnpm --filter @api-lab/desktop dev",
+    "build:desktop": "pnpm --filter @api-lab/desktop build",
+    "server:run": "cargo run -p api-lab-server",
+    "test:rust": "cargo test --workspace"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}

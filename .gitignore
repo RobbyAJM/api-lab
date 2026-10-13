@@ -1,0 +1,17 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# Node
+node_modules/
+dist/
+build/
+.pnpm-store/
+
+# Tauri
+apps/desktop/src-tauri/target/
+
+# Environment & logs
+.env
+*.log
