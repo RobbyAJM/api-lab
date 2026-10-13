@@ -1,0 +1,28 @@
+[package]
+name = "api-lab-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rust-core = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+sqlx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+aes-gcm = { workspace = true }
+rand = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tower = { workspace = true }
+http-body-util = { workspace = true }
+grpc-client = { workspace = true }
