@@ -5,6 +5,7 @@ import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse } from '@api-lab/api-types';
 import { Send, Save, Plus, Trash2 } from 'lucide-react';
+import { JsonEditor } from '../common/JsonEditor';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -377,18 +378,22 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               </label>
             </div>
 
-            {bodyType !== 'none' && (
+            {bodyType === 'json' ? (
+              <div className="flex-1 h-64">
+                <JsonEditor
+                  value={body}
+                  onChange={setBody}
+                  placeholder='{\n  "userId": "{{USER_ID}}",\n  "name": "Jane"\n}'
+                />
+              </div>
+            ) : bodyType !== 'none' ? (
               <textarea
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                placeholder={
-                  bodyType === 'json'
-                    ? '{\n  "userId": "{{USER_ID}}",\n  "name": "Jane"\n}'
-                    : 'raw payload'
-                }
+                placeholder="raw payload"
                 className="flex-1 w-full bg-zinc-900 border border-zinc-800 rounded p-3 font-mono text-xs focus:outline-none focus:border-indigo-500 resize-none h-64"
               />
-            )}
+            ) : null}
           </div>
         )}
 
