@@ -7,29 +7,62 @@ use rust_core::dto::{
     HttpExecutionRequest, HttpExecutionResponse,
 };
 
-#[cfg_attr(feature = "desktop", tauri::command)]
-pub async fn execute_http_request(
-    req: HttpExecutionRequest,
-    variables: HashMap<String, String>,
-) -> HttpExecutionResponse {
-    http_runner::run_http(req, variables).await
+#[cfg(feature = "desktop")]
+mod commands {
+    use super::*;
+
+    #[tauri::command]
+    pub async fn execute_http_request(
+        req: HttpExecutionRequest,
+        variables: HashMap<String, String>,
+    ) -> HttpExecutionResponse {
+        http_runner::run_http(req, variables).await
+    }
+
+    #[tauri::command]
+    pub async fn execute_grpc_request(
+        req: GrpcExecutionRequest,
+        variables: HashMap<String, String>,
+    ) -> GrpcExecutionResponse {
+        grpc_runner::run_grpc(req, variables).await
+    }
+
+    #[tauri::command]
+    pub async fn discover_grpc_services(
+        req: GrpcReflectionRequest,
+        variables: HashMap<String, String>,
+    ) -> GrpcReflectionResponse {
+        grpc_runner::run_grpc_reflection(req, variables).await
+    }
 }
 
-#[cfg_attr(feature = "desktop", tauri::command)]
-pub async fn execute_grpc_request(
-    req: GrpcExecutionRequest,
-    variables: HashMap<String, String>,
-) -> GrpcExecutionResponse {
-    grpc_runner::run_grpc(req, variables).await
+#[cfg(not(feature = "desktop"))]
+mod commands {
+    use super::*;
+
+    pub async fn execute_http_request(
+        req: HttpExecutionRequest,
+        variables: HashMap<String, String>,
+    ) -> HttpExecutionResponse {
+        http_runner::run_http(req, variables).await
+    }
+
+    pub async fn execute_grpc_request(
+        req: GrpcExecutionRequest,
+        variables: HashMap<String, String>,
+    ) -> GrpcExecutionResponse {
+        grpc_runner::run_grpc(req, variables).await
+    }
+
+    pub async fn discover_grpc_services(
+        req: GrpcReflectionRequest,
+        variables: HashMap<String, String>,
+    ) -> GrpcReflectionResponse {
+        grpc_runner::run_grpc_reflection(req, variables).await
+    }
 }
 
-#[cfg_attr(feature = "desktop", tauri::command)]
-pub async fn discover_grpc_services(
-    req: GrpcReflectionRequest,
-    variables: HashMap<String, String>,
-) -> GrpcReflectionResponse {
-    grpc_runner::run_grpc_reflection(req, variables).await
-}
+pub use commands::*;
 
 #[cfg(feature = "desktop")]
 pub fn run() {

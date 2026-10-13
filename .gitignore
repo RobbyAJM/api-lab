@@ -15,3 +15,10 @@ apps/desktop/src-tauri/target/
 # Environment & logs
 .env
 *.log
+
+# Archives & binaries
+*.tar.gz
+*.zip
+
+# Tauri generated
+apps/desktop/src-tauri/gen/
