@@ -26,7 +26,7 @@ pub async fn list_collections(
     let rows = sqlx::query_as!(
         Collection,
         r#"
-        SELECT id, workspace_id, name, sort_order, created_at, updated_at
+        SELECT id, workspace_id, name, settings, sort_order, created_at, updated_at
         FROM collections
         WHERE workspace_id = $1
         ORDER BY sort_order ASC, name ASC
@@ -53,16 +53,19 @@ pub async fn create_collection(
     }
 
     let coll_id = Uuid::new_v4();
+    let settings = dto.settings.unwrap_or_else(|| json!({}));
+
     let row = sqlx::query_as!(
         Collection,
         r#"
-        INSERT INTO collections (id, workspace_id, name)
-        VALUES ($1, $2, $3)
-        RETURNING id, workspace_id, name, sort_order, created_at, updated_at
+        INSERT INTO collections (id, workspace_id, name, settings)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id, workspace_id, name, settings, sort_order, created_at, updated_at
         "#,
         coll_id,
         workspace_id,
-        name
+        name,
+        settings
     )
     .fetch_one(&state.pool)
     .await
@@ -89,7 +92,7 @@ pub async fn get_collection(
     let row = sqlx::query_as!(
         Collection,
         r#"
-        SELECT id, workspace_id, name, sort_order, created_at, updated_at
+        SELECT id, workspace_id, name, settings, sort_order, created_at, updated_at
         FROM collections
         WHERE id = $1
         "#,
@@ -113,7 +116,7 @@ pub async fn update_collection(
 
     let mut current = sqlx::query_as!(
         Collection,
-        "SELECT id, workspace_id, name, sort_order, created_at, updated_at FROM collections WHERE id = $1",
+        "SELECT id, workspace_id, name, settings, sort_order, created_at, updated_at FROM collections WHERE id = $1",
         id
     )
     .fetch_one(&state.pool)
@@ -126,6 +129,9 @@ pub async fn update_collection(
             current.name = trimmed.to_string();
         }
     }
+    if let Some(s) = dto.settings {
+        current.settings = s;
+    }
     if let Some(so) = dto.sort_order {
         current.sort_order = so;
     }
@@ -134,11 +140,12 @@ pub async fn update_collection(
         Collection,
         r#"
         UPDATE collections
-        SET name = $1, sort_order = $2, updated_at = NOW()
-        WHERE id = $3
-        RETURNING id, workspace_id, name, sort_order, created_at, updated_at
+        SET name = $1, settings = $2, sort_order = $3, updated_at = NOW()
+        WHERE id = $4
+        RETURNING id, workspace_id, name, settings, sort_order, created_at, updated_at
         "#,
         current.name,
+        current.settings,
         current.sort_order,
         id
     )

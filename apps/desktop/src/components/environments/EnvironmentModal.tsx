@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Environment, VariableResponse } from '@api-lab/api-types';
-import { X, Plus, Trash2, Eye, EyeOff, Lock } from 'lucide-react';
+import { X, Plus, Trash2, Eye, EyeOff, Lock, Edit2, Check } from 'lucide-react';
 
 export const EnvironmentModal: React.FC = () => {
   const queryClient = useQueryClient();
@@ -18,6 +18,12 @@ export const EnvironmentModal: React.FC = () => {
   const [newVal, setNewVal] = useState('');
   const [newSensitive, setNewSensitive] = useState(false);
   const [showMasked, setShowMasked] = useState<Record<string, boolean>>({});
+
+  // Edit variable state (Bug 1 Fix)
+  const [editingVarId, setEditingVarId] = useState<string | null>(null);
+  const [editKey, setEditKey] = useState('');
+  const [editVal, setEditVal] = useState('');
+  const [editSensitive, setEditSensitive] = useState(false);
 
   // Fetch environments
   const { data: environments = [] } = useQuery<Environment[]>({
@@ -98,6 +104,40 @@ export const EnvironmentModal: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['variables', selectedEnvId] });
     },
   });
+
+  // Update Variable (Bug 1 Fix)
+  const updateVarMutation = useMutation({
+    mutationFn: (payload: { id: string; key: string; value: string; is_sensitive: boolean }) =>
+      apiRequest(`/variables/${payload.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          key: payload.key.trim(),
+          value: payload.value,
+          is_sensitive: payload.is_sensitive,
+        }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['variables', selectedEnvId] });
+      setEditingVarId(null);
+    },
+  });
+
+  function startEditing(v: VariableResponse) {
+    setEditingVarId(v.id);
+    setEditKey(v.key);
+    setEditVal(v.value);
+    setEditSensitive(v.is_sensitive);
+  }
+
+  function handleSaveEdit(id: string) {
+    if (!editKey.trim()) return;
+    updateVarMutation.mutate({
+      id,
+      key: editKey.trim(),
+      value: editVal,
+      is_sensitive: editSensitive,
+    });
+  }
 
   if (!envModalOpen) return null;
 
@@ -235,42 +275,97 @@ export const EnvironmentModal: React.FC = () => {
                     variables.map((v) => (
                       <div
                         key={v.id}
-                        className="flex items-center gap-2 p-1.5 bg-zinc-950/40 border border-zinc-800/80 rounded text-xs"
+                        className="flex items-center gap-2 p-1.5 bg-zinc-950/40 border border-zinc-800/80 rounded text-xs hover:border-zinc-700 transition"
                       >
-                        <span className="w-1/3 font-mono font-semibold text-indigo-400 truncate">
-                          {v.key}
-                        </span>
-                        <div className="flex-1 flex items-center gap-1.5 font-mono text-zinc-300 truncate">
-                          {v.is_sensitive && !showMasked[v.id] ? (
-                            <span className="text-zinc-500">••••••••••••••••</span>
-                          ) : (
-                            <span className="truncate">{v.value}</span>
-                          )}
-                          {v.is_sensitive && (
+                        {editingVarId === v.id ? (
+                          // Edit mode (Bug 1 Fix)
+                          <>
+                            <input
+                              type="text"
+                              value={editKey}
+                              onChange={(e) => setEditKey(e.target.value)}
+                              placeholder="Key"
+                              className="w-1/3 bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs font-mono text-zinc-100 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={editVal}
+                              onChange={(e) => setEditVal(e.target.value)}
+                              placeholder="Value"
+                              className="flex-1 bg-zinc-900 border border-indigo-500 rounded px-1.5 py-0.5 text-xs font-mono text-zinc-100 focus:outline-none"
+                            />
+                            <label className="flex items-center gap-1 text-[11px] text-zinc-400 cursor-pointer" title="Sensitive / Encrypted">
+                              <input
+                                type="checkbox"
+                                checked={editSensitive}
+                                onChange={(e) => setEditSensitive(e.target.checked)}
+                                className="rounded bg-zinc-900 border-zinc-700"
+                              />
+                              <Lock size={11} className={editSensitive ? 'text-amber-400' : ''} />
+                            </label>
                             <button
-                              onClick={() =>
-                                setShowMasked((prev) => ({
-                                  ...prev,
-                                  [v.id]: !prev[v.id],
-                                }))
-                              }
-                              className="text-zinc-500 hover:text-zinc-300 p-0.5"
+                              onClick={() => handleSaveEdit(v.id)}
+                              disabled={updateVarMutation.isPending}
+                              className="p-1 text-emerald-400 hover:text-emerald-300"
+                              title="Save changes"
                             >
-                              {showMasked[v.id] ? <EyeOff size={12} /> : <Eye size={12} />}
+                              <Check size={14} />
                             </button>
-                          )}
-                        </div>
-                        {v.is_sensitive && (
-                          <span className="text-[10px] text-amber-400/80 font-medium px-1 bg-amber-950/40 rounded border border-amber-900/60">
-                            Encrypted
-                          </span>
+                            <button
+                              onClick={() => setEditingVarId(null)}
+                              className="p-1 text-zinc-500 hover:text-zinc-300"
+                              title="Cancel"
+                            >
+                              <X size={14} />
+                            </button>
+                          </>
+                        ) : (
+                          // View mode
+                          <>
+                            <span className="w-1/3 font-mono font-semibold text-indigo-400 truncate">
+                              {v.key}
+                            </span>
+                            <div className="flex-1 flex items-center gap-1.5 font-mono text-zinc-300 truncate">
+                              {v.is_sensitive && !showMasked[v.id] ? (
+                                <span className="text-zinc-500">••••••••••••••••</span>
+                              ) : (
+                                <span className="truncate">{v.value}</span>
+                              )}
+                              {v.is_sensitive && (
+                                <button
+                                  onClick={() =>
+                                    setShowMasked((prev) => ({
+                                      ...prev,
+                                      [v.id]: !prev[v.id],
+                                    }))
+                                  }
+                                  className="text-zinc-500 hover:text-zinc-300 p-0.5"
+                                >
+                                  {showMasked[v.id] ? <EyeOff size={12} /> : <Eye size={12} />}
+                                </button>
+                              )}
+                            </div>
+                            {v.is_sensitive && (
+                              <span className="text-[10px] text-amber-400/80 font-medium px-1 bg-amber-950/40 rounded border border-amber-900/60">
+                                Encrypted
+                              </span>
+                            )}
+                            <button
+                              onClick={() => startEditing(v)}
+                              className="text-zinc-500 hover:text-indigo-400 p-1"
+                              title="Edit variable"
+                            >
+                              <Edit2 size={12} />
+                            </button>
+                            <button
+                              onClick={() => deleteVarMutation.mutate(v.id)}
+                              className="text-zinc-500 hover:text-red-400 p-1"
+                              title="Delete variable"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </>
                         )}
-                        <button
-                          onClick={() => deleteVarMutation.mutate(v.id)}
-                          className="text-zinc-500 hover:text-red-400 p-1"
-                        >
-                          <Trash2 size={13} />
-                        </button>
                       </div>
                     ))
                   )}

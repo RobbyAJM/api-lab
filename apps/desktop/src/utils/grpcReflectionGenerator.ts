@@ -9,6 +9,7 @@ export interface PlannedEndpoint {
     server_address: string;
     service: string;
     method: string;
+    stream_type?: 'unary' | 'omni_stream' | 'bidi_stream';
     metadata: Record<string, string>;
     payload: any;
   };
@@ -59,6 +60,7 @@ export function planGrpcHierarchy(options: {
           server_address: options.serverAddress,
           service: svc.name,
           method: method.name,
+          stream_type: method.stream_type || 'unary',
           metadata: {},
           payload,
         },

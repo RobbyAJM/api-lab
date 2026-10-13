@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import {
   executeNativeGrpc,
+  executeNativeGrpcStream,
+  cancelNativeGrpcStream,
   discoverNativeGrpcServices,
   generateNativeGrpcSamplePayload,
 } from '../../api/native';
@@ -12,12 +14,15 @@ import type {
   GrpcExecutionRequest,
   GrpcServiceSummary,
   VariableResponse,
+  Collection,
 } from '@api-lab/api-types';
 import {
   Send,
   Save,
   RefreshCw,
   Radio,
+  ArrowDownUp,
+  ArrowLeftRight,
   Plus,
   Trash2,
   Wand2,
@@ -25,14 +30,28 @@ import {
   CheckCircle,
   XCircle,
   Terminal,
+  Play,
+  Square,
+  Shield,
 } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
+import { JavaScriptEditor } from '../common/JavaScriptEditor';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
+import { applyInheritedGrpcAuth } from '../../utils/authInheritance';
+import { syncEnvironmentVariables } from '../../utils/envSync';
 
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
-  const { activeEnvironmentId, setLastGrpcResponse } = useAppStore();
+  const {
+    activeEnvironmentId,
+    setLastGrpcResponse,
+    isStreaming,
+    activeStreamId,
+    setIsStreaming,
+    addStreamMessage,
+    clearStreamMessages,
+  } = useAppStore();
 
   const [serverAddress, setServerAddress] = useState(
     endpoint.config?.server_address || 'localhost:50051'
@@ -40,7 +59,31 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [useTls, setUseTls] = useState<boolean>(endpoint.config?.use_tls || false);
   const [selectedService, setSelectedService] = useState(endpoint.config?.service || '');
   const [selectedMethod, setSelectedMethod] = useState(endpoint.config?.method || '');
-  const [discoveredServices, setDiscoveredServices] = useState<GrpcServiceSummary[]>([]);
+
+  // Auto-discover & cache reflection per server address (Fix for Bug 1)
+  const {
+    data: cachedServices = [],
+    isFetching: discovering,
+    refetch: refetchReflection,
+  } = useQuery<GrpcServiceSummary[]>({
+    queryKey: ['reflection', serverAddress, useTls],
+    queryFn: async () => {
+      if (!serverAddress.trim()) return [];
+      const activeVars = await resolveVariables();
+      const res = await discoverNativeGrpcServices(
+        { server_address: serverAddress, use_tls: useTls },
+        activeVars
+      );
+      if (res.error) {
+        return [];
+      }
+      return res.services || [];
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!serverAddress.trim(),
+  });
+
+  const discoveredServices = cachedServices;
 
   const [metadata, setMetadata] = useState<[string, string][]>(() => {
     const raw = endpoint.config?.metadata || {};
@@ -63,10 +106,16 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'scripts' | 'options'>('payload');
-  const [discovering, setDiscovering] = useState(false);
   const [generatingPayload, setGeneratingPayload] = useState(false);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Fetch parent collection for inherited settings
+  const { data: collection } = useQuery<Collection>({
+    queryKey: ['collection', endpoint.collection_id],
+    queryFn: () => apiRequest<Collection>(`/collections/${endpoint.collection_id}`),
+    enabled: !!endpoint.collection_id,
+  });
 
   async function resolveVariables(): Promise<Record<string, string>> {
     const activeVars: Record<string, string> = {};
@@ -109,31 +158,47 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   // Discover services via reflection
   async function handleDiscover() {
-    setDiscovering(true);
-    setStatusMessage(null);
-    try {
-      const activeVars = await resolveVariables();
-      const res = await discoverNativeGrpcServices(
-        { server_address: serverAddress, use_tls: useTls },
-        activeVars
-      );
-      if (res.error) {
-        setStatusMessage(res.error);
-      } else {
-        setDiscoveredServices(res.services);
-        if (res.services.length > 0 && !selectedService) {
-          setSelectedService(res.services[0].name);
-          if (res.services[0].methods.length > 0) {
-            setSelectedMethod(res.services[0].methods[0].name);
-          }
+    setStatusMessage('Querying server reflection...');
+    const res = await refetchReflection();
+    if (res.data && res.data.length > 0) {
+      setStatusMessage(`Discovered ${res.data.length} services via reflection`);
+      if (!selectedService) {
+        setSelectedService(res.data[0].name);
+        if (res.data[0].methods.length > 0) {
+          setSelectedMethod(res.data[0].methods[0].name);
         }
-        setStatusMessage(`Discovered ${res.services.length} services via reflection`);
       }
-    } catch (err: any) {
-      setStatusMessage(`Discovery error: ${err.message}`);
-    } finally {
-      setDiscovering(false);
+    } else {
+      setStatusMessage('No services discovered. Reflection may be disabled on target.');
     }
+    setTimeout(() => setStatusMessage(null), 3500);
+  }
+
+  // Generate example script for Before or After hook (New Feature 1)
+  function handleGenerateScript() {
+    if (hookScriptTab === 'pre') {
+      const samplePre = `// Pre-request Script Example
+pm.environment.set("REQUEST_TIME", Date.now());
+pm.request.metadata['x-client-timestamp'] = String(Date.now());
+console.log("Calling gRPC:", pm.request.service + "/" + pm.request.method);`;
+      setPreRequestScript((prev) => (prev ? prev + '\n\n' + samplePre : samplePre));
+      setStatusMessage('Generated example Pre-request script');
+    } else {
+      const samplePost = `// Post-response Script Example
+pm.test("Status is OK (0)", function () {
+  pm.expect(pm.response.code).to.equal(0);
+});
+
+const body = pm.response.json();
+console.log("gRPC Response body:", body);
+if (body && body.details && body.details.token) {
+  pm.environment.set("GRPC_TOKEN", body.details.token);
+  console.log("Saved token to environment:", body.details.token);
+}`;
+      setPostResponseScript((prev) => (prev ? prev + '\n\n' + samplePost : samplePost));
+      setStatusMessage('Generated example Post-response script');
+    }
+    setTimeout(() => setStatusMessage(null), 2500);
   }
 
   // Generate example JSON payload from reflection schema (Feature 4)
@@ -172,6 +237,19 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
   }
 
+  const currentServiceObj = discoveredServices.find((s) => s.name === selectedService);
+  const availableMethods = currentServiceObj?.methods || [];
+  const currentMethodObj = availableMethods.find((m) => m.name === selectedMethod);
+
+  const streamType =
+    currentMethodObj?.stream_type ||
+    endpoint.config?.stream_type ||
+    (currentMethodObj?.is_server_streaming || currentMethodObj?.is_client_streaming
+      ? 'omni_stream'
+      : 'unary');
+
+  const isStreamingRpc = streamType !== 'unary';
+
   // Save changes to endpoint on server
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -196,6 +274,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             service: selectedService,
             method: selectedMethod,
             use_tls: useTls,
+            stream_type: streamType,
             metadata: metaMap,
             payload: payloadJson,
             pre_request_script: preRequestScript,
@@ -261,14 +340,33 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       }
       setHookLogs(beforeResult.logs);
 
-      // 2. Execute gRPC Request
-      const resp = await executeNativeGrpc(beforeResult.request, beforeResult.variables);
+      // 2. Apply Inherited Collection Authorization if applicable
+      let currentColl = collection;
+      if (!currentColl && endpoint.collection_id) {
+        try {
+          currentColl = await queryClient.fetchQuery({
+            queryKey: ['collection', endpoint.collection_id],
+            queryFn: () => apiRequest<Collection>(`/collections/${endpoint.collection_id}`),
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      const finalReq = applyInheritedGrpcAuth(
+        beforeResult.request,
+        currentColl?.settings,
+        beforeResult.variables
+      );
+
+      // 3. Execute gRPC Request
+      const resp = await executeNativeGrpc(finalReq, beforeResult.variables);
       setLastGrpcResponse(resp);
 
-      // 3. Run Post-response Hook (After)
+      // 4. Run Post-response Hook (After)
       const afterResult = await runAfterHook(
         postResponseScript,
-        beforeResult.request,
+        finalReq,
         resp,
         beforeResult.variables
       );
@@ -276,7 +374,22 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       setHookLogs((prev) => [...prev, ...afterResult.logs]);
       setActiveVariables(afterResult.variables);
 
-      if (afterResult.error) {
+      // Sync variables modified by pm.environment.set to the active environment (Bug 2 Fix)
+      const syncRes = await syncEnvironmentVariables(
+        beforeResult.variables,
+        afterResult.variables,
+        activeEnvironmentId,
+        {
+          get: (path) => apiRequest(path),
+          post: (path, body) => apiRequest(path, { method: 'POST', body: JSON.stringify(body) }),
+          patch: (path, body) => apiRequest(path, { method: 'PATCH', body: JSON.stringify(body) }),
+        }
+      );
+      if (syncRes.syncedCount > 0) {
+        queryClient.invalidateQueries({ queryKey: ['variables', activeEnvironmentId] });
+        resolveVariables().then(setActiveVariables);
+        setStatusMessage(`Saved ${syncRes.syncedKeys.join(', ')} to environment`);
+      } else if (afterResult.error) {
         setStatusMessage(afterResult.error);
       }
     } catch (err: any) {
@@ -294,8 +407,132 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
   }
 
-  const currentServiceObj = discoveredServices.find((s) => s.name === selectedService);
-  const availableMethods = currentServiceObj?.methods || [];
+  // Execute Streaming gRPC (Feature 1)
+  async function handleStartStream() {
+    setSending(true);
+    setStatusMessage('Starting stream...');
+    clearStreamMessages();
+
+    const metaMap: Record<string, string> = {};
+    for (const [k, v] of metadata) {
+      if (k.trim()) metaMap[k.trim()] = v;
+    }
+
+    let parsedPayload: any = {};
+    try {
+      parsedPayload = JSON.parse(payloadStr || '{}');
+    } catch (err: any) {
+      setLastGrpcResponse({
+        status_code: 3,
+        status_message: 'Invalid JSON',
+        response_time_ms: 0,
+        response_size_bytes: 0,
+        metadata: {},
+        body: null,
+        error: `Payload is not valid JSON: ${err.message}`,
+      });
+      setSending(false);
+      return;
+    }
+
+    const execReq: GrpcExecutionRequest = {
+      server_address: serverAddress,
+      service: selectedService,
+      method: selectedMethod,
+      metadata: metaMap,
+      payload: parsedPayload,
+      use_tls: useTls,
+      timeout_ms: 60000,
+    };
+
+    const streamId = `stream-${Date.now()}`;
+    setIsStreaming(true, streamId);
+
+    try {
+      const currentVars = await resolveVariables();
+      const beforeResult = await runBeforeHook(preRequestScript, execReq, currentVars);
+      setHookLogs(beforeResult.logs);
+
+      let currentColl = collection;
+      if (!currentColl && endpoint.collection_id) {
+        try {
+          currentColl = await queryClient.fetchQuery({
+            queryKey: ['collection', endpoint.collection_id],
+            queryFn: () => apiRequest<Collection>(`/collections/${endpoint.collection_id}`),
+          });
+        } catch {
+          // ignore
+        }
+      }
+
+      const finalReq = applyInheritedGrpcAuth(
+        beforeResult.request,
+        currentColl?.settings,
+        beforeResult.variables
+      );
+
+      const resp = await executeNativeGrpcStream(
+        finalReq,
+        beforeResult.variables,
+        streamId,
+        (msg) => {
+          addStreamMessage(msg);
+        }
+      );
+      setLastGrpcResponse(resp);
+
+      const afterResult = await runAfterHook(
+        postResponseScript,
+        finalReq,
+        resp,
+        beforeResult.variables
+      );
+      setHookTests(afterResult.tests);
+      setHookLogs((prev) => [...prev, ...afterResult.logs]);
+      setActiveVariables(afterResult.variables);
+
+      // Sync variables modified by stream hook to the active environment (Bug 2 Fix)
+      const syncRes = await syncEnvironmentVariables(
+        beforeResult.variables,
+        afterResult.variables,
+        activeEnvironmentId,
+        {
+          get: (path) => apiRequest(path),
+          post: (path, body) => apiRequest(path, { method: 'POST', body: JSON.stringify(body) }),
+          patch: (path, body) => apiRequest(path, { method: 'PATCH', body: JSON.stringify(body) }),
+        }
+      );
+      if (syncRes.syncedCount > 0) {
+        queryClient.invalidateQueries({ queryKey: ['variables', activeEnvironmentId] });
+        resolveVariables().then(setActiveVariables);
+        setStatusMessage(`Saved ${syncRes.syncedKeys.join(', ')} to environment`);
+      } else if (afterResult.error) {
+        setStatusMessage(afterResult.error);
+      }
+    } catch (err: any) {
+      setLastGrpcResponse({
+        status_code: 14,
+        status_message: 'Stream Failed',
+        response_time_ms: 0,
+        response_size_bytes: 0,
+        metadata: {},
+        body: null,
+        error: err.message,
+      });
+    } finally {
+      setIsStreaming(false, null);
+      setSending(false);
+    }
+  }
+
+  async function handleStopStream() {
+    if (activeStreamId) {
+      await cancelNativeGrpcStream(activeStreamId);
+      setIsStreaming(false, null);
+      setStatusMessage('Stream stopped by user');
+      setTimeout(() => setStatusMessage(null), 2500);
+    }
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-zinc-950 border-r border-zinc-800 h-screen select-none">
@@ -303,10 +540,29 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       <div className="p-3 border-b border-zinc-800 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-purple-400 flex items-center gap-1">
-              <Radio size={13} /> gRPC Endpoint:
-            </span>
+            {streamType === 'bidi_stream' ? (
+              <span className="text-xs font-semibold text-fuchsia-400 flex items-center gap-1">
+                <ArrowLeftRight size={13} /> gRPC Bidi Stream:
+              </span>
+            ) : streamType === 'omni_stream' ? (
+              <span className="text-xs font-semibold text-cyan-400 flex items-center gap-1">
+                <ArrowDownUp size={13} /> gRPC Stream:
+              </span>
+            ) : (
+              <span className="text-xs font-semibold text-purple-400 flex items-center gap-1">
+                <Radio size={13} /> gRPC Unary:
+              </span>
+            )}
             <span className="text-xs font-medium text-zinc-100">{endpoint.name}</span>
+
+            {collection?.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
+              <span
+                title="Inheriting authorization from collection settings"
+                className="text-[10px] text-indigo-300 bg-indigo-950/60 border border-indigo-800/60 px-1 rounded flex items-center gap-0.5"
+              >
+                <Shield size={9} /> Shared Auth
+              </span>
+            )}
           </div>
           {statusMessage && (
             <div className="p-1 px-2 bg-zinc-900 border border-zinc-800 rounded text-xs font-mono text-indigo-300 break-all select-text">
@@ -336,14 +592,35 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             <span>{discovering ? 'Querying...' : 'Reflection'}</span>
           </button>
 
-          <button
-            onClick={handleSend}
-            disabled={sending || !selectedService || !selectedMethod}
-            className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
-          >
-            <Send size={13} />
-            <span>{sending ? 'Calling...' : 'Invoke'}</span>
-          </button>
+          {isStreamingRpc ? (
+            isStreaming ? (
+              <button
+                onClick={handleStopStream}
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+              >
+                <Square size={12} fill="currentColor" />
+                <span>Stop Stream</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleStartStream}
+                disabled={sending || !selectedService || !selectedMethod}
+                className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+              >
+                <Play size={12} fill="currentColor" />
+                <span>Start Stream</span>
+              </button>
+            )
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={sending || !selectedService || !selectedMethod}
+              className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+            >
+              <Send size={13} />
+              <span>{sending ? 'Calling...' : 'Invoke'}</span>
+            </button>
+          )}
 
           <button
             onClick={() => saveMutation.mutate()}
@@ -355,62 +632,54 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           </button>
         </div>
 
-        {/* Service and Method Selectors */}
+        {/* Service and Method Selectors (Always Dropdown with Auto-Cache) */}
         <div className="grid grid-cols-2 gap-2 pt-1">
           <div>
             <label className="block text-[10px] text-zinc-400 mb-0.5">Service</label>
-            {discoveredServices.length > 0 ? (
-              <select
-                value={selectedService}
-                onChange={(e) => {
-                  setSelectedService(e.target.value);
-                  const svc = discoveredServices.find((s) => s.name === e.target.value);
-                  if (svc && svc.methods.length > 0) {
-                    setSelectedMethod(svc.methods[0].name);
-                  }
-                }}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-purple-500 h-7"
-              >
-                {discoveredServices.map((s) => (
-                  <option key={s.name} value={s.name}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={selectedService}
-                onChange={(e) => setSelectedService(e.target.value)}
-                placeholder="package.ServiceName (click Reflection to auto-discover)"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-300 focus:outline-none focus:border-purple-500 h-7"
-              />
-            )}
+            <select
+              value={selectedService}
+              onChange={(e) => {
+                setSelectedService(e.target.value);
+                const svc = discoveredServices.find((s) => s.name === e.target.value);
+                if (svc && svc.methods.length > 0) {
+                  setSelectedMethod(svc.methods[0].name);
+                }
+              }}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-purple-500 h-7"
+            >
+              {selectedService && !discoveredServices.some((s) => s.name === selectedService) && (
+                <option value={selectedService}>{selectedService}</option>
+              )}
+              {discoveredServices.length === 0 && !selectedService && (
+                <option value="">{discovering ? 'Discovering services...' : 'Click Reflection to discover'}</option>
+              )}
+              {discoveredServices.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
             <label className="block text-[10px] text-zinc-400 mb-0.5">Method</label>
-            {availableMethods.length > 0 ? (
-              <select
-                value={selectedMethod}
-                onChange={(e) => setSelectedMethod(e.target.value)}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-purple-500 h-7"
-              >
-                {availableMethods.map((m) => (
-                  <option key={m.name} value={m.name}>
-                    {m.name} ({m.input_type} → {m.output_type})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={selectedMethod}
-                onChange={(e) => setSelectedMethod(e.target.value)}
-                placeholder="MethodName"
-                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-300 focus:outline-none focus:border-purple-500 h-7"
-              />
-            )}
+            <select
+              value={selectedMethod}
+              onChange={(e) => setSelectedMethod(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-purple-500 h-7"
+            >
+              {selectedMethod && !availableMethods.some((m) => m.name === selectedMethod) && (
+                <option value={selectedMethod}>{selectedMethod}</option>
+              )}
+              {availableMethods.length === 0 && !selectedMethod && (
+                <option value="">{selectedService ? 'No methods found' : 'Select service first'}</option>
+              )}
+              {availableMethods.map((m) => (
+                <option key={m.name} value={m.name}>
+                  {m.name} ({m.stream_type === 'bidi_stream' ? 'bidi stream' : m.stream_type === 'omni_stream' ? 'stream' : 'unary'})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -580,29 +849,49 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             <div className="flex-1 flex flex-col space-y-2">
               {hookScriptTab === 'pre' ? (
                 <div className="flex-1 flex flex-col space-y-1">
-                  <span className="text-[10px] text-zinc-400">
-                    Runs before invoking gRPC. Use <code className="text-purple-300 font-mono">pm.environment.set(key, val)</code> or mutate <code className="text-purple-300 font-mono">pm.request.payload</code> or <code className="text-purple-300 font-mono">pm.request.metadata</code>.
-                  </span>
-                  <textarea
-                    value={preRequestScript}
-                    onChange={(e) => setPreRequestScript(e.target.value)}
-                    placeholder={`// Example gRPC Pre-request Script:\npm.environment.set("REQ_ID", "req_" + Date.now());\npm.request.metadata['x-request-id'] = pm.variables.get('REQ_ID');\nconsole.log('Invoking gRPC method...');`}
-                    spellCheck={false}
-                    className="flex-1 w-full bg-zinc-950 border border-zinc-800 rounded p-2.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-purple-500 resize-none min-h-[160px]"
-                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-zinc-400">
+                      Runs before invoking gRPC. Use <code className="text-purple-300 font-mono">pm.environment.set(key, val)</code> or mutate <code className="text-purple-300 font-mono">pm.request.payload</code> or <code className="text-purple-300 font-mono">pm.request.metadata</code>.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGenerateScript}
+                      className="text-[11px] text-purple-300 hover:text-white px-2 py-0.5 bg-purple-950/70 border border-purple-800/60 rounded flex items-center gap-1 font-medium transition flex-shrink-0"
+                    >
+                      <Wand2 size={11} />
+                      <span>Generate Example</span>
+                    </button>
+                  </div>
+                  <div className="flex-1 min-h-[160px]">
+                    <JavaScriptEditor
+                      value={preRequestScript}
+                      onChange={setPreRequestScript}
+                      placeholder={`// Example gRPC Pre-request Script:\npm.environment.set("REQ_ID", "req_" + Date.now());\npm.request.metadata['x-request-id'] = pm.variables.get('REQ_ID');\nconsole.log('Invoking gRPC method...');`}
+                    />
+                  </div>
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col space-y-1">
-                  <span className="text-[10px] text-zinc-400">
-                    Runs after gRPC response arrives. Use <code className="text-purple-300 font-mono">pm.test(...)</code> and <code className="text-purple-300 font-mono">pm.response.json()</code>.
-                  </span>
-                  <textarea
-                    value={postResponseScript}
-                    onChange={(e) => setPostResponseScript(e.target.value)}
-                    placeholder={`// Example gRPC Post-response Script:\npm.test("Status code is 0 (OK)", () => {\n  pm.expect(pm.response.code).to.equal(0);\n});\n\nconst body = pm.response.json();\nif (body && body.details && body.details.token) {\n  pm.environment.set("GRPC_TOKEN", body.details.token);\n}`}
-                    spellCheck={false}
-                    className="flex-1 w-full bg-zinc-950 border border-zinc-800 rounded p-2.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-purple-500 resize-none min-h-[160px]"
-                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-zinc-400">
+                      Runs after gRPC response arrives. Use <code className="text-purple-300 font-mono">pm.test(...)</code> and <code className="text-purple-300 font-mono">pm.response.json()</code>.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleGenerateScript}
+                      className="text-[11px] text-purple-300 hover:text-white px-2 py-0.5 bg-purple-950/70 border border-purple-800/60 rounded flex items-center gap-1 font-medium transition flex-shrink-0"
+                    >
+                      <Wand2 size={11} />
+                      <span>Generate Example</span>
+                    </button>
+                  </div>
+                  <div className="flex-1 min-h-[160px]">
+                    <JavaScriptEditor
+                      value={postResponseScript}
+                      onChange={setPostResponseScript}
+                      placeholder={`// Example gRPC Post-response Script:\npm.test("Status code is 0 (OK)", () => {\n  pm.expect(pm.response.code).to.equal(0);\n});\n\nconst body = pm.response.json();\nif (body && body.details && body.details.token) {\n  pm.environment.set("GRPC_TOKEN", body.details.token);\n}`}
+                    />
+                  </div>
                 </div>
               )}
             </div>

@@ -133,6 +133,7 @@ pub struct Collection {
     pub id: Uuid,
     pub workspace_id: Uuid,
     pub name: String,
+    pub settings: serde_json::Value,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
