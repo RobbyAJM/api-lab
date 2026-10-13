@@ -3,16 +3,13 @@ use std::time::{Duration, Instant};
 use futures::StreamExt;
 use prost::Message;
 use prost_reflect::{DescriptorPool, DynamicMessage};
+use prost_types::FileDescriptorProto;
 use serde::de::DeserializeSeed;
 use rust_core::dto::{
     GrpcExecutionRequest, GrpcExecutionResponse, GrpcMethodSummary, GrpcReflectionRequest,
     GrpcReflectionResponse, GrpcServiceSummary,
 };
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
-use tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient;
-use tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest;
-use tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse;
-use tonic_reflection::pb::v1alpha::ServerReflectionRequest;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -45,6 +42,7 @@ async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String> {
         .map_err(|e| format!("failed to connect to gRPC server: {e}"))
 }
 
+// Try v1 first, fallback to v1alpha
 pub async fn discover_services(
     req: GrpcReflectionRequest,
 ) -> GrpcReflectionResponse {
@@ -61,10 +59,32 @@ pub async fn discover_services(
         }
     };
 
-    let mut client = ServerReflectionClient::new(channel);
+    // Try v1 first
+    match try_discover_v1(channel.clone()).await {
+        Ok(res) if !res.services.is_empty() => return res,
+        _ => {}
+    }
 
-    // List services via reflection stream
-    let (tx, rx) = tokio::sync::mpsc::channel(10);
+    // Fallback to v1alpha
+    match try_discover_v1alpha(channel).await {
+        Ok(res) => res,
+        Err(err) => GrpcReflectionResponse {
+            services: Vec::new(),
+            error: Some(format!("Reflection discovery failed: {err}. gRPC server reflection unavailable on target; reflection required.")),
+        },
+    }
+}
+
+async fn try_discover_v1(
+    channel: Channel,
+) -> Result<GrpcReflectionResponse, String> {
+    use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
+    use tonic_reflection::pb::v1::server_reflection_request::MessageRequest;
+    use tonic_reflection::pb::v1::server_reflection_response::MessageResponse;
+    use tonic_reflection::pb::v1::ServerReflectionRequest;
+
+    let mut client = ServerReflectionClient::new(channel);
+    let (tx, rx) = tokio::sync::mpsc::channel(20);
     let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
 
     let list_req = ServerReflectionRequest {
@@ -72,72 +92,34 @@ pub async fn discover_services(
         message_request: Some(MessageRequest::ListServices(String::new())),
     };
 
-    if tx.send(list_req).await.is_err() {
-        return GrpcReflectionResponse {
-            services: Vec::new(),
-            error: Some("failed to send reflection list request. gRPC server reflection unavailable on target; reflection required.".into()),
-        };
-    }
+    tx.send(list_req).await.map_err(|e| e.to_string())?;
 
-    let mut response_stream = match tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound)).await {
-        Ok(Ok(res)) => res.into_inner(),
-        Ok(Err(e)) => {
-            return GrpcReflectionResponse {
-                services: Vec::new(),
-                error: Some(format!("reflection service rejected: {e}. gRPC server reflection unavailable on target; reflection required.")),
-            };
-        }
-        Err(_) => {
-            return GrpcReflectionResponse {
-                services: Vec::new(),
-                error: Some(format!("reflection request timed out after {}s. Server reflection unavailable.", REQUEST_TIMEOUT.as_secs())),
-            };
-        }
-    };
+    let mut response_stream = tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound))
+        .await
+        .map_err(|_| "v1 reflection request timed out".to_string())?
+        .map_err(|e| e.to_string())?
+        .into_inner();
 
-    let first_res = match tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
-        Ok(Some(Ok(res))) => res,
-        Ok(Some(Err(e))) => {
-            return GrpcReflectionResponse {
-                services: Vec::new(),
-                error: Some(format!("reflection stream error: {e}. Server reflection unavailable.")),
-            };
-        }
-        Ok(None) => {
-            return GrpcReflectionResponse {
-                services: Vec::new(),
-                error: Some("empty reflection response. gRPC server reflection unavailable on target; reflection required.".into()),
-            };
-        }
-        Err(_) => {
-            return GrpcReflectionResponse {
-                services: Vec::new(),
-                error: Some(format!("timed out waiting for reflection response after {}s.", REQUEST_TIMEOUT.as_secs())),
-            };
-        }
-    };
+    let first_res = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next())
+        .await
+        .map_err(|_| "v1 stream response timed out".to_string())?
+        .ok_or_else(|| "empty stream".to_string())?
+        .map_err(|e| e.to_string())?;
 
     let service_names = match first_res.message_response {
         Some(MessageResponse::ListServicesResponse(ls)) => {
             ls.service.into_iter().map(|s| s.name).collect::<Vec<_>>()
         }
-        _ => {
-            return GrpcReflectionResponse {
-                services: Vec::new(),
-                error: Some("unexpected reflection response type. gRPC server reflection unavailable on target; reflection required.".into()),
-            };
-        }
+        _ => return Err("unexpected v1 response type".into()),
     };
 
-    // Filter reflection service itself
     let target_services: Vec<String> = service_names
         .into_iter()
         .filter(|s| !s.starts_with("grpc.reflection"))
         .collect();
 
-    let mut pool = DescriptorPool::new();
+    let mut raw_protos: HashMap<String, FileDescriptorProto> = HashMap::new();
 
-    // Fetch file descriptors for each service
     for service_name in &target_services {
         let sym_req = ServerReflectionRequest {
             host: String::new(),
@@ -148,8 +130,10 @@ pub async fn discover_services(
             if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
                 if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
                     for fd_bytes in fdr.file_descriptor_proto {
-                        if let Ok(proto) = prost_types::FileDescriptorProto::decode(&fd_bytes[..]) {
-                            let _ = pool.add_file_descriptor_protos([proto]);
+                        if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
+                            if let Some(ref name) = proto.name {
+                                raw_protos.insert(name.clone(), proto);
+                            }
                         }
                     }
                 }
@@ -157,34 +141,130 @@ pub async fn discover_services(
         }
     }
 
-    let mut summaries = Vec::new();
-    for svc in pool.services() {
-        let methods = svc
-            .methods()
-            .map(|m| GrpcMethodSummary {
-                name: m.name().to_string(),
-                input_type: m.input().full_name().to_string(),
-                output_type: m.output().full_name().to_string(),
-            })
-            .collect();
+    let summaries = extract_summaries(&raw_protos);
+    if summaries.is_empty() {
+        return Err("No user services discovered via v1 reflection".into());
+    }
 
-        summaries.push(GrpcServiceSummary {
-            name: svc.full_name().to_string(),
-            methods,
+    Ok(GrpcReflectionResponse {
+        services: summaries,
+        error: None,
+    })
+}
+
+async fn try_discover_v1alpha(
+    channel: Channel,
+) -> Result<GrpcReflectionResponse, String> {
+    use tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient;
+    use tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest;
+    use tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse;
+    use tonic_reflection::pb::v1alpha::ServerReflectionRequest;
+
+    let mut client = ServerReflectionClient::new(channel);
+    let (tx, rx) = tokio::sync::mpsc::channel(20);
+    let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
+
+    let list_req = ServerReflectionRequest {
+        host: String::new(),
+        message_request: Some(MessageRequest::ListServices(String::new())),
+    };
+
+    tx.send(list_req).await.map_err(|e| e.to_string())?;
+
+    let mut response_stream = tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound))
+        .await
+        .map_err(|_| "v1alpha reflection request timed out".to_string())?
+        .map_err(|e| e.to_string())?
+        .into_inner();
+
+    let first_res = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next())
+        .await
+        .map_err(|_| "v1alpha stream response timed out".to_string())?
+        .ok_or_else(|| "empty stream".to_string())?
+        .map_err(|e| e.to_string())?;
+
+    let service_names = match first_res.message_response {
+        Some(MessageResponse::ListServicesResponse(ls)) => {
+            ls.service.into_iter().map(|s| s.name).collect::<Vec<_>>()
+        }
+        _ => return Err("unexpected v1alpha response type".into()),
+    };
+
+    let target_services: Vec<String> = service_names
+        .into_iter()
+        .filter(|s| !s.starts_with("grpc.reflection"))
+        .collect();
+
+    let mut raw_protos: HashMap<String, FileDescriptorProto> = HashMap::new();
+
+    for service_name in &target_services {
+        let sym_req = ServerReflectionRequest {
+            host: String::new(),
+            message_request: Some(MessageRequest::FileContainingSymbol(service_name.clone())),
+        };
+
+        if tx.send(sym_req).await.is_ok() {
+            if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
+                if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
+                    for fd_bytes in fdr.file_descriptor_proto {
+                        if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
+                            if let Some(ref name) = proto.name {
+                                raw_protos.insert(name.clone(), proto);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let summaries = extract_summaries(&raw_protos);
+    if summaries.is_empty() {
+        return Ok(GrpcReflectionResponse {
+            services: Vec::new(),
+            error: Some("No user services discovered via reflection. gRPC server reflection unavailable on target; reflection required.".into()),
         });
     }
 
-    if summaries.is_empty() {
-        return GrpcReflectionResponse {
-            services: Vec::new(),
-            error: Some("No user services discovered via reflection. gRPC server reflection unavailable on target; reflection required.".into()),
-        };
-    }
-
-    GrpcReflectionResponse {
+    Ok(GrpcReflectionResponse {
         services: summaries,
         error: None,
+    })
+}
+
+fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> Vec<GrpcServiceSummary> {
+    let mut summaries = Vec::new();
+    for proto in raw_protos.values() {
+        let pkg = proto.package.as_deref().unwrap_or("");
+        for svc in &proto.service {
+            let svc_name = if pkg.is_empty() {
+                svc.name.clone().unwrap_or_default()
+            } else {
+                format!("{}.{}", pkg, svc.name.as_deref().unwrap_or_default())
+            };
+
+            let methods = svc
+                .method
+                .iter()
+                .map(|m| {
+                    let in_type = m.input_type.as_deref().unwrap_or("").trim_start_matches('.');
+                    let out_type = m.output_type.as_deref().unwrap_or("").trim_start_matches('.');
+                    GrpcMethodSummary {
+                        name: m.name.clone().unwrap_or_default(),
+                        input_type: in_type.to_string(),
+                        output_type: out_type.to_string(),
+                    }
+                })
+                .collect();
+
+            summaries.push(GrpcServiceSummary {
+                name: svc_name,
+                methods,
+            });
+        }
     }
+    summaries.sort_by(|a, b| a.name.cmp(&b.name));
+    summaries
 }
 
 pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
@@ -207,30 +287,9 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
     };
 
     // Query reflection to obtain schema
-    let mut client = ServerReflectionClient::new(channel.clone());
-    let (tx, rx) = tokio::sync::mpsc::channel(10);
-    let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
-
-    let sym_req = ServerReflectionRequest {
-        host: String::new(),
-        message_request: Some(MessageRequest::FileContainingSymbol(req.service.clone())),
-    };
-
-    if tx.send(sym_req).await.is_err() {
-        return GrpcExecutionResponse {
-            status_code: 14,
-            status_message: "Failed to query reflection".into(),
-            response_time_ms: start.elapsed().as_millis() as u64,
-            response_size_bytes: 0,
-            metadata: HashMap::new(),
-            body: serde_json::Value::Null,
-            error: Some("failed to send reflection query. gRPC server reflection unavailable on target; reflection required.".into()),
-        };
-    }
-
-    let mut response_stream = match tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound)).await {
-        Ok(Ok(res)) => res.into_inner(),
-        Ok(Err(e)) => {
+    let pool = match fetch_pool_for_symbol(channel.clone(), &req.service).await {
+        Ok(p) => p,
+        Err(e) => {
             return GrpcExecutionResponse {
                 status_code: 14,
                 status_message: "Reflection error".into(),
@@ -238,32 +297,10 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
                 response_size_bytes: 0,
                 metadata: HashMap::new(),
                 body: serde_json::Value::Null,
-                error: Some(format!("gRPC server reflection unavailable on target; reflection required. Detail: {e}")),
-            };
-        }
-        Err(_) => {
-            return GrpcExecutionResponse {
-                status_code: 4, // DEADLINE_EXCEEDED
-                status_message: "Reflection timeout".into(),
-                response_time_ms: start.elapsed().as_millis() as u64,
-                response_size_bytes: 0,
-                metadata: HashMap::new(),
-                body: serde_json::Value::Null,
-                error: Some(format!("Reflection request timed out after {}s", REQUEST_TIMEOUT.as_secs())),
+                error: Some(format!("Failed to retrieve service reflection: {e}")),
             };
         }
     };
-
-    let mut pool = DescriptorPool::new();
-    if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
-        if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
-            for fd_bytes in fdr.file_descriptor_proto {
-                if let Ok(proto) = prost_types::FileDescriptorProto::decode(&fd_bytes[..]) {
-                    let _ = pool.add_file_descriptor_protos([proto]);
-                }
-            }
-        }
-    }
 
     let service_desc = match pool.get_service_by_name(&req.service) {
         Some(s) => s,
@@ -437,6 +474,91 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
             error: Some("gRPC request timed out".into()),
         },
     }
+}
+
+async fn fetch_pool_for_symbol(channel: Channel, symbol: &str) -> Result<DescriptorPool, String> {
+    // Try v1 first
+    if let Ok(pool) = fetch_pool_v1(channel.clone(), symbol).await {
+        return Ok(pool);
+    }
+    // Fallback v1alpha
+    fetch_pool_v1alpha(channel, symbol).await
+}
+
+async fn fetch_pool_v1(channel: Channel, symbol: &str) -> Result<DescriptorPool, String> {
+    use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
+    use tonic_reflection::pb::v1::server_reflection_request::MessageRequest;
+    use tonic_reflection::pb::v1::server_reflection_response::MessageResponse;
+    use tonic_reflection::pb::v1::ServerReflectionRequest;
+
+    let mut client = ServerReflectionClient::new(channel);
+    let (tx, rx) = tokio::sync::mpsc::channel(10);
+    let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
+
+    let sym_req = ServerReflectionRequest {
+        host: String::new(),
+        message_request: Some(MessageRequest::FileContainingSymbol(symbol.to_string())),
+    };
+
+    tx.send(sym_req).await.map_err(|e| e.to_string())?;
+
+    let mut response_stream = tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound))
+        .await
+        .map_err(|_| "v1 timeout".to_string())?
+        .map_err(|e| e.to_string())?
+        .into_inner();
+
+    let mut pool = DescriptorPool::new();
+    if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
+        if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
+            let mut protos = Vec::new();
+            for fd_bytes in fdr.file_descriptor_proto {
+                if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
+                    protos.push(proto);
+                }
+            }
+            let _ = pool.add_file_descriptor_protos(protos);
+        }
+    }
+    Ok(pool)
+}
+
+async fn fetch_pool_v1alpha(channel: Channel, symbol: &str) -> Result<DescriptorPool, String> {
+    use tonic_reflection::pb::v1alpha::server_reflection_client::ServerReflectionClient;
+    use tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest;
+    use tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse;
+    use tonic_reflection::pb::v1alpha::ServerReflectionRequest;
+
+    let mut client = ServerReflectionClient::new(channel);
+    let (tx, rx) = tokio::sync::mpsc::channel(10);
+    let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
+
+    let sym_req = ServerReflectionRequest {
+        host: String::new(),
+        message_request: Some(MessageRequest::FileContainingSymbol(symbol.to_string())),
+    };
+
+    tx.send(sym_req).await.map_err(|e| e.to_string())?;
+
+    let mut response_stream = tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound))
+        .await
+        .map_err(|_| "v1alpha timeout".to_string())?
+        .map_err(|e| e.to_string())?
+        .into_inner();
+
+    let mut pool = DescriptorPool::new();
+    if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
+        if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
+            let mut protos = Vec::new();
+            for fd_bytes in fdr.file_descriptor_proto {
+                if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
+                    protos.push(proto);
+                }
+            }
+            let _ = pool.add_file_descriptor_protos(protos);
+        }
+    }
+    Ok(pool)
 }
 
 // Minimal dynamic byte codec for raw bytes over tonic
