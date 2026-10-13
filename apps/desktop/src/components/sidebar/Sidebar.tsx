@@ -7,7 +7,6 @@ import type {
   CollectionFolder,
   Endpoint,
   Environment,
-  VariableResponse,
 } from '@api-lab/api-types';
 import {
   Folder,
@@ -30,7 +29,6 @@ export const Sidebar: React.FC = () => {
     setActiveWorkspaceId,
     activeEnvironmentId,
     setActiveEnvironmentId,
-    setActiveVariables,
     logout,
     setEnvModalOpen,
     setMembersModalOpen,
@@ -58,20 +56,6 @@ export const Sidebar: React.FC = () => {
       setActiveEnvironmentId(def.id);
     }
   }, [environments, activeEnvironmentId, setActiveEnvironmentId]);
-
-  // Fetch variables for active environment
-  const { data: variables = [] } = useQuery<VariableResponse[]>({
-    queryKey: ['variables', activeEnvironmentId],
-    queryFn: () =>
-      activeEnvironmentId
-        ? apiRequest(`/environments/${activeEnvironmentId}/variables`)
-        : Promise.resolve([]),
-    enabled: !!activeEnvironmentId,
-  });
-
-  React.useEffect(() => {
-    setActiveVariables(variables);
-  }, [variables, setActiveVariables]);
 
   // 2. Fetch collections for active workspace
   const { data: collections = [] } = useQuery<Collection[]>({

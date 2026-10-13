@@ -5,7 +5,6 @@ import type {
   Endpoint,
   HttpExecutionResponse,
   GrpcExecutionResponse,
-  VariableResponse,
 } from '@api-lab/api-types';
 import { getAuthToken, setAuthToken } from '../api/client';
 
@@ -17,7 +16,6 @@ interface AppState {
   activeWorkspaceRole: 'admin' | 'developer' | null;
 
   activeEnvironmentId: string | null;
-  activeVariables: Record<string, string>;
 
   activeEndpointId: string | null;
   activeEndpoint: Endpoint | null;
@@ -36,7 +34,6 @@ interface AppState {
   setWorkspaces: (workspaces: WorkspaceSummary[]) => void;
   setActiveWorkspaceId: (id: string | null) => void;
   setActiveEnvironmentId: (id: string | null) => void;
-  setActiveVariables: (vars: VariableResponse[]) => void;
   setActiveEndpoint: (endpoint: Endpoint | null) => void;
   setLastHttpResponse: (res: HttpExecutionResponse | null) => void;
   setLastGrpcResponse: (res: GrpcExecutionResponse | null) => void;
@@ -55,7 +52,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeWorkspaceRole: null,
 
   activeEnvironmentId: null,
-  activeVariables: {},
 
   activeEndpointId: null,
   activeEndpoint: null,
@@ -134,14 +130,6 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setActiveEnvironmentId: (id) => set({ activeEnvironmentId: id }),
-
-  setActiveVariables: (vars) => {
-    const map: Record<string, string> = {};
-    for (const v of vars) {
-      map[v.key] = v.value;
-    }
-    set({ activeVariables: map });
-  },
 
   setActiveEndpoint: (endpoint) =>
     set({
