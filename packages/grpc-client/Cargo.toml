@@ -14,6 +14,7 @@ prost-reflect = { workspace = true }
 tonic = { workspace = true }
 tonic-reflection = { workspace = true }
 rust-core = { workspace = true }
+rand = { workspace = true }
 tracing = { workspace = true }
 futures = { workspace = true }
 tokio-stream = { workspace = true }

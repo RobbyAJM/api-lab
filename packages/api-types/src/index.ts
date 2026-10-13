@@ -177,6 +177,18 @@ export interface GrpcReflectionResponse {
   error?: string;
 }
 
+export interface GrpcSamplePayloadRequest {
+  server_address: string;
+  service: string;
+  method: string;
+  use_tls?: boolean;
+}
+
+export interface GrpcSamplePayloadResponse {
+  payload: any;
+  error?: string;
+}
+
 export interface WsSyncEvent {
   workspace_id: string;
   entity: string;

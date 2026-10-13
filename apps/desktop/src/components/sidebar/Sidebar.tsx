@@ -19,6 +19,7 @@ import {
   LogOut,
   Radio,
 } from 'lucide-react';
+import { GenerateGrpcModal } from './GenerateGrpcModal';
 
 export const Sidebar: React.FC = () => {
   const queryClient = useQueryClient();
@@ -262,9 +263,11 @@ const CollectionNode: React.FC<{
   const [isOpen, setIsOpen] = useState(true);
   const [showAddFolder, setShowAddFolder] = useState(false);
   const [showAddEndpoint, setShowAddEndpoint] = useState(false);
+  const [showGrpcReflectionModal, setShowGrpcReflectionModal] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [endpointName, setEndpointName] = useState('');
-  const [endpointProtocol, setEndpointProtocol] = useState<'http' | 'grpc'>('http');
+  const [endpointProtocol, setEndpointProtocol] = useState<'http' | 'grpc' | 'grpc_reflection'>('http');
+  const { activeEnvironmentId } = useAppStore();
 
   // Fetch Folders
   const { data: folders = [] } = useQuery<CollectionFolder[]>({
@@ -367,34 +370,58 @@ const CollectionNode: React.FC<{
           <div className="flex gap-1">
             <select
               value={endpointProtocol}
-              onChange={(e) => setEndpointProtocol(e.target.value as any)}
+              onChange={(e) => {
+                const val = e.target.value as 'http' | 'grpc' | 'grpc_reflection';
+                setEndpointProtocol(val);
+                if (val === 'grpc_reflection') {
+                  setShowGrpcReflectionModal(true);
+                }
+              }}
               className="bg-zinc-950 border border-zinc-800 rounded px-1 py-0.5 text-xs font-mono"
             >
               <option value="http">HTTP</option>
               <option value="grpc">gRPC</option>
+              <option value="grpc_reflection">Generate gRPC Collection from Reflection</option>
             </select>
-            <input
-              type="text"
-              value={endpointName}
-              onChange={(e) => setEndpointName(e.target.value)}
-              placeholder="Endpoint name"
-              className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5 text-xs"
-            />
+            {endpointProtocol !== 'grpc_reflection' && (
+              <input
+                type="text"
+                value={endpointName}
+                onChange={(e) => setEndpointName(e.target.value)}
+                placeholder="Endpoint name"
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5 text-xs"
+              />
+            )}
             <button
-              onClick={() =>
-                endpointName.trim() &&
-                createEndpointMutation.mutate({
-                  name: endpointName.trim(),
-                  protocol: endpointProtocol,
-                })
-              }
-              className="bg-indigo-600 px-2 rounded text-xs text-white"
+              onClick={() => {
+                if (endpointProtocol === 'grpc_reflection') {
+                  setShowGrpcReflectionModal(true);
+                } else if (endpointName.trim()) {
+                  createEndpointMutation.mutate({
+                    name: endpointName.trim(),
+                    protocol: endpointProtocol,
+                  });
+                }
+              }}
+              className="bg-indigo-600 hover:bg-indigo-500 px-2 rounded text-xs text-white"
+              title={endpointProtocol === 'grpc_reflection' ? 'Generate gRPC Collection' : 'Add Endpoint'}
             >
               +
             </button>
           </div>
         </div>
       )}
+
+      <GenerateGrpcModal
+        collectionId={collection.id}
+        isOpen={showGrpcReflectionModal}
+        onClose={() => {
+          setShowGrpcReflectionModal(false);
+          setShowAddEndpoint(false);
+          setEndpointProtocol('http');
+        }}
+        activeEnvironmentId={activeEnvironmentId}
+      />
 
       {isOpen && (
         <div className="pl-3 pr-1 pb-1 space-y-0.5">

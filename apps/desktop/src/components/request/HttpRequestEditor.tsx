@@ -4,8 +4,10 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse } from '@api-lab/api-types';
-import { Send, Save, Plus, Trash2 } from 'lucide-react';
+import { Send, Save, Plus, Trash2, CheckCircle, XCircle, Terminal, Code } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
+import { VariableInput } from '../common/VariableInput';
+import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -13,7 +15,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   const [method, setMethod] = useState(endpoint.config?.method || 'GET');
   const [url, setUrl] = useState(endpoint.config?.url || 'https://httpbin.org/get');
-  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth'>('params');
+  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'scripts'>('params');
 
   // Query Params & Headers state
   const [queryParams, setQueryParams] = useState<[string, string][]>(
@@ -33,8 +35,47 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     endpoint.config?.auth || { auth_type: 'none' }
   );
 
+  // Hook Scripts state (standard JavaScript)
+  const [preRequestScript, setPreRequestScript] = useState<string>(
+    endpoint.config?.pre_request_script || ''
+  );
+  const [postResponseScript, setPostResponseScript] = useState<string>(
+    endpoint.config?.post_request_script || ''
+  );
+  const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
+  const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
+  const [hookLogs, setHookLogs] = useState<string[]>([]);
+
+  const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Resolve active environment variables
+  async function resolveVariables(): Promise<Record<string, string>> {
+    const vars: Record<string, string> = {};
+    if (activeEnvironmentId) {
+      const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
+      if (envVars) {
+        for (const v of envVars) {
+          vars[v.key] = v.value;
+        }
+      } else {
+        try {
+          const fetched = await apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`);
+          for (const v of fetched) {
+            vars[v.key] = v.value;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return vars;
+  }
+
+  useEffect(() => {
+    resolveVariables().then(setActiveVariables);
+  }, [activeEnvironmentId]);
 
   // Sync state if endpoint prop changes
   useEffect(() => {
@@ -45,6 +86,10 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setBodyType(endpoint.config?.body_type || 'json');
     setBody(endpoint.config?.body || '');
     setAuth(endpoint.config?.auth || { auth_type: 'none' });
+    setPreRequestScript(endpoint.config?.pre_request_script || '');
+    setPostResponseScript(endpoint.config?.post_request_script || '');
+    setHookTests([]);
+    setHookLogs([]);
   }, [endpoint.id]);
 
   // Save changes to endpoint on server
@@ -67,6 +112,8 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             body_type: bodyType,
             body,
             auth,
+            pre_request_script: preRequestScript,
+            post_request_script: postResponseScript,
           },
         }),
       });
@@ -102,27 +149,33 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     };
 
     try {
-      let activeVariables: Record<string, string> = {};
-      if (activeEnvironmentId) {
-        const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
-        if (envVars) {
-          for (const v of envVars) {
-            activeVariables[v.key] = v.value;
-          }
-        } else {
-          try {
-            const fetched = await apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`);
-            for (const v of fetched) {
-              activeVariables[v.key] = v.value;
-            }
-          } catch {
-            // fallback
-          }
-        }
-      }
+      const currentVars = await resolveVariables();
 
-      const resp = await executeNativeHttp(execReq, activeVariables);
+      // 1. Run Pre-request Hook (Before)
+      const beforeResult = await runBeforeHook(preRequestScript, execReq, currentVars);
+      if (beforeResult.error) {
+        setStatusMessage(beforeResult.error);
+      }
+      setHookLogs(beforeResult.logs);
+
+      // 2. Execute HTTP Request
+      const resp = await executeNativeHttp(beforeResult.request, beforeResult.variables);
       setLastHttpResponse(resp);
+
+      // 3. Run Post-response Hook (After)
+      const afterResult = await runAfterHook(
+        postResponseScript,
+        beforeResult.request,
+        resp,
+        beforeResult.variables
+      );
+      setHookTests(afterResult.tests);
+      setHookLogs((prev) => [...prev, ...afterResult.logs]);
+      setActiveVariables(afterResult.variables);
+
+      if (afterResult.error) {
+        setStatusMessage(afterResult.error);
+      }
     } catch (err: any) {
       setLastHttpResponse({
         status_code: 0,
@@ -148,7 +201,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             <span className="text-xs font-medium text-zinc-100">{endpoint.name}</span>
           </div>
           {statusMessage && (
-            <span className="text-xs text-indigo-400 font-mono">{statusMessage}</span>
+            <span className="text-xs text-indigo-400 font-mono truncate max-w-md">{statusMessage}</span>
           )}
         </div>
 
@@ -156,7 +209,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs font-mono font-bold text-zinc-200 focus:outline-none focus:border-indigo-500"
+            className="bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs font-mono font-bold text-zinc-200 focus:outline-none focus:border-indigo-500 h-8"
           >
             <option value="GET">GET</option>
             <option value="POST">POST</option>
@@ -167,18 +220,20 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             <option value="OPTIONS">OPTIONS</option>
           </select>
 
-          <input
-            type="text"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://api.example.com/v1/users/{{USER_ID}}"
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-3 py-1.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-indigo-500"
-          />
+          <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-8">
+            <VariableInput
+              value={url}
+              onChange={setUrl}
+              variables={activeVariables}
+              placeholder="https://api.example.com/v1/users/{{USER_ID}}"
+              className="w-full h-full"
+            />
+          </div>
 
           <button
             onClick={handleSend}
             disabled={sending}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition"
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
           >
             <Send size={13} />
             <span>{sending ? 'Sending...' : 'Send'}</span>
@@ -187,7 +242,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           <button
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs flex items-center gap-1.5 transition"
+            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs flex items-center gap-1.5 transition h-8"
             title="Save changes to endpoint"
           >
             <Save size={13} />
@@ -238,6 +293,22 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         >
           Auth ({auth.auth_type})
         </button>
+        <button
+          onClick={() => setActiveTab('scripts')}
+          className={`px-4 py-2 font-medium border-b-2 transition flex items-center gap-1 ${
+            activeTab === 'scripts'
+              ? 'border-indigo-500 text-indigo-400'
+              : 'border-transparent text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <Code size={12} />
+          <span>Scripts</span>
+          {hookTests.length > 0 && (
+            <span className="ml-1 px-1 py-0.2 bg-zinc-800 text-[10px] rounded font-mono">
+              {hookTests.filter((t) => t.passed).length}/{hookTests.length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Tab Panels */}
@@ -265,19 +336,21 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                     setQueryParams(next);
                   }}
                   placeholder="Key"
-                  className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-indigo-500"
+                  className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-indigo-500 h-7"
                 />
-                <input
-                  type="text"
-                  value={val}
-                  onChange={(e) => {
-                    const next = [...queryParams];
-                    next[idx][1] = e.target.value;
-                    setQueryParams(next);
-                  }}
-                  placeholder="Value (or {{VAR}})"
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-indigo-500"
-                />
+                <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-7">
+                  <VariableInput
+                    value={val}
+                    onChange={(newVal) => {
+                      const next = [...queryParams];
+                      next[idx][1] = newVal;
+                      setQueryParams(next);
+                    }}
+                    variables={activeVariables}
+                    placeholder="Value (or {{VAR}})"
+                    className="w-full h-full"
+                  />
+                </div>
                 <button
                   onClick={() => setQueryParams(queryParams.filter((_, i) => i !== idx))}
                   className="text-zinc-500 hover:text-red-400 p-1"
@@ -312,19 +385,21 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                     setHeaders(next);
                   }}
                   placeholder="Header Name"
-                  className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-indigo-500"
+                  className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-indigo-500 h-7"
                 />
-                <input
-                  type="text"
-                  value={val}
-                  onChange={(e) => {
-                    const next = [...headers];
-                    next[idx][1] = e.target.value;
-                    setHeaders(next);
-                  }}
-                  placeholder="Header Value (or {{VAR}})"
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-indigo-500"
-                />
+                <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-7">
+                  <VariableInput
+                    value={val}
+                    onChange={(newVal) => {
+                      const next = [...headers];
+                      next[idx][1] = newVal;
+                      setHeaders(next);
+                    }}
+                    variables={activeVariables}
+                    placeholder="Header Value (or {{VAR}})"
+                    className="w-full h-full"
+                  />
+                </div>
                 <button
                   onClick={() => setHeaders(headers.filter((_, i) => i !== idx))}
                   className="text-zinc-500 hover:text-red-400 p-1"
@@ -383,6 +458,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 <JsonEditor
                   value={body}
                   onChange={setBody}
+                  variables={activeVariables}
                   placeholder='{\n  "userId": "{{USER_ID}}",\n  "name": "Jane"\n}'
                 />
               </div>
@@ -419,13 +495,15 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             {auth.auth_type === 'bearer' && (
               <div>
                 <label className="block text-zinc-400 mb-1">Token</label>
-                <input
-                  type="text"
-                  value={auth.token || ''}
-                  onChange={(e) => setAuth({ ...auth, token: e.target.value })}
-                  placeholder="{{API_TOKEN}} or raw-token"
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-indigo-500"
-                />
+                <div className="bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-8">
+                  <VariableInput
+                    value={auth.token || ''}
+                    onChange={(newVal) => setAuth({ ...auth, token: newVal })}
+                    variables={activeVariables}
+                    placeholder="{{API_TOKEN}} or raw-token"
+                    className="w-full h-full"
+                  />
+                </div>
               </div>
             )}
 
@@ -466,14 +544,129 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 </div>
                 <div>
                   <label className="block text-zinc-400 mb-1">Header Value</label>
-                  <input
-                    type="text"
-                    value={auth.header_value || ''}
-                    onChange={(e) => setAuth({ ...auth, header_value: e.target.value })}
-                    placeholder="{{API_KEY}}"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-indigo-500"
+                  <div className="bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-8">
+                    <VariableInput
+                      value={auth.header_value || ''}
+                      onChange={(newVal) => setAuth({ ...auth, header_value: newVal })}
+                      variables={activeVariables}
+                      placeholder="{{API_KEY}}"
+                      className="w-full h-full"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Scripts Panel (Before & After Hooks) */}
+        {activeTab === 'scripts' && (
+          <div className="space-y-3 h-full flex flex-col">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHookScriptTab('pre')}
+                  className={`px-3 py-1 rounded text-xs font-medium transition ${
+                    hookScriptTab === 'pre'
+                      ? 'bg-indigo-900/60 text-indigo-300 border border-indigo-700/60'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Pre-request Script (Before)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHookScriptTab('post')}
+                  className={`px-3 py-1 rounded text-xs font-medium transition ${
+                    hookScriptTab === 'post'
+                      ? 'bg-indigo-900/60 text-indigo-300 border border-indigo-700/60'
+                      : 'text-zinc-400 hover:text-zinc-200'
+                  }`}
+                >
+                  Post-response Script (After)
+                </button>
+              </div>
+
+              <span className="text-[10px] text-zinc-500 font-mono">
+                JavaScript (Workbench syntax: pm.*)
+              </span>
+            </div>
+
+            <div className="flex-1 flex flex-col space-y-2">
+              {hookScriptTab === 'pre' ? (
+                <div className="flex-1 flex flex-col space-y-1">
+                  <span className="text-[10px] text-zinc-400">
+                    Runs before sending request. Use <code className="text-indigo-300 font-mono">pm.environment.set(key, val)</code> or mutate <code className="text-indigo-300 font-mono">pm.request.headers[...]</code>.
+                  </span>
+                  <textarea
+                    value={preRequestScript}
+                    onChange={(e) => setPreRequestScript(e.target.value)}
+                    placeholder={`// Example Pre-request Script:\npm.environment.set("TIMESTAMP", Date.now());\npm.request.headers['Authorization'] = 'Bearer ' + pm.variables.get('API_KEY');\nconsole.log('Sending request...');`}
+                    spellCheck={false}
+                    className="flex-1 w-full bg-zinc-950 border border-zinc-800 rounded p-2.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 resize-none min-h-[160px]"
                   />
                 </div>
+              ) : (
+                <div className="flex-1 flex flex-col space-y-1">
+                  <span className="text-[10px] text-zinc-400">
+                    Runs after response arrives. Use <code className="text-indigo-300 font-mono">pm.test(...)</code>, <code className="text-indigo-300 font-mono">pm.response.json()</code>, and extract values into variables.
+                  </span>
+                  <textarea
+                    value={postResponseScript}
+                    onChange={(e) => setPostResponseScript(e.target.value)}
+                    placeholder={`// Example Post-response Script:\npm.test("Status code is 200", () => {\n  pm.expect(pm.response.code).to.equal(200);\n});\n\nconst data = pm.response.json();\npm.environment.set("USER_TOKEN", data.token);`}
+                    spellCheck={false}
+                    className="flex-1 w-full bg-zinc-950 border border-zinc-800 rounded p-2.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-indigo-500 resize-none min-h-[160px]"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Test Results & Logs Output */}
+            {(hookTests.length > 0 || hookLogs.length > 0) && (
+              <div className="mt-2 p-2.5 bg-zinc-900/80 border border-zinc-800 rounded space-y-2 max-h-44 overflow-y-auto font-mono text-xs">
+                {hookTests.length > 0 && (
+                  <div>
+                    <span className="text-[11px] font-semibold text-zinc-300 block mb-1">
+                      Test Results:
+                    </span>
+                    <div className="space-y-1">
+                      {hookTests.map((t, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5">
+                          {t.passed ? (
+                            <CheckCircle size={13} className="text-emerald-400" />
+                          ) : (
+                            <XCircle size={13} className="text-rose-400" />
+                          )}
+                          <span className={t.passed ? 'text-zinc-200' : 'text-rose-300'}>
+                            {t.name}
+                          </span>
+                          {t.error && (
+                            <span className="text-[10px] text-rose-400 ml-1">
+                              ({t.error})
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {hookLogs.length > 0 && (
+                  <div>
+                    <span className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1 mb-1">
+                      <Terminal size={11} /> Logs:
+                    </span>
+                    <div className="bg-zinc-950 p-2 rounded text-[11px] text-zinc-300 space-y-0.5">
+                      {hookLogs.map((log, idx) => (
+                        <div key={idx} className="break-all">
+                          {log}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
