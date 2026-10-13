@@ -7,12 +7,13 @@ import type {
   Endpoint,
   GrpcExecutionRequest,
   GrpcServiceSummary,
+  VariableResponse,
 } from '@api-lab/api-types';
 import { Send, Save, RefreshCw, Radio, Plus, Trash2 } from 'lucide-react';
 
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
-  const { activeVariables, setLastGrpcResponse } = useAppStore();
+  const { activeEnvironmentId, setLastGrpcResponse } = useAppStore();
 
   const [serverAddress, setServerAddress] = useState(
     endpoint.config?.server_address || 'localhost:50051'
@@ -44,11 +45,34 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setPayloadStr(JSON.stringify(endpoint.config?.payload || {}, null, 2));
   }, [endpoint.id]);
 
+  async function resolveVariables(): Promise<Record<string, string>> {
+    const activeVariables: Record<string, string> = {};
+    if (activeEnvironmentId) {
+      const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
+      if (envVars) {
+        for (const v of envVars) {
+          activeVariables[v.key] = v.value;
+        }
+      } else {
+        try {
+          const fetched = await apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`);
+          for (const v of fetched) {
+            activeVariables[v.key] = v.value;
+          }
+        } catch {
+          // fallback
+        }
+      }
+    }
+    return activeVariables;
+  }
+
   // Discover services via reflection
   async function handleDiscover() {
     setDiscovering(true);
     setStatusMessage(null);
     try {
+      const activeVariables = await resolveVariables();
       const res = await discoverNativeGrpcServices(
         { server_address: serverAddress, use_tls: useTls },
         activeVariables
@@ -150,6 +174,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     };
 
     try {
+      const activeVariables = await resolveVariables();
       const resp = await executeNativeGrpc(execReq, activeVariables);
       setLastGrpcResponse(resp);
     } catch (err: any) {

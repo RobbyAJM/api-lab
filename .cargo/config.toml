@@ -1,3 +1,7 @@
+[env]
+DATABASE_URL = "postgres://root:root@localhost:5432/api_lab?sslmode=disable"
+ENV_ENCRYPTION_KEY = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 [target.x86_64-pc-windows-gnu]
 linker = "x86_64-w64-mingw32-gcc"
 ar = "x86_64-w64-mingw32-ar"

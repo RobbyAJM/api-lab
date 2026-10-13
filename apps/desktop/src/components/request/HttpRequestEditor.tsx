@@ -3,12 +3,12 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
-import type { Endpoint, HttpAuth, HttpExecutionRequest } from '@api-lab/api-types';
+import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse } from '@api-lab/api-types';
 import { Send, Save, Plus, Trash2 } from 'lucide-react';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
-  const { activeVariables, setLastHttpResponse } = useAppStore();
+  const { activeEnvironmentId, setLastHttpResponse } = useAppStore();
 
   const [method, setMethod] = useState(endpoint.config?.method || 'GET');
   const [url, setUrl] = useState(endpoint.config?.url || 'https://httpbin.org/get');
@@ -101,6 +101,25 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     };
 
     try {
+      let activeVariables: Record<string, string> = {};
+      if (activeEnvironmentId) {
+        const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
+        if (envVars) {
+          for (const v of envVars) {
+            activeVariables[v.key] = v.value;
+          }
+        } else {
+          try {
+            const fetched = await apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`);
+            for (const v of fetched) {
+              activeVariables[v.key] = v.value;
+            }
+          } catch {
+            // fallback
+          }
+        }
+      }
+
       const resp = await executeNativeHttp(execReq, activeVariables);
       setLastHttpResponse(resp);
     } catch (err: any) {
