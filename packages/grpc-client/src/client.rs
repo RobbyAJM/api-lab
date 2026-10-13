@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use futures::StreamExt;
 use prost::Message;
 use prost_reflect::{DescriptorPool, DynamicMessage};
@@ -14,6 +14,9 @@ use tonic_reflection::pb::v1alpha::server_reflection_request::MessageRequest;
 use tonic_reflection::pb::v1alpha::server_reflection_response::MessageResponse;
 use tonic_reflection::pb::v1alpha::ServerReflectionRequest;
 
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
 async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String> {
     let mut endpoint_str = addr.to_string();
     if !endpoint_str.starts_with("http://") && !endpoint_str.starts_with("https://") {
@@ -25,7 +28,9 @@ async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String> {
     }
 
     let mut endpoint = Endpoint::from_shared(endpoint_str)
-        .map_err(|e| format!("invalid server address URL: {e}"))?;
+        .map_err(|e| format!("invalid server address URL: {e}"))?
+        .connect_timeout(CONNECT_TIMEOUT)
+        .timeout(REQUEST_TIMEOUT);
 
     if use_tls {
         let tls = ClientTlsConfig::new();
@@ -34,9 +39,9 @@ async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String> {
             .map_err(|e| format!("failed to configure TLS: {e}"))?;
     }
 
-    endpoint
-        .connect()
+    tokio::time::timeout(CONNECT_TIMEOUT, endpoint.connect())
         .await
+        .map_err(|_| format!("connection timed out after {}s", CONNECT_TIMEOUT.as_secs()))?
         .map_err(|e| format!("failed to connect to gRPC server: {e}"))
 }
 
@@ -74,22 +79,40 @@ pub async fn discover_services(
         };
     }
 
-    let mut response_stream = match client.server_reflection_info(outbound).await {
-        Ok(res) => res.into_inner(),
-        Err(e) => {
+    let mut response_stream = match tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound)).await {
+        Ok(Ok(res)) => res.into_inner(),
+        Ok(Err(e)) => {
             return GrpcReflectionResponse {
                 services: Vec::new(),
                 error: Some(format!("reflection service rejected: {e}. gRPC server reflection unavailable on target; reflection required.")),
             };
         }
+        Err(_) => {
+            return GrpcReflectionResponse {
+                services: Vec::new(),
+                error: Some(format!("reflection request timed out after {}s. Server reflection unavailable.", REQUEST_TIMEOUT.as_secs())),
+            };
+        }
     };
 
-    let first_res = match response_stream.next().await {
-        Some(Ok(res)) => res,
-        _ => {
+    let first_res = match tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
+        Ok(Some(Ok(res))) => res,
+        Ok(Some(Err(e))) => {
+            return GrpcReflectionResponse {
+                services: Vec::new(),
+                error: Some(format!("reflection stream error: {e}. Server reflection unavailable.")),
+            };
+        }
+        Ok(None) => {
             return GrpcReflectionResponse {
                 services: Vec::new(),
                 error: Some("empty reflection response. gRPC server reflection unavailable on target; reflection required.".into()),
+            };
+        }
+        Err(_) => {
+            return GrpcReflectionResponse {
+                services: Vec::new(),
+                error: Some(format!("timed out waiting for reflection response after {}s.", REQUEST_TIMEOUT.as_secs())),
             };
         }
     };
@@ -122,7 +145,7 @@ pub async fn discover_services(
         };
 
         if tx.send(sym_req).await.is_ok() {
-            if let Some(Ok(res)) = response_stream.next().await {
+            if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
                 if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
                     for fd_bytes in fdr.file_descriptor_proto {
                         if let Ok(proto) = prost_types::FileDescriptorProto::decode(&fd_bytes[..]) {
@@ -205,9 +228,9 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
         };
     }
 
-    let mut response_stream = match client.server_reflection_info(outbound).await {
-        Ok(res) => res.into_inner(),
-        Err(e) => {
+    let mut response_stream = match tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound)).await {
+        Ok(Ok(res)) => res.into_inner(),
+        Ok(Err(e)) => {
             return GrpcExecutionResponse {
                 status_code: 14,
                 status_message: "Reflection error".into(),
@@ -218,10 +241,21 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
                 error: Some(format!("gRPC server reflection unavailable on target; reflection required. Detail: {e}")),
             };
         }
+        Err(_) => {
+            return GrpcExecutionResponse {
+                status_code: 4, // DEADLINE_EXCEEDED
+                status_message: "Reflection timeout".into(),
+                response_time_ms: start.elapsed().as_millis() as u64,
+                response_size_bytes: 0,
+                metadata: HashMap::new(),
+                body: serde_json::Value::Null,
+                error: Some(format!("Reflection request timed out after {}s", REQUEST_TIMEOUT.as_secs())),
+            };
+        }
     };
 
     let mut pool = DescriptorPool::new();
-    if let Some(Ok(res)) = response_stream.next().await {
+    if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
         if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
             for fd_bytes in fdr.file_descriptor_proto {
                 if let Ok(proto) = prost_types::FileDescriptorProto::decode(&fd_bytes[..]) {
