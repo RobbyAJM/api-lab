@@ -5,7 +5,9 @@
     "dev:desktop": "pnpm --filter @api-lab/desktop dev",
     "build:desktop": "pnpm --filter @api-lab/desktop build",
     "server:run": "cargo run -p api-lab-server",
-    "test:rust": "cargo test --workspace"
+    "test:rust": "cargo test --workspace",
+    "test:ts": "node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts",
+    "test": "cargo test --workspace && node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts"
   },
   "devDependencies": {
     "typescript": "^5.7.3"

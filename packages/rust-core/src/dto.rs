@@ -258,6 +258,20 @@ pub struct GrpcReflectionResponse {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrpcSamplePayloadRequest {
+    pub server_address: String,
+    pub service: String,
+    pub method: String,
+    pub use_tls: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrpcSamplePayloadResponse {
+    pub payload: serde_json::Value,
+    pub error: Option<String>,
+}
+
 // WebSocket Event DTO
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WsSyncEvent {

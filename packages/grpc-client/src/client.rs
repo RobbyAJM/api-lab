@@ -7,7 +7,7 @@ use prost_types::FileDescriptorProto;
 use serde::de::DeserializeSeed;
 use rust_core::dto::{
     GrpcExecutionRequest, GrpcExecutionResponse, GrpcMethodSummary, GrpcReflectionRequest,
-    GrpcReflectionResponse, GrpcServiceSummary,
+    GrpcReflectionResponse, GrpcSamplePayloadRequest, GrpcSamplePayloadResponse, GrpcServiceSummary,
 };
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 
@@ -620,5 +620,58 @@ impl tonic::codec::Decoder for DynamicRawDecoder {
         let mut bytes = vec![0u8; len];
         src.copy_to_slice(&mut bytes);
         Ok(Some(bytes))
+    }
+}
+
+pub async fn generate_sample_for_method(
+    req: GrpcSamplePayloadRequest,
+) -> GrpcSamplePayloadResponse {
+    let use_tls = req.use_tls.unwrap_or(false);
+    let channel = match create_channel(&req.server_address, use_tls).await {
+        Ok(c) => c,
+        Err(e) => {
+            return GrpcSamplePayloadResponse {
+                payload: serde_json::Value::Null,
+                error: Some(format!("Connection error: {e}")),
+            };
+        }
+    };
+
+    let pool = match fetch_pool_for_symbol(channel, &req.service).await {
+        Ok(p) => p,
+        Err(e) => {
+            return GrpcSamplePayloadResponse {
+                payload: serde_json::Value::Null,
+                error: Some(format!("Reflection error: {e}")),
+            };
+        }
+    };
+
+    let service_desc = match pool.get_service_by_name(&req.service) {
+        Some(s) => s,
+        None => {
+            return GrpcSamplePayloadResponse {
+                payload: serde_json::Value::Null,
+                error: Some(format!("Service '{}' not found in server reflection", req.service)),
+            };
+        }
+    };
+
+    let method_desc = match service_desc.methods().find(|m| m.name() == req.method) {
+        Some(m) => m,
+        None => {
+            return GrpcSamplePayloadResponse {
+                payload: serde_json::Value::Null,
+                error: Some(format!("Method '{}' not found on service '{}'", req.method, req.service)),
+            };
+        }
+    };
+
+    let input_desc = method_desc.input();
+    let payload = crate::payload_generator::generate_sample_payload(&input_desc);
+
+    GrpcSamplePayloadResponse {
+        payload,
+        error: None,
     }
 }
