@@ -391,6 +391,18 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
     let timeout_ms = req.timeout_ms.unwrap_or(30_000);
     let codec = DynamicRawCodec;
 
+    if let Err(e) = grpc_client.ready().await {
+        return GrpcExecutionResponse {
+            status_code: 14,
+            status_message: format!("Channel not ready: {e}"),
+            response_time_ms: start.elapsed().as_millis() as u64,
+            response_size_bytes: 0,
+            metadata: HashMap::new(),
+            body: serde_json::Value::Null,
+            error: Some(format!("Failed to prepare gRPC channel: {e}")),
+        };
+    }
+
     let res = tokio::time::timeout(
         std::time::Duration::from_millis(timeout_ms),
         grpc_client.unary(tonic_req, http_path, codec),

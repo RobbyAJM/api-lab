@@ -10,6 +10,7 @@ import type {
   VariableResponse,
 } from '@api-lab/api-types';
 import { Send, Save, RefreshCw, Radio, Plus, Trash2 } from 'lucide-react';
+import { JsonEditor } from '../common/JsonEditor';
 
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -352,11 +353,13 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             <span className="text-[11px] text-zinc-400">
               Provide JSON matching the protobuf message schema. Variables like &#123;&#123;ID&#125;&#125; are supported.
             </span>
-            <textarea
-              value={payloadStr}
-              onChange={(e) => setPayloadStr(e.target.value)}
-              className="flex-1 w-full bg-zinc-900 border border-zinc-800 rounded p-3 font-mono text-xs focus:outline-none focus:border-purple-500 resize-none h-64"
-            />
+            <div className="flex-1 h-72">
+              <JsonEditor
+                value={payloadStr}
+                onChange={setPayloadStr}
+                placeholder="{\n  \n}"
+              />
+            </div>
           </div>
         )}
 
