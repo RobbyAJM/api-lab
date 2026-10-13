@@ -206,11 +206,11 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             </span>
             <span className="text-xs font-medium text-zinc-100">{endpoint.name}</span>
           </div>
-          {statusMessage && (
-            <span className="text-xs text-indigo-400 font-mono truncate max-w-sm">
-              {statusMessage}
-            </span>
-          )}
+        {statusMessage && (
+          <div className="p-2 bg-zinc-900 border border-zinc-800 rounded text-xs font-mono text-indigo-300 break-all select-text">
+            {statusMessage}
+          </div>
+        )}
         </div>
 
         <div className="flex items-center gap-2">
