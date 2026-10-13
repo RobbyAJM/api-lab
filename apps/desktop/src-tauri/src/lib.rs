@@ -43,6 +43,24 @@ mod commands {
     ) -> GrpcSamplePayloadResponse {
         grpc_runner::run_grpc_sample_payload(req, variables).await
     }
+
+    #[tauri::command]
+    pub async fn execute_grpc_stream(
+        req: GrpcExecutionRequest,
+        variables: HashMap<String, String>,
+        stream_id: String,
+        channel: tauri::ipc::Channel<serde_json::Value>,
+    ) -> GrpcExecutionResponse {
+        grpc_runner::run_grpc_stream(req, variables, stream_id, move |msg| {
+            let _ = channel.send(msg);
+        })
+        .await
+    }
+
+    #[tauri::command]
+    pub fn cancel_grpc_stream(stream_id: String) -> bool {
+        grpc_runner::cancel_stream(&stream_id)
+    }
 }
 
 #[cfg(not(feature = "desktop"))]
@@ -76,6 +94,18 @@ mod commands {
     ) -> GrpcSamplePayloadResponse {
         grpc_runner::run_grpc_sample_payload(req, variables).await
     }
+
+    pub async fn execute_grpc_stream(
+        req: GrpcExecutionRequest,
+        variables: HashMap<String, String>,
+        stream_id: String,
+    ) -> GrpcExecutionResponse {
+        grpc_runner::run_grpc_stream(req, variables, stream_id, |_| {}).await
+    }
+
+    pub fn cancel_grpc_stream(stream_id: String) -> bool {
+        grpc_runner::cancel_stream(&stream_id)
+    }
 }
 
 pub use commands::*;
@@ -88,7 +118,9 @@ pub fn run() {
             execute_http_request,
             execute_grpc_request,
             discover_grpc_services,
-            generate_grpc_sample_payload
+            generate_grpc_sample_payload,
+            execute_grpc_stream,
+            cancel_grpc_stream
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

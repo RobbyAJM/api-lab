@@ -41,10 +41,24 @@ export interface InvitationResponse {
   created_at: string;
 }
 
+export interface CollectionAuthSettings {
+  auth_type: 'none' | 'bearer' | 'basic' | 'custom';
+  token?: string;
+  username?: string;
+  password?: string;
+  header_name?: string;
+  header_value?: string;
+}
+
+export interface CollectionSettings {
+  auth?: CollectionAuthSettings;
+}
+
 export interface Collection {
   id: string;
   workspace_id: string;
   name: string;
+  settings?: CollectionSettings;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -107,7 +121,7 @@ export interface SavedResponse {
 }
 
 export interface HttpAuth {
-  auth_type: 'none' | 'bearer' | 'basic' | 'custom';
+  auth_type: 'inherit' | 'none' | 'bearer' | 'basic' | 'custom';
   token?: string;
   username?: string;
   password?: string;
@@ -165,6 +179,9 @@ export interface GrpcMethodSummary {
   name: string;
   input_type: string;
   output_type: string;
+  is_client_streaming?: boolean;
+  is_server_streaming?: boolean;
+  stream_type?: 'unary' | 'omni_stream' | 'bidi_stream';
 }
 
 export interface GrpcServiceSummary {
