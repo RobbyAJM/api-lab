@@ -637,7 +637,7 @@ where
     // Call streaming based on whether method is client-streaming (bidi) or server-streaming (omni)
     let is_client_streaming = method_desc.is_client_streaming();
 
-    let stream_res = if is_client_streaming {
+    let (keepalive_tx, stream_res) = if is_client_streaming {
         let (tx, rx) = tokio::sync::mpsc::channel(10);
         let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
         let _ = tx.send(buf).await;
@@ -650,7 +650,8 @@ where
                 }
             }
         }
-        grpc_client.streaming(tonic_req, http_path, codec).await
+        let res = grpc_client.streaming(tonic_req, http_path, codec).await;
+        (Some(tx), res)
     } else {
         let mut tonic_req = tonic::Request::new(buf);
         for (k, v) in req.metadata {
@@ -661,11 +662,13 @@ where
                 }
             }
         }
-        grpc_client.server_streaming(tonic_req, http_path, codec).await
+        let res = grpc_client.server_streaming(tonic_req, http_path, codec).await;
+        (None, res)
     };
 
     match stream_res {
         Ok(response) => {
+            let _keepalive = keepalive_tx;
             let mut meta_map = HashMap::new();
             for kv in response.metadata().iter() {
                 if let tonic::metadata::KeyAndValueRef::Ascii(k, v) = kv {

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
@@ -14,7 +14,13 @@ import { syncEnvironmentVariables } from '../../utils/envSync';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
-  const { activeEnvironmentId, setLastHttpResponse } = useAppStore();
+  const { activeEnvironmentId, setLastHttpResponse, setActiveEndpoint } = useAppStore();
+
+  const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
+  const currentVersionRef = useRef<number>(endpoint.version);
+  currentVersionRef.current = currentVersion;
+  const isSavingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
 
   const [method, setMethod] = useState(endpoint.config?.method || 'GET');
   const [url, setUrl] = useState(endpoint.config?.url || 'https://httpbin.org/get');
@@ -43,7 +49,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     endpoint.config?.pre_request_script || ''
   );
   const [postResponseScript, setPostResponseScript] = useState<string>(
-    endpoint.config?.post_request_script || ''
+    endpoint.config?.post_request_script || endpoint.config?.post_response_script || ''
   );
   const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
@@ -89,6 +95,8 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   // Sync state if endpoint prop changes
   useEffect(() => {
+    setCurrentVersion(endpoint.version);
+    currentVersionRef.current = endpoint.version;
     setMethod(endpoint.config?.method || 'GET');
     setUrl(endpoint.config?.url || 'https://httpbin.org/get');
     setQueryParams(endpoint.config?.query_params || []);
@@ -97,12 +105,113 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setBody(endpoint.config?.body || '');
     setAuth(endpoint.config?.auth || { auth_type: 'none' });
     setPreRequestScript(endpoint.config?.pre_request_script || '');
-    setPostResponseScript(endpoint.config?.post_request_script || '');
+    setPostResponseScript(
+      endpoint.config?.post_request_script || endpoint.config?.post_response_script || ''
+    );
     setHookTests([]);
     setHookLogs([]);
   }, [endpoint.id]);
 
-  // Generate example script for Before or After hook (New Feature 1)
+  function buildConfig() {
+    const headerMap: Record<string, string> = {};
+    for (const [k, v] of headers) {
+      if (k.trim()) headerMap[k.trim()] = v;
+    }
+    return {
+      method,
+      url,
+      query_params: queryParams.filter(([k]) => k.trim()),
+      headers: headerMap,
+      body_type: bodyType,
+      body,
+      auth,
+      pre_request_script: preRequestScript,
+      post_request_script: postResponseScript,
+      post_response_script: postResponseScript,
+    };
+  }
+
+  const saveChanges = async (options?: { silent?: boolean }) => {
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+    isSavingRef.current = true;
+    try {
+      const cfg = buildConfig();
+      let res: Endpoint;
+      try {
+        res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            version: currentVersionRef.current,
+            config: cfg,
+          }),
+        });
+      } catch (err: any) {
+        if (err?.message?.includes('version mismatch') || err?.status === 409) {
+          const latest = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`);
+          currentVersionRef.current = latest.version;
+          res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              version: latest.version,
+              config: cfg,
+            }),
+          });
+        } else {
+          throw err;
+        }
+      }
+
+      setCurrentVersion(res.version);
+      currentVersionRef.current = res.version;
+      setActiveEndpoint(res);
+      queryClient.setQueryData<Endpoint[]>(
+        ['endpoints', endpoint.collection_id],
+        (prev) => prev?.map((ep) => (ep.id === res.id ? res : ep)) || [res]
+      );
+      if (!options?.silent) {
+        setStatusMessage('Saved successfully');
+        setTimeout(() => setStatusMessage(null), 2000);
+      }
+    } catch (err: any) {
+      if (!options?.silent) {
+        setStatusMessage(`Error saving: ${err.message}`);
+      }
+    } finally {
+      isSavingRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        saveChanges(options);
+      }
+    }
+  };
+
+  // Debounced auto-save on script edits (1000ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveChanges({ silent: true });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [preRequestScript, postResponseScript]);
+
+  // Keyboard shortcuts: Ctrl+S to save, Ctrl+Enter to send
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveChanges({ silent: false });
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSend();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentVersion, preRequestScript, postResponseScript, method, url, queryParams, headers, bodyType, body, auth]);
+
+  // Generate example script for Before or After hook
   function handleGenerateScript() {
     if (hookScriptTab === 'pre') {
       const samplePre = `// Pre-request Script Example
@@ -136,43 +245,8 @@ try {
     setTimeout(() => setStatusMessage(null), 2500);
   }
 
-  // Save changes to endpoint on server
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const headerMap: Record<string, string> = {};
-      for (const [k, v] of headers) {
-        if (k.trim()) headerMap[k.trim()] = v;
-      }
-
-      return apiRequest(`/endpoints/${endpoint.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          version: endpoint.version,
-          config: {
-            method,
-            url,
-            query_params: queryParams.filter(([k]) => k.trim()),
-            headers: headerMap,
-            body_type: bodyType,
-            body,
-            auth,
-            pre_request_script: preRequestScript,
-            post_request_script: postResponseScript,
-          },
-        }),
-      });
-    },
-    onSuccess: () => {
-      setStatusMessage('Saved successfully');
-      queryClient.invalidateQueries({ queryKey: ['endpoints', endpoint.collection_id] });
-      setTimeout(() => setStatusMessage(null), 2000);
-    },
-    onError: (err: any) => {
-      setStatusMessage(`Error saving: ${err.message}`);
-    },
-  });
-
   async function handleSend() {
+    saveChanges({ silent: true });
     setSending(true);
     setStatusMessage(null);
 
@@ -312,19 +386,26 @@ try {
             onClick={handleSend}
             disabled={sending}
             className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+            title="Send request (Ctrl+Enter)"
           >
             <Send size={13} />
             <span>{sending ? 'Sending...' : 'Send'}</span>
+            <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-indigo-800/80 text-indigo-200 border border-indigo-700 ml-0.5 select-none">
+              Ctrl+↵
+            </kbd>
           </button>
 
           <button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
+            onClick={() => saveChanges({ silent: false })}
+            disabled={isSavingRef.current}
             className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs flex items-center gap-1.5 transition h-8"
-            title="Save changes to endpoint"
+            title="Save changes to endpoint (Ctrl+S)"
           >
             <Save size={13} />
             <span>Save</span>
+            <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-700/60 ml-0.5 select-none">
+              Ctrl+S
+            </kbd>
           </button>
         </div>
       </div>

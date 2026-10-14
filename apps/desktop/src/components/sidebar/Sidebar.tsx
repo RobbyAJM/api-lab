@@ -28,6 +28,7 @@ import {
   FolderPlus,
   ChevronsDownUp,
   RefreshCw,
+  Keyboard,
 } from 'lucide-react';
 import { GenerateGrpcModal } from './GenerateGrpcModal';
 import { CollectionSettingsModal } from '../collections/CollectionSettingsModal';
@@ -50,6 +51,8 @@ export const Sidebar: React.FC = () => {
     logout,
     setEnvModalOpen,
     setMembersModalOpen,
+    setCommandPaletteOpen,
+    setShortcutsHelpOpen,
   } = useAppStore();
 
   const [newCollectionName, setNewCollectionName] = useState('');
@@ -244,14 +247,24 @@ export const Sidebar: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search collections & endpoints..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded pl-7 pr-6 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-zinc-950 border border-zinc-800 rounded pl-7 pr-12 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
           />
-          {searchQuery && (
+          {searchQuery ? (
             <button
               onClick={() => setSearchQuery('')}
               className="absolute right-2 text-zinc-500 hover:text-zinc-300"
             >
               <X size={11} />
+            </button>
+          ) : (
+            <button
+              onClick={() => setCommandPaletteOpen(true)}
+              className="absolute right-1.5 flex items-center hover:opacity-80 transition"
+              title="Open Command Palette (Ctrl+K)"
+            >
+              <kbd className="text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60 select-none">
+                Ctrl+K
+              </kbd>
             </button>
           )}
         </div>
@@ -328,6 +341,13 @@ export const Sidebar: React.FC = () => {
 
         <div className="flex items-center gap-1 text-zinc-400">
           <button
+            onClick={() => setShortcutsHelpOpen(true)}
+            className="p-1 hover:text-indigo-400 transition"
+            title="Keyboard Shortcuts (Ctrl+/)"
+          >
+            <Keyboard size={14} />
+          </button>
+          <button
             onClick={() => setMembersModalOpen(true)}
             className="p-1 hover:text-zinc-200"
             title="Workspace Members"
@@ -402,6 +422,21 @@ const CollectionNode: React.FC<{
     queryKey: ['endpoints', collection.id],
     queryFn: () => apiRequest(`/collections/${collection.id}/endpoints`),
   });
+
+  const { activeEndpointId, setActiveEndpoint } = useAppStore();
+
+  // Auto-restore last active endpoint on boot
+  useEffect(() => {
+    if (!activeEndpointId && endpoints.length > 0) {
+      const savedId = localStorage.getItem('api_lab_active_endpoint_id');
+      if (savedId) {
+        const found = endpoints.find((ep) => ep.id === savedId);
+        if (found) {
+          setActiveEndpoint(found);
+        }
+      }
+    }
+  }, [endpoints, activeEndpointId, setActiveEndpoint]);
 
   const renameMutation = useMutation({
     mutationFn: (newName: string) =>
@@ -942,7 +977,10 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
 
   return (
     <button
-      onClick={() => setActiveEndpoint(endpoint)}
+      onClick={() => {
+        setActiveEndpoint(endpoint);
+        localStorage.setItem('api_lab_active_endpoint_id', endpoint.id);
+      }}
       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition text-left group ${
         isActive
           ? 'bg-indigo-950/70 text-indigo-200 font-medium border border-indigo-800/60'

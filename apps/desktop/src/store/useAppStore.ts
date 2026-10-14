@@ -7,10 +7,12 @@ import type {
   GrpcExecutionResponse,
 } from '@api-lab/api-types';
 import { getAuthToken, setAuthToken } from '../api/client';
+import { cancelNativeGrpcStream } from '../api/native';
 
 export interface StreamMessageItem {
   id: string;
   timestamp: string;
+  direction: 'in' | 'out';
   payload: any;
 }
 
@@ -32,16 +34,24 @@ interface AppState {
   // Streaming state
   isStreaming: boolean;
   activeStreamId: string | null;
+  streamingEndpointId: string | null;
   streamMessages: StreamMessageItem[];
-  setIsStreaming: (isStreaming: boolean, streamId?: string | null) => void;
-  addStreamMessage: (msg: any) => void;
+  setIsStreaming: (
+    isStreaming: boolean,
+    streamId?: string | null,
+    endpointId?: string | null
+  ) => void;
+  addStreamMessage: (msg: any, direction?: 'in' | 'out') => void;
   clearStreamMessages: () => void;
+  stopStreaming: () => Promise<void>;
 
   // Modals
   authModalOpen: boolean;
   authModalTab: 'login' | 'register' | 'forgot' | 'reset';
   envModalOpen: boolean;
   membersModalOpen: boolean;
+  commandPaletteOpen: boolean;
+  shortcutsHelpOpen: boolean;
 
   setAuth: (token: string, user: UserSummary, workspace?: WorkspaceSummary) => void;
   logout: () => void;
@@ -56,6 +66,8 @@ interface AppState {
   closeAuthModal: () => void;
   setEnvModalOpen: (open: boolean) => void;
   setMembersModalOpen: (open: boolean) => void;
+  setCommandPaletteOpen: (open: boolean) => void;
+  setShortcutsHelpOpen: (open: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -75,21 +87,38 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   isStreaming: false,
   activeStreamId: null,
+  streamingEndpointId: null,
   streamMessages: [],
-  setIsStreaming: (isStreaming, streamId = null) =>
-    set({ isStreaming, activeStreamId: streamId }),
-  addStreamMessage: (msg) =>
+  setIsStreaming: (isStreaming, streamId = null, endpointId = null) =>
+    set({
+      isStreaming,
+      activeStreamId: streamId,
+      streamingEndpointId: isStreaming ? endpointId : null,
+    }),
+  addStreamMessage: (msg, direction = 'in') =>
     set((state) => ({
       streamMessages: [
         ...state.streamMessages,
         {
           id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           timestamp: new Date().toLocaleTimeString(),
+          direction,
           payload: msg,
         },
       ],
     })),
   clearStreamMessages: () => set({ streamMessages: [] }),
+  stopStreaming: async () => {
+    const { activeStreamId } = get();
+    if (activeStreamId) {
+      await cancelNativeGrpcStream(activeStreamId);
+    }
+    set({
+      isStreaming: false,
+      activeStreamId: null,
+      streamingEndpointId: null,
+    });
+  },
 
   authModalOpen: !getAuthToken(),
   authModalTab: 'login',
@@ -170,14 +199,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveEnvironmentId: (id) => set({ activeEnvironmentId: id }),
 
   setActiveEndpoint: (endpoint) =>
-    set({
-      activeEndpoint: endpoint,
-      activeEndpointId: endpoint ? endpoint.id : null,
-      lastHttpResponse: null,
-      lastGrpcResponse: null,
-      isStreaming: false,
-      activeStreamId: null,
-      streamMessages: [],
+    set((state) => {
+      if (state.activeEndpointId === endpoint?.id) {
+        return { activeEndpoint: endpoint };
+      }
+      return {
+        activeEndpoint: endpoint,
+        activeEndpointId: endpoint ? endpoint.id : null,
+        lastHttpResponse: null,
+        lastGrpcResponse: null,
+      };
     }),
 
   setLastHttpResponse: (res) => set({ lastHttpResponse: res }),
@@ -187,4 +218,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   closeAuthModal: () => set({ authModalOpen: false }),
   setEnvModalOpen: (open) => set({ envModalOpen: open }),
   setMembersModalOpen: (open) => set({ membersModalOpen: open }),
+  commandPaletteOpen: false,
+  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+  shortcutsHelpOpen: false,
+  setShortcutsHelpOpen: (open) => set({ shortcutsHelpOpen: open }),
 }));

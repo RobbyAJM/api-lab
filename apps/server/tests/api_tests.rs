@@ -280,6 +280,57 @@ async fn test_collections_endpoints_concurrency_and_saved_responses() {
     let ep_updated: Value = parse_body(res.into_body()).await;
     assert_eq!(ep_updated["version"].as_i64().unwrap(), 2);
 
+    // 5b. Update endpoint with pre_request_script and post_request_script -> bumps to 3
+    let patch_scripts = Request::builder()
+        .method("PATCH")
+        .uri(format!("/api/v1/endpoints/{ep_id}"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "version": 2,
+                "config": {
+                    "method": "POST",
+                    "url": "https://api.example.com/test",
+                    "pre_request_script": "pm.environment.set('KEY', 'val');",
+                    "post_request_script": "pm.test('Status 200', () => {});"
+                }
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(patch_scripts).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let ep_scripts: Value = parse_body(res.into_body()).await;
+    assert_eq!(ep_scripts["version"].as_i64().unwrap(), 3);
+    assert_eq!(
+        ep_scripts["config"]["pre_request_script"].as_str().unwrap(),
+        "pm.environment.set('KEY', 'val');"
+    );
+    assert_eq!(
+        ep_scripts["config"]["post_request_script"].as_str().unwrap(),
+        "pm.test('Status 200', () => {});"
+    );
+
+    // Verify GET endpoint returns persisted scripts
+    let get_ep = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/endpoints/{ep_id}"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(get_ep).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let ep_fetched: Value = parse_body(res.into_body()).await;
+    assert_eq!(
+        ep_fetched["config"]["pre_request_script"].as_str().unwrap(),
+        "pm.environment.set('KEY', 'val');"
+    );
+    assert_eq!(
+        ep_fetched["config"]["post_request_script"].as_str().unwrap(),
+        "pm.test('Status 200', () => {});"
+    );
+
     // 6. Put Saved Response
     let save_resp = Request::builder()
         .method("PUT")
