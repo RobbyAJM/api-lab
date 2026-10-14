@@ -14,15 +14,27 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
-async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String> {
-    let mut endpoint_str = addr.to_string();
-    if !endpoint_str.starts_with("http://") && !endpoint_str.starts_with("https://") {
-        if use_tls {
-            endpoint_str = format!("https://{}", endpoint_str);
-        } else {
-            endpoint_str = format!("http://{}", endpoint_str);
-        }
+async fn create_channel_direct(addr: &str, use_tls: bool) -> Result<Channel, String> {
+    let mut clean = addr.trim().to_string();
+    if clean.starts_with("http://") {
+        clean = clean.trim_start_matches("http://").to_string();
+    } else if clean.starts_with("https://") {
+        clean = clean.trim_start_matches("https://").to_string();
     }
+
+    let endpoint_str = if use_tls {
+        if clean.ends_with(":80") {
+            format!("https://{}", clean.trim_end_matches(":80"))
+        } else {
+            format!("https://{}", clean)
+        }
+    } else {
+        if clean.ends_with(":443") {
+            format!("http://{}", clean.trim_end_matches(":443"))
+        } else {
+            format!("http://{}", clean)
+        }
+    };
 
     let mut endpoint = Endpoint::from_shared(endpoint_str)
         .map_err(|e| format!("invalid server address URL: {e}"))?
@@ -30,7 +42,7 @@ async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String> {
         .timeout(REQUEST_TIMEOUT);
 
     if use_tls {
-        let tls = ClientTlsConfig::new();
+        let tls = ClientTlsConfig::new().with_native_roots();
         endpoint = endpoint
             .tls_config(tls)
             .map_err(|e| format!("failed to configure TLS: {e}"))?;
@@ -39,39 +51,127 @@ async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String> {
     tokio::time::timeout(CONNECT_TIMEOUT, endpoint.connect())
         .await
         .map_err(|_| format!("connection timed out after {}s", CONNECT_TIMEOUT.as_secs()))?
-        .map_err(|e| format!("failed to connect to gRPC server: {e}"))
+        .map_err(|e| {
+            let mut err_str = format!("{e:?}");
+            let mut cur: Option<&(dyn std::error::Error + 'static)> = std::error::Error::source(&e);
+            while let Some(source) = cur {
+                err_str.push_str(&format!(" -> {source}"));
+                cur = source.source();
+            }
+            format!("failed to connect to gRPC server: {e} ({err_str})")
+        })
 }
 
-// Try v1 first, fallback to v1alpha
-pub async fn discover_services(
-    req: GrpcReflectionRequest,
-) -> GrpcReflectionResponse {
-    let use_tls = req.use_tls.unwrap_or(false);
-    let channel = match create_channel(&req.server_address, use_tls).await {
-        Ok(c) => c,
-        Err(e) => {
-            return GrpcReflectionResponse {
-                services: Vec::new(),
-                error: Some(format!(
-                    "connection error: {e}. gRPC server reflection unavailable on target; reflection required."
-                )),
-            };
+pub async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String> {
+    create_channel_smart(addr, Some(use_tls)).await.map(|(c, _)| c)
+}
+
+pub async fn create_channel_smart(addr: &str, explicit_tls: Option<bool>) -> Result<(Channel, bool), String> {
+    let clean = addr.trim();
+    let has_https = clean.starts_with("https://") || clean.ends_with(":443");
+    let has_http = clean.starts_with("http://");
+
+    let initial_tls = if has_https {
+        true
+    } else if has_http {
+        false
+    } else {
+        let host_part = clean.split(':').next().unwrap_or(clean);
+        let is_local = host_part == "localhost"
+            || host_part == "127.0.0.1"
+            || host_part == "0.0.0.0"
+            || host_part == "::1";
+
+        if !is_local && host_part.contains('.') {
+            explicit_tls.unwrap_or(true)
+        } else {
+            explicit_tls.unwrap_or(false)
         }
     };
 
+    match create_channel_direct(clean, initial_tls).await {
+        Ok(c) => Ok((c, initial_tls)),
+        Err(e) => {
+            if !has_https && !has_http {
+                let fallback_tls = !initial_tls;
+                if let Ok(c) = create_channel_direct(clean, fallback_tls).await {
+                    return Ok((c, fallback_tls));
+                }
+            }
+            Err(e)
+        }
+    }
+}
+
+async fn try_discover_all_versions(channel: Channel) -> Result<GrpcReflectionResponse, String> {
     // Try v1 first
     match try_discover_v1(channel.clone()).await {
-        Ok(res) if !res.services.is_empty() => return res,
+        Ok(res) if !res.services.is_empty() => return Ok(res),
         _ => {}
     }
 
     // Fallback to v1alpha
-    match try_discover_v1alpha(channel).await {
-        Ok(res) => res,
-        Err(err) => GrpcReflectionResponse {
-            services: Vec::new(),
-            error: Some(format!("Reflection discovery failed: {err}. gRPC server reflection unavailable on target; reflection required.")),
-        },
+    try_discover_v1alpha(channel).await
+}
+
+// Try v1 first, fallback to v1alpha, with auto TLS negotiation for remote domains
+pub async fn discover_services(
+    req: GrpcReflectionRequest,
+) -> GrpcReflectionResponse {
+    let clean = req.server_address.trim();
+    let has_https = clean.starts_with("https://") || clean.ends_with(":443");
+    let has_http = clean.starts_with("http://");
+
+    let host_part = clean.split(':').next().unwrap_or(clean);
+    let is_local = host_part == "localhost"
+        || host_part == "127.0.0.1"
+        || host_part == "0.0.0.0"
+        || host_part == "::1";
+
+    let initial_tls = if has_https {
+        true
+    } else if has_http {
+        false
+    } else if !is_local && host_part.contains('.') {
+        req.use_tls.unwrap_or(true)
+    } else {
+        req.use_tls.unwrap_or(false)
+    };
+
+    // 1. Try initial connection & discovery
+    let first_res = match create_channel_direct(clean, initial_tls).await {
+        Ok(c) => try_discover_all_versions(c).await,
+        Err(e) => Err(e),
+    };
+
+    if let Ok(res) = &first_res {
+        if !res.services.is_empty() {
+            return res.clone();
+        }
+    }
+
+    // 2. If initial attempt failed and scheme wasn't locked, try fallback
+    if !has_https && !has_http {
+        let fallback_tls = !initial_tls;
+        if let Ok(c) = create_channel_direct(clean, fallback_tls).await {
+            if let Ok(res) = try_discover_all_versions(c).await {
+                if !res.services.is_empty() {
+                    return res;
+                }
+            }
+        }
+    }
+
+    let err_msg = match first_res {
+        Ok(res) => res.error.unwrap_or_else(|| "No services discovered".into()),
+        Err(e) => e,
+    };
+
+    GrpcReflectionResponse {
+        services: Vec::new(),
+        error: Some(format!(
+            "Reflection discovery failed: {err_msg}. gRPC server reflection unavailable on target; reflection required."
+        )),
     }
 }
 
