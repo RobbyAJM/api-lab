@@ -140,13 +140,13 @@ export function searchEndpointsForCommandPalette(
     return items;
   }
 
+  // Multi-keyword search: all whitespace-separated keywords must match any field
+  // (equivalent to SQL: field LIKE '%k1%' AND field LIKE '%k2%')
+  const keywords = q.split(/\s+/).filter(Boolean);
+
   return items.filter((item) => {
-    return (
-      item.endpoint.name.toLowerCase().includes(q) ||
-      item.collectionName.toLowerCase().includes(q) ||
-      item.methodLabel.toLowerCase().includes(q) ||
-      item.urlOrService.toLowerCase().includes(q)
-    );
+    const searchable = `${item.endpoint.name} ${item.collectionName} ${item.methodLabel} ${item.urlOrService} ${item.protocol}`.toLowerCase();
+    return keywords.every((kw) => searchable.includes(kw));
   });
 }
 

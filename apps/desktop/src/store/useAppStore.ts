@@ -8,6 +8,11 @@ import type {
 } from '@api-lab/api-types';
 import { getAuthToken, setAuthToken } from '../api/client';
 import { cancelNativeGrpcStream } from '../api/native';
+import {
+  openEndpointInTabs,
+  closeEndpointInTabs,
+  updateEndpointInTabs,
+} from '../utils/tabManager';
 
 export interface StreamMessageItem {
   id: string;
@@ -25,8 +30,11 @@ interface AppState {
 
   activeEnvironmentId: string | null;
 
+  openEndpoints: Endpoint[];
   activeEndpointId: string | null;
   activeEndpoint: Endpoint | null;
+  openEndpoint: (endpoint: Endpoint) => void;
+  closeEndpoint: (endpointId: string) => void;
 
   lastHttpResponse: HttpExecutionResponse | null;
   lastGrpcResponse: GrpcExecutionResponse | null;
@@ -79,6 +87,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   activeEnvironmentId: null,
 
+  openEndpoints: [],
   activeEndpointId: null,
   activeEndpoint: null,
 
@@ -186,6 +195,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       activeWorkspaceId: id,
       activeWorkspaceRole: ws ? ws.role : null,
+      openEndpoints: [],
       activeEndpointId: null,
       activeEndpoint: null,
       lastHttpResponse: null,
@@ -198,18 +208,73 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveEnvironmentId: (id) => set({ activeEnvironmentId: id }),
 
-  setActiveEndpoint: (endpoint) =>
+  openEndpoint: (endpoint) => {
     set((state) => {
-      if (state.activeEndpointId === endpoint?.id) {
-        return { activeEndpoint: endpoint };
-      }
+      const tabState = openEndpointInTabs(
+        {
+          openEndpoints: state.openEndpoints,
+          activeEndpointId: state.activeEndpointId,
+          activeEndpoint: state.activeEndpoint,
+        },
+        endpoint
+      );
+
+      const isSameEndpoint = state.activeEndpointId === endpoint.id;
       return {
-        activeEndpoint: endpoint,
-        activeEndpointId: endpoint ? endpoint.id : null,
+        ...tabState,
+        lastHttpResponse: isSameEndpoint ? state.lastHttpResponse : null,
+        lastGrpcResponse: isSameEndpoint ? state.lastGrpcResponse : null,
+      };
+    });
+  },
+
+  closeEndpoint: (endpointId) => {
+    set((state) => {
+      const tabState = closeEndpointInTabs(
+        {
+          openEndpoints: state.openEndpoints,
+          activeEndpointId: state.activeEndpointId,
+          activeEndpoint: state.activeEndpoint,
+        },
+        endpointId
+      );
+
+      const wasActive = state.activeEndpointId === endpointId;
+      return {
+        ...tabState,
+        lastHttpResponse: wasActive ? null : state.lastHttpResponse,
+        lastGrpcResponse: wasActive ? null : state.lastGrpcResponse,
+      };
+    });
+  },
+
+  setActiveEndpoint: (endpoint) => {
+    if (!endpoint) {
+      set({
+        activeEndpoint: null,
+        activeEndpointId: null,
         lastHttpResponse: null,
         lastGrpcResponse: null,
-      };
-    }),
+      });
+      return;
+    }
+    const state = get();
+    if (state.activeEndpointId === endpoint.id) {
+      // Update endpoint metadata/config in place
+      set((s) => ({
+        ...updateEndpointInTabs(
+          {
+            openEndpoints: s.openEndpoints,
+            activeEndpointId: s.activeEndpointId,
+            activeEndpoint: s.activeEndpoint,
+          },
+          endpoint
+        ),
+      }));
+      return;
+    }
+    state.openEndpoint(endpoint);
+  },
 
   setLastHttpResponse: (res) => set({ lastHttpResponse: res }),
   setLastGrpcResponse: (res) => set({ lastGrpcResponse: res }),
