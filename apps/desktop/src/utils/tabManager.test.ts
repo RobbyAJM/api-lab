@@ -10,6 +10,7 @@ import {
   clearEndpointDraftInState,
   isEndpointDirtyInState,
   isConfigDirty,
+  getEffectiveEndpointConfig,
   type TabState,
 } from './tabManager.ts';
 import type { Endpoint } from '@api-lab/api-types';
@@ -281,4 +282,51 @@ test('draft management in TabState preserves unsaved changes across switches', (
   // User saves, clearing draft
   const state2 = clearEndpointDraftInState(state1, 'ep1');
   assert.equal(isEndpointDirtyInState(state2, 'ep1'), false);
+});
+
+test('getEffectiveEndpointConfig: returns draft if present and non-empty, otherwise saved config', () => {
+  const ep = createMockEndpoint('ep1', 'My Endpoint');
+  ep.config = { method: 'GET', url: 'https://saved.com', body: 'saved_body' };
+
+  // 1. No draft -> returns saved config
+  assert.deepEqual(getEffectiveEndpointConfig(ep, null), ep.config);
+  assert.deepEqual(getEffectiveEndpointConfig(ep, undefined), ep.config);
+  assert.deepEqual(getEffectiveEndpointConfig(ep, {}), ep.config);
+
+  // 2. Draft present -> returns draft
+  const unsavedDraft = { method: 'POST', url: 'https://unsaved.com', body: 'unsaved_body' };
+  assert.deepEqual(getEffectiveEndpointConfig(ep, unsavedDraft), unsavedDraft);
+});
+
+test('openEndpointInTabs and closeEndpointInTabs preserve drafts for other tabs', () => {
+  const ep1 = createMockEndpoint('ep1', 'Tab 1');
+  const ep2 = createMockEndpoint('ep2', 'Tab 2');
+
+  let state: TabState = {
+    openEndpoints: [],
+    activeEndpointId: null,
+    activeEndpoint: null,
+    endpointDrafts: {},
+  };
+
+  // Open Tab 1 and add unsaved draft
+  state = openEndpointInTabs(state, ep1);
+  state = setEndpointDraftInState(state, 'ep1', {
+    ...ep1.config,
+    url: 'https://tab1-unsaved.com',
+  });
+  assert.equal(isEndpointDirtyInState(state, 'ep1'), true);
+
+  // Open Tab 2
+  state = openEndpointInTabs(state, ep2);
+  assert.equal(state.activeEndpointId, 'ep2');
+  // Tab 1 draft must still exist in state!
+  assert.equal(isEndpointDirtyInState(state, 'ep1'), true);
+  assert.equal(getEffectiveEndpointConfig(ep1, state.endpointDrafts?.['ep1']).url, 'https://tab1-unsaved.com');
+
+  // Close Tab 2 -> Tab 1 draft must NOT be wiped out
+  state = closeEndpointInTabs(state, 'ep2');
+  assert.equal(state.activeEndpointId, 'ep1');
+  assert.equal(isEndpointDirtyInState(state, 'ep1'), true);
+  assert.equal(getEffectiveEndpointConfig(ep1, state.endpointDrafts?.['ep1']).url, 'https://tab1-unsaved.com');
 });

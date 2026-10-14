@@ -227,6 +227,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           openEndpoints: state.openEndpoints,
           activeEndpointId: state.activeEndpointId,
           activeEndpoint: state.activeEndpoint,
+          endpointDrafts: state.endpointDrafts,
         },
         endpoint
       );
@@ -247,6 +248,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           openEndpoints: state.openEndpoints,
           activeEndpointId: state.activeEndpointId,
           activeEndpoint: state.activeEndpoint,
+          endpointDrafts: state.endpointDrafts,
         },
         endpointId
       );
@@ -351,6 +353,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             openEndpoints: s.openEndpoints,
             activeEndpointId: s.activeEndpointId,
             activeEndpoint: s.activeEndpoint,
+            endpointDrafts: s.endpointDrafts,
           },
           endpoint
         ),
