@@ -10,6 +10,9 @@ import { ResponseViewer } from './components/response/ResponseViewer';
 import { AuthModal } from './components/auth/AuthModal';
 import { EnvironmentModal } from './components/environments/EnvironmentModal';
 import { MembersModal } from './components/members/MembersModal';
+import { CommandPaletteModal } from './components/common/CommandPaletteModal';
+import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
+import { matchesShortcut } from './utils/shortcuts';
 import type { UserSummary, WorkspaceSummary } from '@api-lab/api-types';
 import { Layers } from 'lucide-react';
 
@@ -25,6 +28,12 @@ export const App: React.FC = () => {
     setWorkspaces,
     activeEndpoint,
     openAuthModal,
+    envModalOpen,
+    setEnvModalOpen,
+    commandPaletteOpen,
+    setCommandPaletteOpen,
+    shortcutsHelpOpen,
+    setShortcutsHelpOpen,
   } = useAppStore();
 
   // Real-time synchronization hook
@@ -51,12 +60,51 @@ export const App: React.FC = () => {
     }
   }, [meError, openAuthModal]);
 
+  // Global Keyboard Shortcuts
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // 1. Open / Toggle Command Palette (Ctrl + K)
+      if (matchesShortcut(e, 'open_command')) {
+        e.preventDefault();
+        setCommandPaletteOpen(!commandPaletteOpen);
+      }
+      // 2. Open / Toggle Shortcuts Help (Ctrl + /)
+      else if (matchesShortcut(e, 'open_shortcuts')) {
+        e.preventDefault();
+        setShortcutsHelpOpen(!shortcutsHelpOpen);
+      }
+      // 3. Open / Toggle Environments (Ctrl + E)
+      else if (matchesShortcut(e, 'open_environment')) {
+        e.preventDefault();
+        setEnvModalOpen(!envModalOpen);
+      }
+      // 4. Escape closes any active top modal
+      else if (matchesShortcut(e, 'escape')) {
+        if (commandPaletteOpen) {
+          e.preventDefault();
+          setCommandPaletteOpen(false);
+        } else if (shortcutsHelpOpen) {
+          e.preventDefault();
+          setShortcutsHelpOpen(false);
+        } else if (envModalOpen) {
+          e.preventDefault();
+          setEnvModalOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [commandPaletteOpen, shortcutsHelpOpen, envModalOpen, setCommandPaletteOpen, setShortcutsHelpOpen, setEnvModalOpen]);
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
       {/* Modals */}
       <AuthModal />
       <EnvironmentModal />
       <MembersModal />
+      <CommandPaletteModal />
+      <ShortcutsHelpModal />
 
       {/* 3-Panel Layout */}
       {/* Panel 1: Left Sidebar */}
@@ -65,9 +113,9 @@ export const App: React.FC = () => {
       {/* Panel 2: Request Editor */}
       {activeEndpoint ? (
         activeEndpoint.protocol === 'http' ? (
-          <HttpRequestEditor endpoint={activeEndpoint} />
+          <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
         ) : (
-          <GrpcRequestEditor endpoint={activeEndpoint} />
+          <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
         )
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center border-r border-zinc-800 text-zinc-500 p-8 text-center select-none">
@@ -81,7 +129,7 @@ export const App: React.FC = () => {
 
       {/* Panel 3: Response Panel */}
       {activeEndpoint ? (
-        <ResponseViewer endpoint={activeEndpoint} />
+        <ResponseViewer key={activeEndpoint.id} endpoint={activeEndpoint} />
       ) : (
         <div className="w-96 bg-zinc-950 flex items-center justify-center text-zinc-700 text-xs">
           Response viewer idle
