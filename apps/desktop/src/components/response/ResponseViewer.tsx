@@ -17,11 +17,16 @@ import {
   Square,
   ArrowUpRight,
   ArrowDownLeft,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   detectResponseFormat,
   formatResponseBody,
 } from '../../utils/responseDetector';
+import {
+  getGrpcStatusLabel,
+  formatExecutionError,
+} from '../../utils/grpcSpecification';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
 
 export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
@@ -41,6 +46,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   const [copied, setCopied] = useState(false);
   const [copiedSaved, setCopiedSaved] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
+  const [copiedError, setCopiedError] = useState(false);
   const streamBottomRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
 
@@ -214,195 +220,248 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
       : 0;
 
   return (
-    <div className="w-96 bg-zinc-950 flex flex-col h-screen text-zinc-300 flex-shrink-0">
-      {/* Top Status Header */}
-      <div className="p-3 border-b border-zinc-800 space-y-2 select-none">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-zinc-400">Response</span>
-            {isStreaming && (
-              <div className="flex items-center gap-1.5">
-                <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-mono font-bold bg-cyan-950/70 border border-cyan-800 px-1.5 py-0.5 rounded animate-pulse">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                  STREAMING
-                </span>
-                <button
-                  onClick={stopStreaming}
-                  className="px-1.5 py-0.5 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 rounded text-[10px] font-medium flex items-center gap-1 transition"
-                  title="Stop gRPC Stream"
+    <div className="w-full flex-1 flex flex-col min-h-0 bg-zinc-950 text-zinc-300 overflow-hidden">
+      {/* Top Status & Search Header (Result V3 Sleek Bar) */}
+      <div className="px-4 py-2 bg-zinc-900/60 border-b border-zinc-800/80 flex flex-wrap items-center justify-between text-xs gap-3 select-none flex-shrink-0">
+        {/* Left: Status Badge, Metrics, Stream Indicator */}
+        <div className="flex items-center gap-2.5">
+          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Response</span>
+
+          {isStreaming && (
+            <div className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-mono font-bold bg-cyan-950/70 border border-cyan-800 px-2 py-0.5 rounded animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                STREAMING
+              </span>
+              <button
+                onClick={stopStreaming}
+                className="px-2 py-0.5 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 rounded text-[10px] font-medium flex items-center gap-1 transition"
+                title="Stop gRPC Stream"
+              >
+                <Square size={9} fill="currentColor" />
+                <span>Stop</span>
+              </button>
+            </div>
+          )}
+
+          {activeResponse || streamMessages.length > 0 ? (
+            <div className="flex items-center gap-2.5 text-xs">
+              {/* Status Badge */}
+              {isHttp && lastHttpResponse ? (
+                <span
+                  title={lastHttpResponse.status_text}
+                  className={`font-mono font-bold px-2.5 py-0.5 rounded text-xs inline-flex items-center gap-1.5 flex-shrink-0 ${
+                    lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
+                      ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/60'
+                      : lastHttpResponse.status_code >= 400
+                      ? 'bg-red-950/50 text-red-400 border border-red-800/60'
+                      : 'bg-zinc-800 text-zinc-300'
+                  }`}
                 >
-                  <Square size={9} fill="currentColor" />
-                  <span>Stop</span>
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
+                        ? 'bg-emerald-400'
+                        : 'bg-red-400'
+                    }`}
+                  />
+                  <span>
+                    {lastHttpResponse.status_code}
+                    {lastHttpResponse.status_text && lastHttpResponse.status_text.length <= 24
+                      ? ` ${lastHttpResponse.status_text}`
+                      : ''}
+                  </span>
+                </span>
+              ) : !isHttp && lastGrpcResponse ? (
+                <span
+                  title={lastGrpcResponse.status_message}
+                  className={`font-mono font-bold px-2.5 py-0.5 rounded text-xs inline-flex items-center gap-1.5 flex-shrink-0 ${
+                    lastGrpcResponse.status_code === 0
+                      ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-800/60'
+                      : 'bg-red-950/50 text-red-400 border border-red-800/60'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      lastGrpcResponse.status_code === 0 ? 'bg-emerald-400' : 'bg-red-400'
+                    }`}
+                  />
+                  <span>
+                    gRPC [{lastGrpcResponse.status_code}]{' '}
+                    {getGrpcStatusLabel(lastGrpcResponse.status_code, lastGrpcResponse.status_message)}
+                  </span>
+                </span>
+              ) : null}
+
+              {/* Time */}
+              {activeResponse && (
+                <span className="flex items-center gap-1 text-zinc-400 font-mono text-[11px]">
+                  <Clock size={11} className="text-zinc-500" />
+                  <span>{activeResponse.response_time_ms} ms</span>
+                </span>
+              )}
+
+              {activeResponse && <span className="text-zinc-600">•</span>}
+
+              {/* Size */}
+              {activeResponse && (
+                <span className="flex items-center gap-1 text-zinc-400 font-mono text-[11px]">
+                  <HardDrive size={11} className="text-zinc-500" />
+                  <span>{activeResponse.response_size_bytes} B</span>
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-zinc-500">No response executed yet</span>
+          )}
+
+          {saveMessage && (
+            <span className="text-[11px] text-emerald-400 font-mono ml-1">{saveMessage}</span>
+          )}
+        </div>
+
+        {/* Right: Search Filter Input & Save Button */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex items-center">
+            <Search size={12} className="w-3 h-3 text-zinc-500 absolute left-2.5 top-2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={
+                activeTab === 'stream'
+                  ? 'Filter stream messages...'
+                  : activeTab === 'saved'
+                  ? 'Filter saved response...'
+                  : 'Filter response...'
+              }
+              className="w-44 lg:w-56 bg-zinc-900 border border-zinc-800 focus:border-zinc-700 rounded py-1 pl-7 pr-12 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none"
+            />
+            {searchQuery && (
+              <div className="absolute right-1.5 flex items-center gap-1">
+                {activeTab === 'body' && bodyMatchesCount > 0 && (
+                  <span className="text-[10px] text-zinc-400 font-mono">
+                    {bodyMatchesCount}
+                  </span>
+                )}
+                {activeTab === 'saved' && savedMatchesCount > 0 && (
+                  <span className="text-[10px] text-zinc-400 font-mono">
+                    {savedMatchesCount}
+                  </span>
+                )}
+                {activeTab === 'stream' && (
+                  <span className="text-[10px] text-zinc-400 font-mono">
+                    {filteredStreamMessages.length}/{streamMessages.length}
+                  </span>
+                )}
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="text-zinc-500 hover:text-zinc-300 p-0.5"
+                >
+                  <X size={11} />
                 </button>
               </div>
             )}
           </div>
+
           {(activeResponse || streamMessages.length > 0) && (
             <button
               onClick={handleSaveCurrent}
               disabled={saveResponseMutation.isPending}
-              className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-medium transition"
-              title="Save this response to workspace"
+              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              title="Save response to workspace"
             >
-              <Bookmark size={12} />
+              <Bookmark size={12} className="text-zinc-400" />
               <span>Save</span>
             </button>
           )}
         </div>
-
-        {saveMessage && (
-          <div className="text-[11px] text-emerald-400 font-mono">{saveMessage}</div>
-        )}
-
-        {activeResponse || streamMessages.length > 0 ? (
-          <div className="flex items-center gap-3 text-xs">
-            {/* Status Badge */}
-            {isHttp && lastHttpResponse ? (
-              <span
-                className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
-                  lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
-                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                    : lastHttpResponse.status_code >= 400
-                    ? 'bg-red-950 text-red-400 border border-red-800'
-                    : 'bg-zinc-800 text-zinc-300'
-                }`}
-              >
-                {lastHttpResponse.status_code} {lastHttpResponse.status_text}
-              </span>
-            ) : !isHttp && lastGrpcResponse ? (
-              <span
-                className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
-                  lastGrpcResponse.status_code === 0
-                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                    : 'bg-red-950 text-red-400 border border-red-800'
-                }`}
-              >
-                gRPC [{lastGrpcResponse.status_code}] {lastGrpcResponse.status_message}
-              </span>
-            ) : null}
-
-            {/* Time */}
-            {activeResponse && (
-              <span className="flex items-center gap-1 text-zinc-400 text-[11px]">
-                <Clock size={11} />
-                <span>{activeResponse.response_time_ms} ms</span>
-              </span>
-            )}
-
-            {/* Size */}
-            {activeResponse && (
-              <span className="flex items-center gap-1 text-zinc-400 text-[11px]">
-                <HardDrive size={11} />
-                <span>{activeResponse.response_size_bytes} B</span>
-              </span>
-            )}
-          </div>
-        ) : (
-          <div className="text-xs text-zinc-500 py-1">No response executed yet</div>
-        )}
       </div>
 
-      {/* Searchbar in Response or Stream */}
-      <div className="px-3 py-1.5 border-b border-zinc-800 bg-zinc-900/50 select-none">
-        <div className="relative flex items-center">
-          <Search size={12} className="absolute left-2 text-zinc-500 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={
-              activeTab === 'stream'
-                ? 'Search stream messages...'
-                : activeTab === 'saved'
-                ? 'Search saved response...'
-                : 'Search response body...'
-            }
-            className="w-full bg-zinc-950 border border-zinc-800 rounded pl-7 pr-12 py-1 text-[11px] font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
-          />
-          {searchQuery && (
-            <div className="absolute right-1.5 flex items-center gap-1">
-              {activeTab === 'body' && bodyMatchesCount > 0 && (
-                <span className="text-[10px] text-zinc-400 font-mono">
-                  {bodyMatchesCount}
-                </span>
-              )}
-              {activeTab === 'saved' && savedMatchesCount > 0 && (
-                <span className="text-[10px] text-zinc-400 font-mono">
-                  {savedMatchesCount}
-                </span>
-              )}
-              {activeTab === 'stream' && (
-                <span className="text-[10px] text-zinc-400 font-mono">
-                  {filteredStreamMessages.length}/{streamMessages.length}
-                </span>
-              )}
-              <button
-                onClick={() => setSearchQuery('')}
-                className="text-zinc-500 hover:text-zinc-300 p-0.5"
-              >
-                <X size={11} />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-zinc-800 bg-zinc-900/40 text-xs select-none">
-        <button
-          onClick={() => setActiveTab('body')}
-          className={`px-3 py-2 font-medium border-b-2 transition ${
-            activeTab === 'body'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Body
-        </button>
-
-        {!isHttp && (
+      {/* Navigation Tabs Bar */}
+      <div className="px-4 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
+        <div className="flex items-center gap-4">
           <button
-            onClick={() => setActiveTab('stream')}
-            className={`px-3 py-2 font-medium border-b-2 transition flex items-center gap-1 ${
-              activeTab === 'stream'
-                ? 'border-cyan-500 text-cyan-400'
+            onClick={() => setActiveTab('body')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'body'
+                ? 'border-zinc-200 text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <ArrowDownUp size={11} />
-            <span>Stream</span>
-            {streamMessages.length > 0 && (
-              <span className="ml-0.5 px-1 bg-zinc-800 text-[10px] rounded font-mono text-cyan-300">
-                {streamMessages.length}
-              </span>
+            <span>Body</span>
+          </button>
+
+          {!isHttp && (
+            <button
+              onClick={() => setActiveTab('stream')}
+              className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+                activeTab === 'stream'
+                  ? 'border-cyan-400 text-cyan-300'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <ArrowDownUp size={11} />
+              <span>Stream</span>
+              {streamMessages.length > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-cyan-400 rounded border border-zinc-800">
+                  {streamMessages.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          <button
+            onClick={() => setActiveTab('headers')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'headers'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>{isHttp ? 'Headers' : 'Metadata'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('saved')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'saved'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Saved</span>
+            {savedResponse && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             )}
           </button>
+        </div>
+
+        {/* Output Controls (Format indicator & Copy) */}
+        {activeTab === 'body' && formattedBody && (
+          <div className="flex items-center gap-2 py-1">
+            <span className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
+              {detectedFormat} Formatted
+            </span>
+            <button
+              onClick={handleCopyBody}
+              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1.5 shadow-sm"
+              title="Copy response body to clipboard"
+            >
+              {copied ? (
+                <>
+                  <Check size={11} className="text-emerald-400" />
+                  <span className="text-emerald-400">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={11} className="text-zinc-400" />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          </div>
         )}
-
-        <button
-          onClick={() => setActiveTab('headers')}
-          className={`px-3 py-2 font-medium border-b-2 transition ${
-            activeTab === 'headers'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          {isHttp ? 'Headers' : 'Metadata'}
-        </button>
-
-        <button
-          onClick={() => setActiveTab('saved')}
-          className={`px-3 py-2 font-medium border-b-2 transition flex items-center gap-1 ${
-            activeTab === 'saved'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <span>Saved</span>
-          {savedResponse && (
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-          )}
-        </button>
       </div>
 
       {/* Content */}
@@ -411,12 +470,47 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
         {activeTab === 'body' && (
           <div className="space-y-2">
             {/* Execution Error ONLY inside Body tab */}
-            {activeResponse?.error && (
-              <div className="p-2.5 bg-red-950/60 border border-red-800 rounded text-red-300 font-sans text-xs">
-                <div className="font-semibold mb-1">Execution Error:</div>
-                <div className="font-mono text-xs">{activeResponse.error}</div>
-              </div>
-            )}
+            {activeResponse?.error && (() => {
+              const parsedErr = formatExecutionError(activeResponse.error, activeResponse.status_code);
+              return (
+                <div className="p-3 bg-red-950/40 border border-red-800/60 rounded-md text-red-200 font-sans text-xs space-y-2 select-text">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle size={15} className="text-red-400 flex-shrink-0" />
+                      <span className="font-semibold text-red-300 text-xs">{parsedErr.title}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(activeResponse.error || '');
+                        setCopiedError(true);
+                        setTimeout(() => setCopiedError(false), 2000);
+                      }}
+                      className="px-2 py-0.5 bg-red-950/80 hover:bg-red-900 border border-red-800 text-[11px] font-mono text-red-300 rounded flex items-center gap-1 transition"
+                      title="Copy full error trace"
+                    >
+                      {copiedError ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+                      <span>{copiedError ? 'Copied' : 'Copy Trace'}</span>
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-red-200/90 leading-relaxed font-sans">
+                    {parsedErr.summary}
+                  </p>
+
+                  {parsedErr.details && (
+                    <div className="mt-2 pt-2 border-t border-red-900/40">
+                      <div className="text-[10px] uppercase font-mono tracking-wider text-red-400/80 mb-1">
+                        Technical Details:
+                      </div>
+                      <div className="bg-zinc-950/90 p-2.5 rounded border border-red-950 font-mono text-[11px] text-red-300/80 leading-relaxed max-h-48 overflow-y-auto whitespace-pre-wrap break-all select-text">
+                        {parsedErr.details}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {formattedBody ? (
               <div className="space-y-2">

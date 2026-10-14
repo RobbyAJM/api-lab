@@ -369,129 +369,147 @@ try {
 
   return (
     <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden select-none">
-      {/* Top Bar: Method, URL, Send, Save */}
-      <div className="p-3 border-b border-zinc-800 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-zinc-400">Endpoint:</span>
-            <span className="text-xs font-medium text-zinc-100">{endpoint.name}</span>
-          </div>
-          {statusMessage && (
-            <span className="text-xs text-indigo-400 font-mono truncate max-w-md">{statusMessage}</span>
-          )}
+      {/* URL & Action Bar */}
+      <div className="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800/80 flex items-center gap-2.5 flex-shrink-0">
+        <select
+          value={method}
+          onChange={(e) => setMethod(e.target.value)}
+          className={`bg-zinc-900 border border-zinc-800 rounded-md px-2.5 py-1 text-xs font-mono font-bold focus:outline-none focus:border-zinc-700 h-8 ${
+            method === 'GET'
+              ? 'text-emerald-400'
+              : method === 'POST'
+              ? 'text-blue-400'
+              : method === 'PUT' || method === 'PATCH'
+              ? 'text-amber-400'
+              : 'text-rose-400'
+          }`}
+        >
+          <option value="GET">GET</option>
+          <option value="POST">POST</option>
+          <option value="PUT">PUT</option>
+          <option value="PATCH">PATCH</option>
+          <option value="DELETE">DELETE</option>
+          <option value="HEAD">HEAD</option>
+          <option value="OPTIONS">OPTIONS</option>
+        </select>
+
+        <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md focus-within:border-zinc-700 h-8 flex items-center px-1">
+          <VariableInput
+            value={url}
+            onChange={setUrl}
+            variables={activeVariables}
+            placeholder="https://api.example.com/v1/users/{{USER_ID}}"
+            className="w-full h-full text-xs font-mono"
+          />
         </div>
 
-        <div className="flex items-center gap-2">
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className="bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs font-mono font-bold text-zinc-200 focus:outline-none focus:border-indigo-500 h-8"
-          >
-            <option value="GET">GET</option>
-            <option value="POST">POST</option>
-            <option value="PUT">PUT</option>
-            <option value="PATCH">PATCH</option>
-            <option value="DELETE">DELETE</option>
-            <option value="HEAD">HEAD</option>
-            <option value="OPTIONS">OPTIONS</option>
-          </select>
+        {statusMessage && (
+          <span className="text-[11px] font-mono text-indigo-300 bg-zinc-900/80 px-2.5 py-1 rounded border border-zinc-800 truncate max-w-xs select-text">
+            {statusMessage}
+          </span>
+        )}
 
-          <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-8">
-            <VariableInput
-              value={url}
-              onChange={setUrl}
-              variables={activeVariables}
-              placeholder="https://api.example.com/v1/users/{{USER_ID}}"
-              className="w-full h-full"
-            />
-          </div>
+        <button
+          onClick={handleSend}
+          disabled={sending}
+          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-md text-xs flex items-center gap-1.5 shadow-sm shadow-indigo-950/50 transition h-8 border border-indigo-400/50"
+          title="Send request (Ctrl+Enter)"
+        >
+          <Send size={12} />
+          <span>{sending ? 'Sending...' : 'Send'}</span>
+          <kbd className="text-[10px] font-mono text-indigo-200 bg-indigo-950/70 border border-indigo-500/40 px-1 py-0.2 rounded font-normal ml-0.5 select-none">
+            Ctrl+↵
+          </kbd>
+        </button>
 
-          <button
-            onClick={handleSend}
-            disabled={sending}
-            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
-            title="Send request (Ctrl+Enter)"
-          >
-            <Send size={13} />
-            <span>{sending ? 'Sending...' : 'Send'}</span>
-            <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-indigo-800/80 text-indigo-200 border border-indigo-700 ml-0.5 select-none">
-              Ctrl+↵
-            </kbd>
-          </button>
-
-          <button
-            onClick={() => saveChanges({ silent: false })}
-            disabled={isSavingRef.current}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs flex items-center gap-1.5 transition h-8"
-            title="Save changes to endpoint (Ctrl+S)"
-          >
-            <Save size={13} />
-            <span>Save</span>
-            <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-700/60 ml-0.5 select-none">
-              Ctrl+S
-            </kbd>
-          </button>
-        </div>
+        <button
+          onClick={() => saveChanges({ silent: false })}
+          disabled={isSavingRef.current}
+          className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-md transition flex items-center gap-1.5 shadow-sm h-8 disabled:opacity-50"
+          title="Save changes to endpoint (Ctrl+S)"
+        >
+          <Save size={12} className="text-zinc-400" />
+          <span>Save</span>
+          <kbd className="text-[10px] font-mono text-zinc-500 bg-zinc-800/80 px-1 py-0.2 rounded border border-zinc-700/60 ml-0.5 select-none">
+            Ctrl+S
+          </kbd>
+        </button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-zinc-800 bg-zinc-900/40 text-xs">
-        <button
-          onClick={() => setActiveTab('params')}
-          className={`px-4 py-2 font-medium border-b-2 transition ${
-            activeTab === 'params'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Params ({queryParams.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('headers')}
-          className={`px-4 py-2 font-medium border-b-2 transition ${
-            activeTab === 'headers'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Headers ({headers.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('body')}
-          className={`px-4 py-2 font-medium border-b-2 transition ${
-            activeTab === 'body'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Body
-        </button>
-        <button
-          onClick={() => setActiveTab('auth')}
-          className={`px-4 py-2 font-medium border-b-2 transition ${
-            activeTab === 'auth'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Auth ({auth.auth_type})
-        </button>
-        <button
-          onClick={() => setActiveTab('scripts')}
-          className={`px-4 py-2 font-medium border-b-2 transition flex items-center gap-1 ${
-            activeTab === 'scripts'
-              ? 'border-indigo-500 text-indigo-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <Code size={12} />
-          <span>Scripts</span>
-          {hookTests.length > 0 && (
-            <span className="ml-1 px-1 py-0.2 bg-zinc-800 text-[10px] rounded font-mono">
-              {hookTests.filter((t) => t.passed).length}/{hookTests.length}
+      <div className="px-4 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setActiveTab('params')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'params'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Params</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
+              {queryParams.length}
             </span>
-          )}
-        </button>
+          </button>
+          <button
+            onClick={() => setActiveTab('headers')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'headers'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Headers</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
+              {headers.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('body')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'body'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Body</span>
+            {bodyType !== 'none' && (
+              <span className="text-[9px] font-mono uppercase px-1 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
+                {bodyType}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('auth')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'auth'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Auth</span>
+            {auth.auth_type !== 'none' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('scripts')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'scripts'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Code size={12} />
+            <span>Scripts</span>
+            {hookTests.length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
+                {hookTests.filter((t) => t.passed).length}/{hookTests.length}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Tab Panels */}

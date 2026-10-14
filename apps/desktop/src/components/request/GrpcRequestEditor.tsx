@@ -19,9 +19,6 @@ import {
   Send,
   Save,
   RefreshCw,
-  Radio,
-  ArrowDownUp,
-  ArrowLeftRight,
   Plus,
   Trash2,
   Wand2,
@@ -31,7 +28,9 @@ import {
   Terminal,
   Play,
   Square,
-  Shield,
+  BookOpen,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
@@ -40,11 +39,13 @@ import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/ho
 import { applyInheritedGrpcAuth } from '../../utils/authInheritance';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
+import { formatRpcSignature, formatMethodStreamingLabel } from '../../utils/grpcSpecification';
 
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
   const {
     activeEnvironmentId,
+    lastGrpcResponse,
     setLastGrpcResponse,
     isStreaming,
     streamingEndpointId,
@@ -128,7 +129,10 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookLogs, setHookLogs] = useState<string[]>([]);
 
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'scripts' | 'options'>('payload');
+  const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'scripts' | 'options' | 'specification'>('payload');
+  const [copiedSpec, setCopiedSpec] = useState<'signature' | 'input' | 'output' | 'sample' | null>(null);
+  const [sampleSpecLoading, setSampleSpecLoading] = useState(false);
+  const [specSamplePayload, setSpecSamplePayload] = useState<any>(null);
   const [generatingPayload, setGeneratingPayload] = useState(false);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -267,6 +271,38 @@ if (body && body.details && body.details.token) {
   const currentServiceObj = discoveredServices.find((s) => s.name === selectedService);
   const availableMethods = currentServiceObj?.methods || [];
   const currentMethodObj = availableMethods.find((m) => m.name === selectedMethod);
+
+  // Auto-fetch sample message struct for specification tab
+  useEffect(() => {
+    if (activeTab === 'specification' && selectedService && selectedMethod && !specSamplePayload) {
+      let isCancelled = false;
+      (async () => {
+        try {
+          setSampleSpecLoading(true);
+          const activeVars = await resolveVariables();
+          const res = await generateNativeGrpcSamplePayload(
+            {
+              server_address: serverAddress,
+              service: selectedService,
+              method: selectedMethod,
+              use_tls: effectiveTls,
+            },
+            activeVars
+          );
+          if (!isCancelled && res.payload) {
+            setSpecSamplePayload(res.payload);
+          }
+        } catch {
+          // ignore
+        } finally {
+          if (!isCancelled) setSampleSpecLoading(false);
+        }
+      })();
+      return () => {
+        isCancelled = true;
+      };
+    }
+  }, [activeTab, selectedService, selectedMethod, serverAddress, effectiveTls, specSamplePayload]);
 
   const streamType =
     currentMethodObj?.stream_type ||
@@ -666,72 +702,47 @@ if (body && body.details && body.details.token) {
 
   return (
     <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden select-none">
-      {/* Top Bar: Server Address, Reflection, Send, Save */}
-      <div className="p-3 border-b border-zinc-800 space-y-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {streamType === 'bidi_stream' ? (
-              <span className="text-xs font-semibold text-fuchsia-400 flex items-center gap-1">
-                <ArrowLeftRight size={13} /> gRPC Bidi Stream:
-              </span>
-            ) : streamType === 'omni_stream' ? (
-              <span className="text-xs font-semibold text-cyan-400 flex items-center gap-1">
-                <ArrowDownUp size={13} /> gRPC Stream:
-              </span>
-            ) : (
-              <span className="text-xs font-semibold text-purple-400 flex items-center gap-1">
-                <Radio size={13} /> gRPC Unary:
-              </span>
-            )}
-            <span className="text-xs font-medium text-zinc-100">{endpoint.name}</span>
-
-            {collection?.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
-              <span
-                title="Inheriting authorization from collection settings"
-                className="text-[10px] text-indigo-300 bg-indigo-950/60 border border-indigo-800/60 px-1 rounded flex items-center gap-0.5"
-              >
-                <Shield size={9} /> Shared Auth
-              </span>
-            )}
-          </div>
-          {statusMessage && (
-            <div className="p-1 px-2 bg-zinc-900 border border-zinc-800 rounded text-xs font-mono text-indigo-300 break-all select-text">
-              {statusMessage}
+      {/* Request Configuration Section */}
+      <div className="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800/80 flex flex-col gap-2.5 flex-shrink-0">
+        {/* Host Address & Action Bar */}
+        <div className="flex items-center gap-2.5">
+          <div className="relative flex-1">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500 font-mono text-xs">
+              grpc://
             </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-purple-500 h-8">
-            <VariableInput
-              value={serverAddress}
-              onChange={(val) => {
-                setServerAddress(val);
-                if (shouldAutoDetectTls(val)) {
-                  setUseTls(true);
-                }
-              }}
-              variables={activeVariables}
-              placeholder="localhost:50051 or {{GRPC_ADDR}}"
-              className="w-full h-full"
-            />
+            <div className="pl-14 w-full h-8 bg-zinc-900 border border-zinc-800 rounded-md focus-within:border-zinc-700 transition flex items-center">
+              <VariableInput
+                value={serverAddress}
+                onChange={(val) => {
+                  setServerAddress(val);
+                  if (shouldAutoDetectTls(val)) {
+                    setUseTls(true);
+                  }
+                }}
+                variables={activeVariables}
+                placeholder="localhost:50051 or {{GRPC_ADDR}}"
+                className="w-full h-full text-xs font-mono"
+              />
+            </div>
           </div>
 
+          {/* Reflection Button */}
           <button
             onClick={handleDiscover}
             disabled={discovering}
             title="Discover services via gRPC server reflection"
-            className="px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-purple-300 rounded text-xs flex items-center gap-1 transition h-8"
+            className="px-3 py-1.5 text-xs font-medium text-zinc-300 bg-zinc-900 hover:bg-zinc-850 hover:text-white border border-zinc-800 rounded-md transition flex items-center gap-1.5 shadow-sm h-8 disabled:opacity-50"
           >
-            <RefreshCw size={12} className={discovering ? 'animate-spin' : ''} />
+            <RefreshCw size={12} className={discovering ? 'animate-spin text-indigo-400' : 'text-zinc-400'} />
             <span>{discovering ? 'Querying...' : 'Reflection'}</span>
           </button>
 
+          {/* Invoke Primary Button */}
           {isStreamingRpc ? (
             isCurrentEndpointStreaming ? (
               <button
                 onClick={handleStopStream}
-                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-medium rounded-md text-xs flex items-center gap-1.5 shadow-sm transition h-8"
                 title="Stop Stream (Ctrl+Enter)"
               >
                 <Square size={12} fill="currentColor" />
@@ -744,7 +755,7 @@ if (body && body.details && body.details.token) {
               <button
                 onClick={handleStartStream}
                 disabled={sending || !selectedService || !selectedMethod}
-                className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+                className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium rounded-md text-xs flex items-center gap-1.5 shadow-sm transition h-8"
                 title="Start stream (Ctrl+Enter)"
               >
                 <Play size={12} fill="currentColor" />
@@ -758,153 +769,214 @@ if (body && body.details && body.details.token) {
             <button
               onClick={handleSend}
               disabled={sending || !selectedService || !selectedMethod}
-              className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+              className="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 border border-indigo-400/50 rounded-md transition flex items-center gap-1.5 shadow-sm shadow-indigo-950/50 h-8"
               title="Invoke method (Ctrl+Enter)"
             >
-              <Send size={13} />
+              <Send size={12} />
               <span>{sending ? 'Calling...' : 'Invoke'}</span>
-              <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-purple-800/80 text-purple-200 border border-purple-700 ml-0.5 select-none">
+              <kbd className="text-[10px] font-mono text-indigo-200 bg-indigo-950/70 border border-indigo-500/40 px-1 py-0.2 rounded font-normal ml-0.5 select-none">
                 Ctrl+↵
               </kbd>
             </button>
           )}
 
+          {/* Save Button */}
           <button
             onClick={() => saveChanges({ silent: false })}
             disabled={isSavingRef.current}
-            className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs flex items-center gap-1.5 transition h-8"
+            className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-md transition flex items-center gap-1.5 shadow-sm h-8 disabled:opacity-50"
             title="Save changes to endpoint (Ctrl+S)"
           >
-            <Save size={13} />
+            <Save size={12} className="text-zinc-400" />
             <span>Save</span>
-            <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-700/60 ml-0.5 select-none">
+            <kbd className="text-[10px] font-mono text-zinc-500 bg-zinc-800/80 px-1 py-0.2 rounded border border-zinc-700/60 ml-0.5 select-none">
               Ctrl+S
             </kbd>
           </button>
         </div>
 
-        {/* Service and Method Selectors (Always Dropdown with Auto-Cache) */}
-        <div className="grid grid-cols-2 gap-2 pt-1">
+        {/* Service and Method Selectors (2-Column Grid, NO intermediate border) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
           <div>
-            <label className="block text-[10px] text-zinc-400 mb-0.5">Service</label>
-            <select
-              value={selectedService}
-              onChange={(e) => {
-                setSelectedService(e.target.value);
-                const svc = discoveredServices.find((s) => s.name === e.target.value);
-                if (svc && svc.methods.length > 0) {
-                  setSelectedMethod(svc.methods[0].name);
-                }
-              }}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-purple-500 h-7"
-            >
-              {selectedService && !discoveredServices.some((s) => s.name === selectedService) && (
-                <option value={selectedService}>{selectedService}</option>
-              )}
-              {discoveredServices.length === 0 && !selectedService && (
-                <option value="">{discovering ? 'Discovering services...' : 'Click Reflection to discover'}</option>
-              )}
-              {discoveredServices.map((s) => (
-                <option key={s.name} value={s.name}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <label className="block text-[11px] font-medium text-zinc-400 mb-1">Service</label>
+            <div className="relative">
+              <select
+                value={selectedService}
+                onChange={(e) => {
+                  setSelectedService(e.target.value);
+                  setSpecSamplePayload(null);
+                  const svc = discoveredServices.find((s) => s.name === e.target.value);
+                  if (svc && svc.methods.length > 0) {
+                    setSelectedMethod(svc.methods[0].name);
+                  }
+                }}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 px-3 text-xs font-mono text-zinc-200 focus:border-zinc-700 focus:ring-0 cursor-pointer h-8"
+              >
+                {selectedService && !discoveredServices.some((s) => s.name === selectedService) && (
+                  <option value={selectedService}>{selectedService}</option>
+                )}
+                {discoveredServices.length === 0 && !selectedService && (
+                  <option value="">{discovering ? 'Discovering services...' : 'Click Reflection to discover'}</option>
+                )}
+                {discoveredServices.map((s) => (
+                  <option key={s.name} value={s.name}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
-            <label className="block text-[10px] text-zinc-400 mb-0.5">Method</label>
-            <select
-              value={selectedMethod}
-              onChange={(e) => setSelectedMethod(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-mono text-zinc-200 focus:outline-none focus:border-purple-500 h-7"
-            >
-              {selectedMethod && !availableMethods.some((m) => m.name === selectedMethod) && (
-                <option value={selectedMethod}>{selectedMethod}</option>
-              )}
-              {availableMethods.length === 0 && !selectedMethod && (
-                <option value="">{selectedService ? 'No methods found' : 'Select service first'}</option>
-              )}
-              {availableMethods.map((m) => (
-                <option key={m.name} value={m.name}>
-                  {m.name} ({m.stream_type === 'bidi_stream' ? 'bidi stream' : m.stream_type === 'omni_stream' ? 'stream' : 'unary'})
-                </option>
-              ))}
-            </select>
+            <label className="block text-[11px] font-medium text-zinc-400 mb-1">Method</label>
+            <div className="relative">
+              <select
+                value={selectedMethod}
+                onChange={(e) => {
+                  setSelectedMethod(e.target.value);
+                  setSpecSamplePayload(null);
+                }}
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 px-3 text-xs font-mono text-zinc-200 focus:border-zinc-700 focus:ring-0 cursor-pointer h-8"
+              >
+                {selectedMethod && !availableMethods.some((m) => m.name === selectedMethod) && (
+                  <option value={selectedMethod}>{selectedMethod}</option>
+                )}
+                {availableMethods.length === 0 && !selectedMethod && (
+                  <option value="">{selectedService ? 'No methods found' : 'Select service first'}</option>
+                )}
+                {availableMethods.map((m) => (
+                  <option key={m.name} value={m.name}>
+                    {m.name} ({m.stream_type === 'bidi_stream' ? 'bidi stream' : m.stream_type === 'omni_stream' ? 'stream' : 'unary'})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
+
+        {statusMessage && (
+          <div className="text-[11px] font-mono text-indigo-300 bg-zinc-900/80 px-2.5 py-0.5 rounded border border-zinc-800 self-start select-text">
+            {statusMessage}
+          </div>
+        )}
       </div>
 
-      {/* Tabs */}
-      <div className="flex border-b border-zinc-800 bg-zinc-900/40 text-xs">
-        <button
-          onClick={() => setActiveTab('payload')}
-          className={`px-4 py-2 font-medium border-b-2 transition ${
-            activeTab === 'payload'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          JSON Payload
-        </button>
-        <button
-          onClick={() => setActiveTab('metadata')}
-          className={`px-4 py-2 font-medium border-b-2 transition ${
-            activeTab === 'metadata'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Metadata ({metadata.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('scripts')}
-          className={`px-4 py-2 font-medium border-b-2 transition flex items-center gap-1 ${
-            activeTab === 'scripts'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          <Code size={12} />
-          <span>Scripts</span>
-          {hookTests.length > 0 && (
-            <span className="ml-1 px-1 py-0.2 bg-zinc-800 text-[10px] rounded font-mono">
-              {hookTests.filter((t) => t.passed).length}/{hookTests.length}
+      {/* Tabs Bar */}
+      <div className="px-4 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setActiveTab('payload')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'payload'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Message</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('metadata')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'metadata'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Metadata</span>
+            <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
+              {metadata.length}
             </span>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('options')}
-          className={`px-4 py-2 font-medium border-b-2 transition ${
-            activeTab === 'options'
-              ? 'border-purple-500 text-purple-400'
-              : 'border-transparent text-zinc-400 hover:text-zinc-200'
-          }`}
-        >
-          Options (TLS)
-        </button>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('scripts')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'scripts'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Code size={12} />
+            <span>Scripts</span>
+            {hookTests.length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
+                {hookTests.filter((t) => t.passed).length}/{hookTests.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('options')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'options'
+                ? 'border-zinc-200 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Options</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('specification')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'specification'
+                ? 'border-indigo-400 text-indigo-200'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <BookOpen size={12} className="text-indigo-400" />
+            <span>Specification</span>
+          </button>
+        </div>
+
+        {/* Sub-toolbar inside Message tab */}
+        {activeTab === 'payload' && (
+          <div className="flex items-center gap-2 py-1">
+            <button
+              type="button"
+              onClick={handleGenerateSamplePayload}
+              disabled={generatingPayload || !selectedService || !selectedMethod}
+              title="Generate example JSON payload with types & enums from reflection"
+              className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1 shadow-sm disabled:opacity-50"
+            >
+              <Wand2 size={11} className={generatingPayload ? 'animate-spin text-indigo-400' : 'text-zinc-400'} />
+              <span>{generatingPayload ? 'Generating...' : 'Generate Example'}</span>
+            </button>
+            <div className="h-3 w-px bg-zinc-800 mx-0.5" />
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  const parsed = JSON.parse(payloadStr || '{}');
+                  setPayloadStr(JSON.stringify(parsed, null, 2));
+                } catch {}
+              }}
+              className="text-[11px] text-zinc-400 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-900 transition"
+            >
+              Beautify
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  const parsed = JSON.parse(payloadStr || '{}');
+                  setPayloadStr(JSON.stringify(parsed));
+                } catch {}
+              }}
+              className="text-[11px] text-zinc-400 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-900 transition"
+            >
+              Minify
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Panels */}
       <div className="flex-1 overflow-y-auto p-3 text-xs">
         {activeTab === 'payload' && (
           <div className="h-full flex flex-col space-y-2">
-            <div className="flex items-center justify-between text-[11px] text-zinc-400">
-              <span>
-                JSON matching protobuf schema. Variables like &#123;&#123;ID&#125;&#125; are supported.
-              </span>
-              <button
-                type="button"
-                onClick={handleGenerateSamplePayload}
-                disabled={generatingPayload || !selectedService || !selectedMethod}
-                title="Generate example JSON payload with types & enums from reflection"
-                className="px-2 py-0.5 bg-purple-950/70 hover:bg-purple-900 border border-purple-800/60 text-purple-300 rounded flex items-center gap-1 transition"
-              >
-                <Wand2 size={11} className={generatingPayload ? 'animate-spin' : ''} />
-                <span>{generatingPayload ? 'Generating...' : 'Generate Example'}</span>
-              </button>
-            </div>
-            <div className="flex-1 h-72">
+            <div className="flex-1 min-h-[160px]">
               <JsonEditor
                 value={payloadStr}
                 onChange={setPayloadStr}
@@ -1107,6 +1179,227 @@ if (body && body.details && body.details.token) {
               />
               <span>Enable TLS (Transport Layer Security)</span>
             </label>
+          </div>
+        )}
+
+        {activeTab === 'specification' && (
+          <div className="h-full flex flex-col space-y-3 overflow-y-auto pr-1">
+            {currentMethodObj ? (
+              <>
+                {/* Method Overview Banner */}
+                <div className="p-3 bg-zinc-900/70 border border-zinc-800/80 rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded font-mono text-[10px] uppercase font-semibold bg-indigo-950/70 text-indigo-300 border border-indigo-800/50">
+                        {formatMethodStreamingLabel(
+                          streamType,
+                          currentMethodObj.is_client_streaming,
+                          currentMethodObj.is_server_streaming
+                        )}
+                      </span>
+                      <span className="font-mono text-xs text-zinc-300 font-medium">
+                        {selectedService} / <span className="text-white font-semibold">{selectedMethod}</span>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const sig = formatRpcSignature(
+                          currentMethodObj.name,
+                          currentMethodObj.input_type,
+                          currentMethodObj.output_type
+                        );
+                        navigator.clipboard.writeText(sig);
+                        setCopiedSpec('signature');
+                        setTimeout(() => setCopiedSpec(null), 2000);
+                      }}
+                      className="text-[11px] text-zinc-400 hover:text-zinc-200 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-2 py-1 rounded flex items-center gap-1 transition"
+                      title="Copy full RPC signature"
+                    >
+                      {copiedSpec === 'signature' ? (
+                        <>
+                          <Check size={11} className="text-emerald-400" />
+                          <span className="text-emerald-400">Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={11} />
+                          <span>Copy Signature</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Proto Signature Code Box */}
+                  <div className="p-2.5 bg-zinc-950 border border-zinc-850 rounded font-mono text-xs text-zinc-300 flex items-center justify-between overflow-x-auto">
+                    <code>
+                      <span className="text-indigo-400 font-semibold">rpc</span>{' '}
+                      <span className="text-zinc-100 font-bold">{currentMethodObj.name}</span> (
+                      <span className="text-amber-300">{currentMethodObj.input_type || 'Unknown'}</span>)
+                      {' '}<span className="text-indigo-400 font-semibold">returns</span> (
+                      <span className="text-emerald-300">{currentMethodObj.output_type || 'Unknown'}</span>);
+                    </code>
+                  </div>
+                </div>
+
+                {/* Two Struct Cards Grid: Request Message Struct & Response Message Struct */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0">
+                  {/* Card 1: Request Message Struct */}
+                  <div className="flex flex-col bg-zinc-900/60 border border-zinc-800/80 rounded-lg p-3 space-y-2 min-h-[220px]">
+                    <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-amber-400" />
+                        <span className="font-semibold text-zinc-200 text-xs">Request Message Struct</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (currentMethodObj.input_type) {
+                            navigator.clipboard.writeText(currentMethodObj.input_type);
+                            setCopiedSpec('input');
+                            setTimeout(() => setCopiedSpec(null), 2000);
+                          }
+                        }}
+                        className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 font-mono transition"
+                        title="Copy input struct name"
+                      >
+                        {copiedSpec === 'input' ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                        <span>Copy Type</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] text-zinc-400">
+                        Type Definition:{' '}
+                        <code className="text-amber-300 font-mono bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-[10px]">
+                          {currentMethodObj.input_type || 'Unknown'}
+                        </code>
+                      </div>
+                      <div className="text-[10px] text-zinc-500 font-mono">
+                        Client Streaming: {currentMethodObj.is_client_streaming ? 'Enabled' : 'Disabled'}
+                      </div>
+                    </div>
+
+                    {/* Reflected Request Struct / Sample JSON Preview */}
+                    <div className="flex-1 flex flex-col min-h-0 pt-1">
+                      <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
+                        <span>Reflected Schema Preview:</span>
+                        {specSamplePayload && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(JSON.stringify(specSamplePayload, null, 2));
+                              setCopiedSpec('sample');
+                              setTimeout(() => setCopiedSpec(null), 2000);
+                            }}
+                            className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1"
+                          >
+                            {copiedSpec === 'sample' ? <Check size={9} className="text-emerald-400" /> : <Copy size={9} />}
+                            <span>Copy JSON</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex-1 bg-zinc-950 border border-zinc-850 rounded p-2 overflow-auto font-mono text-[11px] text-zinc-300 leading-relaxed max-h-48">
+                        {sampleSpecLoading ? (
+                          <div className="text-zinc-500 italic py-4 text-center">Loading reflected structure...</div>
+                        ) : specSamplePayload ? (
+                          <pre className="whitespace-pre">
+                            {JSON.stringify(specSamplePayload, null, 2)}
+                          </pre>
+                        ) : payloadStr && payloadStr.trim() !== '{}' ? (
+                          <pre className="whitespace-pre">{payloadStr}</pre>
+                        ) : (
+                          <div className="text-zinc-500 italic py-4 text-center">
+                            Click 'Generate Example' on Message tab or invoke reflection to preview full message struct fields.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Response Message Struct */}
+                  <div className="flex flex-col bg-zinc-900/60 border border-zinc-800/80 rounded-lg p-3 space-y-2 min-h-[220px]">
+                    <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                        <span className="font-semibold text-zinc-200 text-xs">Response Message Struct</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (currentMethodObj.output_type) {
+                            navigator.clipboard.writeText(currentMethodObj.output_type);
+                            setCopiedSpec('output');
+                            setTimeout(() => setCopiedSpec(null), 2000);
+                          }
+                        }}
+                        className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 font-mono transition"
+                        title="Copy response struct name"
+                      >
+                        {copiedSpec === 'output' ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
+                        <span>Copy Type</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="text-[11px] text-zinc-400">
+                        Type Definition:{' '}
+                        <code className="text-emerald-300 font-mono bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-[10px]">
+                          {currentMethodObj.output_type || 'Unknown'}
+                        </code>
+                      </div>
+                      <div className="text-[10px] text-zinc-500 font-mono">
+                        Server Streaming: {currentMethodObj.is_server_streaming ? 'Enabled' : 'Disabled'}
+                      </div>
+                    </div>
+
+                    {/* Response Struct Details / Last Executed Schema Preview */}
+                    <div className="flex-1 flex flex-col min-h-0 pt-1">
+                      <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
+                        <span>Expected Response Contract:</span>
+                      </div>
+
+                      <div className="flex-1 bg-zinc-950 border border-zinc-850 rounded p-2.5 overflow-auto font-mono text-[11px] text-zinc-300 leading-relaxed max-h-48">
+                        {lastGrpcResponse && lastGrpcResponse.body ? (
+                          <div className="space-y-1.5">
+                            <div className="text-[10px] text-emerald-400/90 font-sans font-medium flex items-center gap-1">
+                              <Check size={10} /> Runtime Verified Struct:
+                            </div>
+                            <pre className="whitespace-pre text-zinc-300">
+                              {typeof lastGrpcResponse.body === 'string'
+                                ? lastGrpcResponse.body
+                                : JSON.stringify(lastGrpcResponse.body, null, 2)}
+                            </pre>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 text-zinc-400 font-sans text-xs">
+                            <p>
+                              The gRPC server will serialize and return protobuf message instances of type{' '}
+                              <code className="text-emerald-300 font-mono text-[10px]">
+                                {currentMethodObj.output_type}
+                              </code>.
+                            </p>
+                            <p className="text-[11px] text-zinc-500">
+                              Execute an <strong className="text-zinc-300">Invoke</strong> call to inspect live decoded fields, status trailers, and stream frames in the Response section below.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex flex-col items-center justify-center p-8 bg-zinc-900/40 border border-zinc-800/80 rounded-lg text-center">
+                <BookOpen size={32} className="text-zinc-600 mb-2" />
+                <h4 className="text-xs font-semibold text-zinc-300">No Method Specification Selected</h4>
+                <p className="text-[11px] text-zinc-500 max-w-sm mt-1">
+                  Select a gRPC service and method above or click <strong className="text-zinc-400">Reflection</strong> to load protobuf message descriptors from the server.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
