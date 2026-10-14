@@ -45,6 +45,27 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     category: 'General',
   },
   {
+    id: 'close_tab',
+    keyLabel: 'Ctrl + W',
+    macKeyLabel: '⌘ + W',
+    description: 'Close active endpoint tab',
+    category: 'Navigation',
+  },
+  {
+    id: 'close_other_tabs',
+    keyLabel: 'Ctrl + Alt + T',
+    macKeyLabel: '⌘ + ⌥ + T',
+    description: 'Close all other endpoint tabs',
+    category: 'Navigation',
+  },
+  {
+    id: 'close_all_tabs',
+    keyLabel: 'Ctrl + Shift + W',
+    macKeyLabel: '⌘ + ⇧ + W',
+    description: 'Close all open endpoint tabs',
+    category: 'Navigation',
+  },
+  {
     id: 'escape',
     keyLabel: 'Esc',
     macKeyLabel: 'Esc',
@@ -84,6 +105,12 @@ export function matchesShortcut(event: KeyboardEventLike, shortcutId: string): b
       return isMod && (key === '/' || key === '?');
     case 'open_environment':
       return isMod && (key === 'e' || key === 'E');
+    case 'close_tab':
+      return isMod && !event.shiftKey && !event.altKey && (key === 'w' || key === 'W');
+    case 'close_other_tabs':
+      return isMod && !!event.altKey && (key === 't' || key === 'T');
+    case 'close_all_tabs':
+      return isMod && !!event.shiftKey && (key === 'w' || key === 'W');
     case 'escape':
       return key === 'Escape';
     default:
@@ -148,6 +175,89 @@ export function searchEndpointsForCommandPalette(
     const searchable = `${item.endpoint.name} ${item.collectionName} ${item.methodLabel} ${item.urlOrService} ${item.protocol}`.toLowerCase();
     return keywords.every((kw) => searchable.includes(kw));
   });
+}
+
+export interface PaletteCommandAction {
+  id: string;
+  actionId: 'close_tab' | 'close_other_tabs' | 'close_all_tabs';
+  title: string;
+  description: string;
+  keyLabel: string;
+}
+
+export const COMMAND_PALETTE_ACTIONS: PaletteCommandAction[] = [
+  {
+    id: 'cmd_close_tab',
+    actionId: 'close_tab',
+    title: 'Close Tab',
+    description: 'Force close active endpoint tab',
+    keyLabel: 'Ctrl + W',
+  },
+  {
+    id: 'cmd_close_all_tabs',
+    actionId: 'close_all_tabs',
+    title: 'Close All Tabs',
+    description: 'Force close all open tabs',
+    keyLabel: 'Ctrl + Shift + W',
+  },
+  {
+    id: 'cmd_close_other_tabs',
+    actionId: 'close_other_tabs',
+    title: 'Close All Other Tabs',
+    description: 'Force close all tabs except current active tab',
+    keyLabel: 'Ctrl + Alt + T',
+  },
+];
+
+export type UnifiedPaletteItem =
+  | ({
+      type: 'endpoint';
+      id: string;
+    } & CommandPaletteItem)
+  | {
+      type: 'command';
+      id: string;
+      actionId: 'close_tab' | 'close_other_tabs' | 'close_all_tabs';
+      title: string;
+      description: string;
+      keyLabel: string;
+    };
+
+/**
+ * Searches both executable actions and workspace endpoints in Command Palette.
+ */
+export function searchUnifiedCommandPalette(
+  endpoints: Endpoint[],
+  collections: Collection[],
+  query: string
+): UnifiedPaletteItem[] {
+  const q = query.trim().toLowerCase();
+  const keywords = q.split(/\s+/).filter(Boolean);
+
+  const matchedCommands: UnifiedPaletteItem[] = COMMAND_PALETTE_ACTIONS.filter((action) => {
+    if (!q) return true;
+    const searchable = `${action.title} ${action.description} ${action.keyLabel}`.toLowerCase();
+    return keywords.every((kw) => searchable.includes(kw));
+  }).map((action) => ({
+    type: 'command',
+    id: action.id,
+    actionId: action.actionId,
+    title: action.title,
+    description: action.description,
+    keyLabel: action.keyLabel,
+  }));
+
+  const endpointItems: UnifiedPaletteItem[] = searchEndpointsForCommandPalette(
+    endpoints,
+    collections,
+    query
+  ).map((item) => ({
+    type: 'endpoint',
+    id: item.endpoint.id,
+    ...item,
+  }));
+
+  return [...matchedCommands, ...endpointItems];
 }
 
 /**

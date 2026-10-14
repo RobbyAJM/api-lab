@@ -14,43 +14,55 @@ import { syncEnvironmentVariables } from '../../utils/envSync';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
-  const { activeEnvironmentId, setLastHttpResponse, setActiveEndpoint } = useAppStore();
+  const {
+    activeEnvironmentId,
+    setLastHttpResponse,
+    setActiveEndpoint,
+    setEndpointDraft,
+    clearEndpointDraft,
+  } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
   const currentVersionRef = useRef<number>(endpoint.version);
   currentVersionRef.current = currentVersion;
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
-  const isFirstMountRef = useRef(true);
 
-  const [method, setMethod] = useState(endpoint.config?.method || 'GET');
-  const [url, setUrl] = useState(endpoint.config?.url || 'https://httpbin.org/get');
+  const initialDraft =
+    useAppStore.getState().endpointDrafts[endpoint.id] || endpoint.config || {};
+
+  const [method, setMethod] = useState(initialDraft.method || 'GET');
+  const [url, setUrl] = useState(
+    initialDraft.url !== undefined ? initialDraft.url : 'https://httpbin.org/get'
+  );
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'scripts'>('params');
 
   // Query Params & Headers state
   const [queryParams, setQueryParams] = useState<[string, string][]>(
-    endpoint.config?.query_params || []
+    initialDraft.query_params || []
   );
   const [headers, setHeaders] = useState<[string, string][]>(() => {
-    const raw = endpoint.config?.headers || {};
+    const raw = initialDraft.headers || {};
     return Object.entries(raw);
   });
 
   // Body & Auth state
   const [bodyType, setBodyType] = useState<'none' | 'json' | 'text' | 'form'>(
-    endpoint.config?.body_type || 'json'
+    initialDraft.body_type || 'json'
   );
-  const [body, setBody] = useState<string>(endpoint.config?.body || '');
+  const [body, setBody] = useState<string>(
+    initialDraft.body !== undefined ? initialDraft.body : ''
+  );
   const [auth, setAuth] = useState<HttpAuth>(
-    endpoint.config?.auth || { auth_type: 'none' }
+    initialDraft.auth || { auth_type: 'none' }
   );
 
   // Hook Scripts state (Postman-style JavaScript)
   const [preRequestScript, setPreRequestScript] = useState<string>(
-    endpoint.config?.pre_request_script || ''
+    initialDraft.pre_request_script || ''
   );
   const [postResponseScript, setPostResponseScript] = useState<string>(
-    endpoint.config?.post_request_script || endpoint.config?.post_response_script || ''
+    initialDraft.post_response_script || initialDraft.post_request_script || ''
   );
   const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
@@ -167,6 +179,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       setCurrentVersion(res.version);
       currentVersionRef.current = res.version;
+      clearEndpointDraft(endpoint.id);
       if (useAppStore.getState().activeEndpointId === endpoint.id) {
         setActiveEndpoint(res);
       }
@@ -191,17 +204,21 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
   };
 
-  // Debounced auto-save on script edits (1000ms, skips initial mount)
+  // Keep working draft synchronized in store so tab switches retain unsaved edits
   useEffect(() => {
-    if (isFirstMountRef.current) {
-      isFirstMountRef.current = false;
-      return;
-    }
-    const timer = setTimeout(() => {
-      saveChanges({ silent: true });
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [preRequestScript, postResponseScript]);
+    const cfg = buildConfig();
+    setEndpointDraft(endpoint.id, cfg);
+  }, [
+    method,
+    url,
+    queryParams,
+    headers,
+    bodyType,
+    body,
+    auth,
+    preRequestScript,
+    postResponseScript,
+  ]);
 
   // Keyboard shortcuts: Ctrl+S to save, Ctrl+Enter to send
   useEffect(() => {

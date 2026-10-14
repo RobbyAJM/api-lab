@@ -28,6 +28,10 @@ export const App: React.FC = () => {
     setAuth,
     setWorkspaces,
     activeEndpoint,
+    activeEndpointId,
+    closeEndpoint,
+    closeOtherEndpoints,
+    closeAllEndpoints,
     openAuthModal,
     envModalOpen,
     setEnvModalOpen,
@@ -79,7 +83,26 @@ export const App: React.FC = () => {
         e.preventDefault();
         setEnvModalOpen(!envModalOpen);
       }
-      // 4. Escape closes any active top modal
+      // 4. Close Active Tab (Ctrl + W) - force close even if unsaved
+      else if (matchesShortcut(e, 'close_tab')) {
+        e.preventDefault();
+        if (activeEndpointId) {
+          closeEndpoint(activeEndpointId);
+        }
+      }
+      // 5. Close All Other Tabs (Ctrl + Alt + T) - force close
+      else if (matchesShortcut(e, 'close_other_tabs')) {
+        e.preventDefault();
+        if (activeEndpointId) {
+          closeOtherEndpoints(activeEndpointId);
+        }
+      }
+      // 6. Close All Tabs (Ctrl + Shift + W) - force close
+      else if (matchesShortcut(e, 'close_all_tabs')) {
+        e.preventDefault();
+        closeAllEndpoints();
+      }
+      // 7. Escape closes any active top modal
       else if (matchesShortcut(e, 'escape')) {
         if (commandPaletteOpen) {
           e.preventDefault();
@@ -96,7 +119,18 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [commandPaletteOpen, shortcutsHelpOpen, envModalOpen, setCommandPaletteOpen, setShortcutsHelpOpen, setEnvModalOpen]);
+  }, [
+    commandPaletteOpen,
+    shortcutsHelpOpen,
+    envModalOpen,
+    activeEndpointId,
+    setCommandPaletteOpen,
+    setShortcutsHelpOpen,
+    setEnvModalOpen,
+    closeEndpoint,
+    closeOtherEndpoints,
+    closeAllEndpoints,
+  ]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
