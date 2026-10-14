@@ -221,6 +221,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveEnvironmentId: (id) => set({ activeEnvironmentId: id }),
 
   openEndpoint: (endpoint) => {
+    localStorage.setItem('api_lab_active_endpoint_id', endpoint.id);
     set((state) => {
       const tabState = openEndpointInTabs(
         {
@@ -253,6 +254,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         endpointId
       );
 
+      if (tabState.activeEndpointId) {
+        localStorage.setItem('api_lab_active_endpoint_id', tabState.activeEndpointId);
+      } else {
+        localStorage.removeItem('api_lab_active_endpoint_id');
+      }
+
       const wasActive = state.activeEndpointId === endpointId;
       return {
         ...tabState,
@@ -263,6 +270,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   closeOtherEndpoints: (endpointId) => {
+    localStorage.setItem('api_lab_active_endpoint_id', endpointId);
     set((state) => {
       const tabState = closeOtherEndpointsInTabs(
         {
@@ -336,6 +344,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveEndpoint: (endpoint) => {
     if (!endpoint) {
+      localStorage.removeItem('api_lab_active_endpoint_id');
       set({
         activeEndpoint: null,
         activeEndpointId: null,
