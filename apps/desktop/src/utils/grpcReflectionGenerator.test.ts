@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   planGrpcHierarchy,
   executeGrpcHierarchyCreation,
+  shouldAutoDetectTls,
   type PlannedHierarchy,
 } from './grpcReflectionGenerator.ts';
 import type { GrpcServiceSummary } from '@api-lab/api-types';
@@ -131,4 +132,23 @@ test('executeGrpcHierarchyCreation: creates root folder, service subfolders, and
   assert.equal(calls[5].path, '/collections/coll-123/endpoints');
   assert.equal(calls[5].body.folder_id, 'folder-3');
   assert.equal(calls[5].body.name, 'SubscribePrice');
+});
+
+test('shouldAutoDetectTls: accurately detects remote domains vs local', () => {
+  assert.equal(shouldAutoDetectTls('grpcb.in:9001'), true);
+  assert.equal(shouldAutoDetectTls('grpcb.in:9001'), true);
+  assert.equal(shouldAutoDetectTls('https://my-service.com'), true);
+  assert.equal(shouldAutoDetectTls('http://my-service.com'), false);
+  assert.equal(shouldAutoDetectTls('localhost:50051'), false);
+  assert.equal(shouldAutoDetectTls('127.0.0.1:3100'), false);
+});
+
+test('planGrpcHierarchy: preserves useTls setting for remote endpoints', () => {
+  const planned = planGrpcHierarchy({
+    folderName: 'Remote gRPC',
+    serverAddress: 'grpcb.in:9001',
+    services: mockServices,
+  });
+
+  assert.equal(planned.serviceFolders[0].endpoints[0].config.use_tls, true);
 });

@@ -10,6 +10,7 @@ import {
   executeReflectionSync,
   type SyncPlan,
 } from '../../utils/grpcReflectionSync';
+import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
 import { VariableInput } from '../common/VariableInput';
 import type { Collection, CollectionFolder, Endpoint } from '@api-lab/api-types';
 import {
@@ -109,9 +110,11 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
     setStatusMessage('Querying fresh gRPC reflection...');
     setPlan(null);
 
+    const effectiveTls = useTls || shouldAutoDetectTls(serverAddress);
+
     try {
       const res = await discoverNativeGrpcServices(
-        { server_address: serverAddress.trim(), use_tls: useTls },
+        { server_address: serverAddress.trim(), use_tls: effectiveTls },
         activeVariables || {}
       );
 
@@ -134,7 +137,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
                 server_address: serverAddress.trim(),
                 service: s.name,
                 method: m.name,
-                use_tls: useTls,
+                use_tls: effectiveTls,
               },
               activeVariables || {}
             );
@@ -275,9 +278,14 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
             <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-purple-500 h-8">
               <VariableInput
                 value={serverAddress}
-                onChange={setServerAddress}
+                onChange={(val) => {
+                  setServerAddress(val);
+                  if (shouldAutoDetectTls(val)) {
+                    setUseTls(true);
+                  }
+                }}
                 variables={activeVariables}
-                placeholder="localhost:9091 or {{GRPC_HOST}}"
+                placeholder="localhost:9091, grpcb.in:9001, or {{GRPC_HOST}}"
                 className="w-full h-full"
               />
             </div>
