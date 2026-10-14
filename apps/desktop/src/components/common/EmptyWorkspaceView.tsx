@@ -1,15 +1,5 @@
 import React from 'react';
 import { useAppStore } from '../../store/useAppStore';
-import {
-  ArrowLeftRight,
-  Radio,
-  Sparkles,
-  Zap,
-  Database,
-  Globe,
-  Activity,
-  Layers,
-} from 'lucide-react';
 
 export const EmptyWorkspaceView: React.FC = () => {
   const { setCommandPaletteOpen, setShortcutsHelpOpen } = useAppStore();
@@ -21,16 +11,6 @@ export const EmptyWorkspaceView: React.FC = () => {
   const modKey = isMac ? '⌘' : 'Ctrl';
 
   const actions = [
-    {
-      label: 'Create new',
-      keyLabel: `${modKey} N`,
-      onClick: () => setCommandPaletteOpen(true),
-    },
-    {
-      label: 'Import',
-      keyLabel: `${modKey} O`,
-      onClick: () => setCommandPaletteOpen(true),
-    },
     {
       label: 'Find in workspace',
       keyLabel: `${modKey} K`,
@@ -74,7 +54,7 @@ export const EmptyWorkspaceView: React.FC = () => {
       </div>
 
       {/* Action Shortcuts Menu */}
-      <div className="w-72 md:w-80 space-y-2 mb-10">
+      <div className="w-72 md:w-80 space-y-2">
         {actions.map((act) => (
           <button
             key={act.label}
@@ -89,34 +69,6 @@ export const EmptyWorkspaceView: React.FC = () => {
             </kbd>
           </button>
         ))}
-      </div>
-
-      {/* Bottom Protocol Icons Row */}
-      <div className="flex items-center gap-5 text-zinc-600 pt-2 border-t border-zinc-900/80">
-        <span title="HTTP / REST">
-          <Globe size={15} className="hover:text-zinc-400 transition cursor-default" />
-        </span>
-        <span title="gRPC Unary & Streams">
-          <Radio size={15} className="hover:text-zinc-400 transition cursor-default" />
-        </span>
-        <span title="Bidirectional Streams">
-          <ArrowLeftRight size={15} className="hover:text-zinc-400 transition cursor-default" />
-        </span>
-        <span title="Real-time Events / WebSocket">
-          <Zap size={15} className="hover:text-zinc-400 transition cursor-default" />
-        </span>
-        <span title="Server-Sent Events">
-          <Activity size={15} className="hover:text-zinc-400 transition cursor-default" />
-        </span>
-        <span title="Payload Reflection">
-          <Sparkles size={15} className="hover:text-zinc-400 transition cursor-default" />
-        </span>
-        <span title="Mock Storage / Cache">
-          <Database size={15} className="hover:text-zinc-400 transition cursor-default" />
-        </span>
-        <span title="Workspace Collections">
-          <Layers size={15} className="hover:text-zinc-400 transition cursor-default" />
-        </span>
       </div>
     </div>
   );
