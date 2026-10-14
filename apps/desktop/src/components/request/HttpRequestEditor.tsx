@@ -11,6 +11,7 @@ import { JavaScriptEditor } from '../common/JavaScriptEditor';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
 import { applyInheritedHttpAuth } from '../../utils/authInheritance';
 import { syncEnvironmentVariables } from '../../utils/envSync';
+import { getEffectiveEndpointConfig } from '../../utils/tabManager';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -28,41 +29,41 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
 
-  const initialDraft =
-    useAppStore.getState().endpointDrafts[endpoint.id] || endpoint.config || {};
+  const draft = useAppStore.getState().endpointDrafts[endpoint.id];
+  const initialConfig = getEffectiveEndpointConfig(endpoint, draft);
 
-  const [method, setMethod] = useState(initialDraft.method || 'GET');
+  const [method, setMethod] = useState(initialConfig.method || 'GET');
   const [url, setUrl] = useState(
-    initialDraft.url !== undefined ? initialDraft.url : 'https://httpbin.org/get'
+    initialConfig.url !== undefined ? initialConfig.url : 'https://httpbin.org/get'
   );
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'scripts'>('params');
 
   // Query Params & Headers state
   const [queryParams, setQueryParams] = useState<[string, string][]>(
-    initialDraft.query_params || []
+    initialConfig.query_params || []
   );
   const [headers, setHeaders] = useState<[string, string][]>(() => {
-    const raw = initialDraft.headers || {};
+    const raw = initialConfig.headers || {};
     return Object.entries(raw);
   });
 
   // Body & Auth state
   const [bodyType, setBodyType] = useState<'none' | 'json' | 'text' | 'form'>(
-    initialDraft.body_type || 'json'
+    initialConfig.body_type || 'json'
   );
   const [body, setBody] = useState<string>(
-    initialDraft.body !== undefined ? initialDraft.body : ''
+    initialConfig.body !== undefined ? initialConfig.body : ''
   );
   const [auth, setAuth] = useState<HttpAuth>(
-    initialDraft.auth || { auth_type: 'none' }
+    initialConfig.auth || { auth_type: 'none' }
   );
 
   // Hook Scripts state (standard JavaScript)
   const [preRequestScript, setPreRequestScript] = useState<string>(
-    initialDraft.pre_request_script || ''
+    initialConfig.pre_request_script || ''
   );
   const [postResponseScript, setPostResponseScript] = useState<string>(
-    initialDraft.post_response_script || initialDraft.post_request_script || ''
+    initialConfig.post_response_script || initialConfig.post_request_script || ''
   );
   const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
@@ -106,23 +107,29 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     resolveVariables().then(setActiveVariables);
   }, [activeEnvironmentId]);
 
-  // Sync state if endpoint prop changes
+  // Track previous endpoint id to only reinitialize state when switching to a different endpoint without remount
+  const prevEndpointIdRef = useRef(endpoint.id);
   useEffect(() => {
-    setCurrentVersion(endpoint.version);
-    currentVersionRef.current = endpoint.version;
-    setMethod(endpoint.config?.method || 'GET');
-    setUrl(endpoint.config?.url || 'https://httpbin.org/get');
-    setQueryParams(endpoint.config?.query_params || []);
-    setHeaders(Object.entries(endpoint.config?.headers || {}));
-    setBodyType(endpoint.config?.body_type || 'json');
-    setBody(endpoint.config?.body || '');
-    setAuth(endpoint.config?.auth || { auth_type: 'none' });
-    setPreRequestScript(endpoint.config?.pre_request_script || '');
-    setPostResponseScript(
-      endpoint.config?.post_request_script || endpoint.config?.post_response_script || ''
-    );
-    setHookTests([]);
-    setHookLogs([]);
+    if (prevEndpointIdRef.current !== endpoint.id) {
+      prevEndpointIdRef.current = endpoint.id;
+      setCurrentVersion(endpoint.version);
+      currentVersionRef.current = endpoint.version;
+      const currentDraft = useAppStore.getState().endpointDrafts[endpoint.id];
+      const cfg = getEffectiveEndpointConfig(endpoint, currentDraft);
+      setMethod(cfg.method || 'GET');
+      setUrl(cfg.url !== undefined ? cfg.url : 'https://httpbin.org/get');
+      setQueryParams(cfg.query_params || []);
+      setHeaders(Object.entries(cfg.headers || {}));
+      setBodyType(cfg.body_type || 'json');
+      setBody(cfg.body || '');
+      setAuth(cfg.auth || { auth_type: 'none' });
+      setPreRequestScript(cfg.pre_request_script || '');
+      setPostResponseScript(
+        cfg.post_request_script || cfg.post_response_script || ''
+      );
+      setHookTests([]);
+      setHookLogs([]);
+    }
   }, [endpoint.id]);
 
   function buildConfig() {
