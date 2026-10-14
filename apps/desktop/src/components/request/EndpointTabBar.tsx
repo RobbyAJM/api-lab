@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
-import type { Endpoint } from '@api-lab/api-types';
-import { X, Radio, ArrowLeftRight, ArrowDownUp, AlertTriangle } from 'lucide-react';
+import { apiRequest } from '../../api/client';
+import type { Endpoint, Environment } from '@api-lab/api-types';
+import { X, Radio, ArrowLeftRight, ArrowDownUp, AlertTriangle, Plus, Settings } from 'lucide-react';
 
 export const EndpointTabBar: React.FC = () => {
   const {
@@ -12,6 +14,11 @@ export const EndpointTabBar: React.FC = () => {
     closeOtherEndpoints,
     closeAllEndpoints,
     isEndpointDirty,
+    activeWorkspaceId,
+    activeEnvironmentId,
+    setActiveEnvironmentId,
+    setCommandPaletteOpen,
+    setEnvModalOpen,
   } = useAppStore();
 
   const [contextMenu, setContextMenu] = useState<{
@@ -22,15 +29,21 @@ export const EndpointTabBar: React.FC = () => {
 
   const [confirmEndpoint, setConfirmEndpoint] = useState<Endpoint | null>(null);
 
+  // Fetch environments for active workspace
+  const { data: environments = [] } = useQuery<Environment[]>({
+    queryKey: ['environments', activeWorkspaceId],
+    queryFn: () =>
+      activeWorkspaceId
+        ? apiRequest(`/workspaces/${activeWorkspaceId}/environments`)
+        : Promise.resolve([]),
+    enabled: !!activeWorkspaceId,
+  });
+
   useEffect(() => {
     const handleWindowClick = () => setContextMenu(null);
     window.addEventListener('click', handleWindowClick);
     return () => window.removeEventListener('click', handleWindowClick);
   }, []);
-
-  if (openEndpoints.length === 0) {
-    return null;
-  }
 
   function handleAttemptClose(ep: Endpoint) {
     if (isEndpointDirty(ep.id)) {
@@ -38,6 +51,53 @@ export const EndpointTabBar: React.FC = () => {
     } else {
       closeEndpoint(ep.id);
     }
+  }
+
+  function renderEnvironmentDropdown() {
+    return (
+      <div className="flex items-center gap-1.5 ml-auto pl-2 flex-shrink-0">
+        <select
+          value={activeEnvironmentId || ''}
+          onChange={(e) => setActiveEnvironmentId(e.target.value || null)}
+          className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-200 text-xs rounded-md px-2.5 py-1 font-mono focus:outline-none cursor-pointer"
+          title="Active Environment"
+        >
+          <option value="" className="bg-zinc-900 text-zinc-400">
+            No Environment
+          </option>
+          {environments.map((env) => (
+            <option key={env.id} value={env.id} className="bg-zinc-900 text-zinc-200">
+              {env.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => setEnvModalOpen(true)}
+          className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
+          title="Manage Environments (Ctrl+E)"
+        >
+          <Settings size={13} />
+        </button>
+      </div>
+    );
+  }
+
+  if (openEndpoints.length === 0) {
+    return (
+      <div className="flex items-center justify-between h-10 px-3 bg-zinc-950 border-b border-zinc-800/80 select-none flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => setCommandPaletteOpen(true)}
+          className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 py-1 px-2 rounded hover:bg-zinc-900 transition"
+          title="New Request / Open Palette (Ctrl+K)"
+        >
+          <Plus size={13} />
+          <span>New Request</span>
+        </button>
+        {renderEnvironmentDropdown()}
+      </div>
+    );
   }
 
   function renderMethodBadge(ep: Endpoint) {
@@ -96,61 +156,76 @@ export const EndpointTabBar: React.FC = () => {
 
   return (
     <>
-      <div className="flex items-center h-10 px-2 gap-1.5 bg-zinc-950 border-b border-zinc-800/80 overflow-x-auto select-none scrollbar-none flex-shrink-0">
-        {openEndpoints.map((ep) => {
-          const isActive = ep.id === activeEndpointId;
-          const dirty = isEndpointDirty(ep.id);
+      <div className="flex items-center justify-between h-10 px-2 bg-zinc-950 border-b border-zinc-800/80 select-none flex-shrink-0">
+        {/* Left: Open Tabs + Add Tab Button */}
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-1 min-w-0 pr-2">
+          {openEndpoints.map((ep) => {
+            const isActive = ep.id === activeEndpointId;
+            const dirty = isEndpointDirty(ep.id);
 
-          return (
-            <div
-              key={ep.id}
-              onClick={() => openEndpoint(ep)}
-              onAuxClick={(e) => {
-                if (e.button === 1) {
-                  e.preventDefault();
-                  handleAttemptClose(ep);
-                }
-              }}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setContextMenu({
-                  tabId: ep.id,
-                  x: Math.min(e.clientX, window.innerWidth - 180),
-                  y: e.clientY,
-                });
-              }}
-              className={`group flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer transition-all border ${
-                isActive
-                  ? 'bg-zinc-900 border-zinc-800 text-zinc-100 font-medium shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border-transparent'
-              }`}
-              title={`${ep.name} (${ep.protocol.toUpperCase()})`}
-            >
-              {renderMethodBadge(ep)}
-              <span className="truncate max-w-[120px] text-xs font-medium">{ep.name}</span>
-
-              {/* Unsaved Changes Indicator Dot */}
-              {dirty && (
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 shadow-sm"
-                  title="Unsaved changes"
-                />
-              )}
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAttemptClose(ep);
+            return (
+              <div
+                key={ep.id}
+                onClick={() => openEndpoint(ep)}
+                onAuxClick={(e) => {
+                  if (e.button === 1) {
+                    e.preventDefault();
+                    handleAttemptClose(ep);
+                  }
                 }}
-                className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition opacity-60 group-hover:opacity-100 ml-0.5"
-                title="Close tab (Middle click)"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({
+                    tabId: ep.id,
+                    x: Math.min(e.clientX, window.innerWidth - 180),
+                    y: e.clientY,
+                  });
+                }}
+                className={`group flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer transition-all border ${
+                  isActive
+                    ? 'bg-zinc-900 border-zinc-800 text-zinc-100 font-medium shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border-transparent'
+                }`}
+                title={`${ep.name} (${ep.protocol.toUpperCase()})`}
               >
-                <X size={12} />
-              </button>
-            </div>
-          );
-        })}
+                {renderMethodBadge(ep)}
+                <span className="truncate max-w-[120px] text-xs font-medium">{ep.name}</span>
+
+                {/* Unsaved Changes Indicator Dot */}
+                {dirty && (
+                  <span
+                    className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 shadow-sm"
+                    title="Unsaved changes"
+                  />
+                )}
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAttemptClose(ep);
+                  }}
+                  className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition opacity-60 group-hover:opacity-100 ml-0.5"
+                  title="Close tab (Middle click)"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            );
+          })}
+
+          <button
+            type="button"
+            onClick={() => setCommandPaletteOpen(true)}
+            className="p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 rounded-md transition flex-shrink-0"
+            title="New Request / Search (Ctrl+K)"
+          >
+            <Plus size={14} />
+          </button>
+        </div>
+
+        {/* Right: Environment Selector Dropdown (Image 1) */}
+        {renderEnvironmentDropdown()}
       </div>
 
       {/* Right-click Context Menu */}

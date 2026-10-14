@@ -67,16 +67,6 @@ test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
   assert.equal(matchesShortcut({ key: 'W', metaKey: true, shiftKey: true }, 'close_all_tabs'), true);
   assert.equal(matchesShortcut({ key: 'w', ctrlKey: true }, 'close_all_tabs'), false);
 
-  // create_new: Ctrl+N or Cmd+N
-  assert.equal(matchesShortcut({ key: 'n', ctrlKey: true }, 'create_new'), true);
-  assert.equal(matchesShortcut({ key: 'N', metaKey: true }, 'create_new'), true);
-  assert.equal(matchesShortcut({ key: 'n' }, 'create_new'), false);
-
-  // import_workspace: Ctrl+O or Cmd+O
-  assert.equal(matchesShortcut({ key: 'o', ctrlKey: true }, 'import_workspace'), true);
-  assert.equal(matchesShortcut({ key: 'O', metaKey: true }, 'import_workspace'), true);
-  assert.equal(matchesShortcut({ key: 'o' }, 'import_workspace'), false);
-
   // escape
   assert.equal(matchesShortcut({ key: 'Escape' }, 'escape'), true);
   assert.equal(matchesShortcut({ key: 'Enter' }, 'escape'), false);

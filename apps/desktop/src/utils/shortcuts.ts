@@ -66,20 +66,6 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     category: 'Navigation',
   },
   {
-    id: 'create_new',
-    keyLabel: 'Ctrl + N',
-    macKeyLabel: '⌘ + N',
-    description: 'Create new endpoint / Open search',
-    category: 'Navigation',
-  },
-  {
-    id: 'import_workspace',
-    keyLabel: 'Ctrl + O',
-    macKeyLabel: '⌘ + O',
-    description: 'Import requests / Open workspace palette',
-    category: 'Navigation',
-  },
-  {
     id: 'escape',
     keyLabel: 'Esc',
     macKeyLabel: 'Esc',
@@ -125,10 +111,6 @@ export function matchesShortcut(event: KeyboardEventLike, shortcutId: string): b
       return isMod && !!event.altKey && (key === 't' || key === 'T');
     case 'close_all_tabs':
       return isMod && !!event.shiftKey && (key === 'w' || key === 'W');
-    case 'create_new':
-      return isMod && !event.shiftKey && !event.altKey && (key === 'n' || key === 'N');
-    case 'import_workspace':
-      return isMod && !event.shiftKey && !event.altKey && (key === 'o' || key === 'O');
     case 'escape':
       return key === 'Escape';
     default:

@@ -49,7 +49,6 @@ export const Sidebar: React.FC = () => {
     activeEnvironmentId,
     setActiveEnvironmentId,
     logout,
-    setEnvModalOpen,
     setMembersModalOpen,
     setCommandPaletteOpen,
     setShortcutsHelpOpen,
@@ -212,34 +211,6 @@ export const Sidebar: React.FC = () => {
           </button>
         </div>
       )}
-
-      {/* Environment Selector */}
-      <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/30">
-        <div className="flex items-center gap-1.5 flex-1 mr-2">
-          <span className="text-[10px] text-zinc-500 uppercase font-semibold">Env:</span>
-          <select
-            value={activeEnvironmentId || ''}
-            onChange={(e) => setActiveEnvironmentId(e.target.value || null)}
-            className="flex-1 bg-transparent text-xs text-zinc-300 font-mono focus:outline-none truncate"
-          >
-            <option value="" className="bg-zinc-900">
-              No Environment
-            </option>
-            {environments.map((env) => (
-              <option key={env.id} value={env.id} className="bg-zinc-900">
-                {env.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <button
-          onClick={() => setEnvModalOpen(true)}
-          className="text-zinc-400 hover:text-zinc-200 p-1"
-          title="Manage Environments"
-        >
-          <Settings size={13} />
-        </button>
-      </div>
 
       {/* Searchbar in Collection (Feature 5) */}
       <div className="px-3 py-2 border-b border-zinc-800/80 bg-zinc-900/40">
@@ -552,24 +523,17 @@ const CollectionNode: React.FC<{
         ) : (
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center justify-between text-zinc-200 font-medium truncate flex-1 text-left py-0.5"
+            className="flex items-center gap-1.5 text-zinc-200 font-medium truncate flex-1 text-left py-0.5"
           >
-            <div className="flex items-center gap-1.5 truncate">
-              {isExpanded ? (
-                <ChevronDown size={13} className="text-zinc-400 flex-shrink-0" />
-              ) : (
-                <ChevronRight size={13} className="text-zinc-400 flex-shrink-0" />
-              )}
-              <span className="truncate font-semibold">{collection.name}</span>
-              {collection.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
-                <span title="Shared Auth configured">
-                  <Shield size={11} className="text-indigo-400 flex-shrink-0" />
-                </span>
-              )}
-            </div>
-            {endpoints.length > 0 && (
-              <span className="text-[10px] text-zinc-400 font-mono px-1.5 py-0.2 rounded-full bg-zinc-800/80 border border-zinc-700/60 ml-1">
-                {endpoints.length}
+            {isExpanded ? (
+              <ChevronDown size={13} className="text-zinc-400 flex-shrink-0" />
+            ) : (
+              <ChevronRight size={13} className="text-zinc-400 flex-shrink-0" />
+            )}
+            <span className="truncate font-semibold">{collection.name}</span>
+            {collection.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
+              <span title="Shared Auth configured">
+                <Shield size={11} className="text-indigo-400 flex-shrink-0" />
               </span>
             )}
           </button>

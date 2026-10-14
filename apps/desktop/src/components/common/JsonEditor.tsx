@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { tokenizeJsonLine, type VariableSource } from '../../utils/variableHighlight';
+import { handleEditorKeyDown } from '../../utils/editorKeyboard';
 
 interface JsonEditorProps {
   value: string;
@@ -18,6 +19,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
   const [formatError, setFormatError] = React.useState<string | null>(null);
 
   function handleBeautify() {
@@ -49,7 +51,41 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
       preRef.current.scrollTop = e.currentTarget.scrollTop;
       preRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
+    if (lineNumbersRef.current) {
+      lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
+    }
   }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const result = handleEditorKeyDown(
+      value,
+      textarea.selectionStart,
+      textarea.selectionEnd,
+      {
+        key: e.key,
+        shiftKey: e.shiftKey,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+      }
+    );
+
+    if (result) {
+      e.preventDefault();
+      onChange(result.text);
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(result.selectionStart, result.selectionEnd);
+        }
+      });
+    }
+  }
+
+  const lineCount = Math.max(1, value.split('\n').length);
+  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
 
   // Highlight syntax tokens: keys, strings, numbers, booleans, variables {{VAR}} (defined vs undefined)
   function highlightJson(raw: string): React.ReactNode[] {
@@ -131,26 +167,44 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
       </div>
 
       {/* Editor View */}
-      <div className="relative flex-1 font-mono text-xs overflow-hidden">
-        {/* Syntax Highlight Overlay */}
-        <pre
-          ref={preRef}
+      <div className="relative flex-1 flex font-mono text-xs overflow-hidden bg-zinc-950">
+        {/* Line Numbers Gutter */}
+        <div
+          ref={lineNumbersRef}
           aria-hidden="true"
-          className="absolute inset-0 m-0 p-3 pointer-events-none whitespace-pre overflow-hidden text-zinc-200 font-mono text-xs select-none"
+          className="py-3 pl-3 pr-2 select-none text-zinc-600 font-mono text-xs text-right border-r border-zinc-850 bg-zinc-950/80 overflow-hidden flex-shrink-0"
+          style={{ minWidth: '2.5rem' }}
         >
-          {highlightJson(value)}
-        </pre>
+          {lineNumbers.map((num) => (
+            <div key={num} className="leading-5 h-5">
+              {num}
+            </div>
+          ))}
+        </div>
 
-        {/* Text Input */}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onScroll={handleScroll}
-          placeholder={placeholder}
-          spellCheck={false}
-          className="absolute inset-0 w-full h-full m-0 p-3 font-mono text-xs bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-indigo-600/40"
-        />
+        {/* Text Area & Overlay */}
+        <div className="relative flex-1 h-full overflow-hidden">
+          {/* Syntax Highlight Overlay */}
+          <pre
+            ref={preRef}
+            aria-hidden="true"
+            className="absolute inset-0 m-0 py-3 px-3 pointer-events-none whitespace-pre overflow-hidden text-zinc-200 font-mono text-xs leading-5 select-none"
+          >
+            {highlightJson(value)}
+          </pre>
+
+          {/* Text Input */}
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onScroll={handleScroll}
+            placeholder={placeholder}
+            spellCheck={false}
+            className="absolute inset-0 w-full h-full m-0 py-3 px-3 font-mono text-xs leading-5 bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-indigo-600/40 whitespace-pre"
+          />
+        </div>
       </div>
     </div>
   );
