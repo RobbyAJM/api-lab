@@ -15,6 +15,9 @@ export default {
           DEFAULT: '#6366f1',
           foreground: '#ffffff',
         },
+        zinc: {
+          850: '#151518',
+        },
       },
     },
   },
