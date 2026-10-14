@@ -4,6 +4,7 @@ import { useAppStore } from './store/useAppStore';
 import { apiRequest } from './api/client';
 import { useWorkspaceSync } from './hooks/useWorkspaceSync';
 import { Sidebar } from './components/sidebar/Sidebar';
+import { EndpointTabBar } from './components/request/EndpointTabBar';
 import { HttpRequestEditor } from './components/request/HttpRequestEditor';
 import { GrpcRequestEditor } from './components/request/GrpcRequestEditor';
 import { ResponseViewer } from './components/response/ResponseViewer';
@@ -110,22 +111,25 @@ export const App: React.FC = () => {
       {/* Panel 1: Left Sidebar */}
       <Sidebar />
 
-      {/* Panel 2: Request Editor */}
-      {activeEndpoint ? (
-        activeEndpoint.protocol === 'http' ? (
-          <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+      {/* Panel 2: Request Editor with Multi-Tab Bar on top */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen bg-zinc-950 border-r border-zinc-800 overflow-hidden">
+        <EndpointTabBar />
+        {activeEndpoint ? (
+          activeEndpoint.protocol === 'http' ? (
+            <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+          ) : (
+            <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+          )
         ) : (
-          <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
-        )
-      ) : (
-        <div className="flex-1 flex flex-col items-center justify-center border-r border-zinc-800 text-zinc-500 p-8 text-center select-none">
-          <Layers size={40} className="text-zinc-700 mb-3" />
-          <h3 className="text-sm font-semibold text-zinc-400">No Endpoint Selected</h3>
-          <p className="text-xs text-zinc-600 max-w-sm mt-1">
-            Select an endpoint from the collection tree on the left, or create a new HTTP or gRPC request to start testing.
-          </p>
-        </div>
-      )}
+          <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 p-8 text-center select-none">
+            <Layers size={40} className="text-zinc-700 mb-3" />
+            <h3 className="text-sm font-semibold text-zinc-400">No Endpoint Selected</h3>
+            <p className="text-xs text-zinc-600 max-w-sm mt-1">
+              Select an endpoint from the collection tree on the left, or create a new HTTP or gRPC request to start testing.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Panel 3: Response Panel */}
       {activeEndpoint ? (

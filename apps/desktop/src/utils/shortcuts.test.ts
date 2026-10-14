@@ -145,7 +145,30 @@ test('searchEndpointsForCommandPalette: searches across names, methods, services
   const byColl = searchEndpointsForCommandPalette(endpoints, collections, 'Billing');
   assert.equal(byColl.length, 2);
 
-  // 6. No matches
+  // 6. Multi-keyword search across fields (e.g. collection + method: "billing invoice")
+  const multiKeyword = searchEndpointsForCommandPalette(endpoints, collections, 'billing invoice');
+  assert.equal(multiKeyword.length, 2);
+
+  // 7. Multi-keyword in name (e.g. "create user" or "user create")
+  const multiName = searchEndpointsForCommandPalette(endpoints, collections, 'user create');
+  assert.equal(multiName.length, 1);
+  assert.equal(multiName[0].endpoint.name, 'Create User');
+
+  // 8. Multi-keyword across method + URL ("post users")
+  const multiMethodUrl = searchEndpointsForCommandPalette(endpoints, collections, 'post users');
+  assert.equal(multiMethodUrl.length, 1);
+  assert.equal(multiMethodUrl[0].endpoint.id, 'e2');
+
+  // 9. Extra whitespace between keywords
+  const whitespaceMatch = searchEndpointsForCommandPalette(endpoints, collections, '   users   profile   ');
+  assert.equal(whitespaceMatch.length, 1);
+  assert.equal(whitespaceMatch[0].endpoint.id, 'e1');
+
+  // 10. Multi-keyword with one non-matching term returns 0 (AND behavior like SQL)
+  const partialMiss = searchEndpointsForCommandPalette(endpoints, collections, 'user nonexistingkeyword');
+  assert.equal(partialMiss.length, 0);
+
+  // 11. No matches
   const none = searchEndpointsForCommandPalette(endpoints, collections, 'NonExistentMethod');
   assert.equal(none.length, 0);
 });

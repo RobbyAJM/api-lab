@@ -214,7 +214,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
       : 0;
 
   return (
-    <div className="w-96 bg-zinc-950 flex flex-col h-screen text-zinc-300 border-l border-zinc-800">
+    <div className="w-96 bg-zinc-950 flex flex-col h-screen text-zinc-300 flex-shrink-0">
       {/* Top Status Header */}
       <div className="p-3 border-b border-zinc-800 space-y-2 select-none">
         <div className="flex items-center justify-between">

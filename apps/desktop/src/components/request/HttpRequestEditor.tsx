@@ -21,6 +21,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   currentVersionRef.current = currentVersion;
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
+  const isFirstMountRef = useRef(true);
 
   const [method, setMethod] = useState(endpoint.config?.method || 'GET');
   const [url, setUrl] = useState(endpoint.config?.url || 'https://httpbin.org/get');
@@ -166,7 +167,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       setCurrentVersion(res.version);
       currentVersionRef.current = res.version;
-      setActiveEndpoint(res);
+      if (useAppStore.getState().activeEndpointId === endpoint.id) {
+        setActiveEndpoint(res);
+      }
       queryClient.setQueryData<Endpoint[]>(
         ['endpoints', endpoint.collection_id],
         (prev) => prev?.map((ep) => (ep.id === res.id ? res : ep)) || [res]
@@ -188,8 +191,12 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
   };
 
-  // Debounced auto-save on script edits (1000ms)
+  // Debounced auto-save on script edits (1000ms, skips initial mount)
   useEffect(() => {
+    if (isFirstMountRef.current) {
+      isFirstMountRef.current = false;
+      return;
+    }
     const timer = setTimeout(() => {
       saveChanges({ silent: true });
     }, 1000);
@@ -344,7 +351,7 @@ try {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-zinc-950 border-r border-zinc-800 h-screen select-none">
+    <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden select-none">
       {/* Top Bar: Method, URL, Send, Save */}
       <div className="p-3 border-b border-zinc-800 space-y-2">
         <div className="flex items-center justify-between">
