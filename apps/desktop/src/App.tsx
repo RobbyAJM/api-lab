@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from './store/useAppStore';
 import { apiRequest } from './api/client';
@@ -14,8 +14,8 @@ import { MembersModal } from './components/members/MembersModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
 import { matchesShortcut } from './utils/shortcuts';
-import type { UserSummary, WorkspaceSummary } from '@api-lab/api-types';
-import { Layers } from 'lucide-react';
+import type { UserSummary, WorkspaceSummary, Environment } from '@api-lab/api-types';
+import { Layers, ChevronDown, Search, Keyboard } from 'lucide-react';
 
 interface MeApiResponse {
   user: UserSummary;
@@ -27,6 +27,8 @@ export const App: React.FC = () => {
     token,
     setAuth,
     setWorkspaces,
+    activeWorkspaceId,
+    activeEnvironmentId,
     activeEndpoint,
     activeEndpointId,
     closeEndpoint,
@@ -41,6 +43,45 @@ export const App: React.FC = () => {
     setShortcutsHelpOpen,
   } = useAppStore();
 
+  // Vertical resizer state between Request & Response
+  const [requestHeightPercent, setRequestHeightPercent] = useState<number>(() => {
+    const saved = localStorage.getItem('api_lab_request_height_pct');
+    return saved ? Math.max(25, Math.min(80, Number(saved))) : 52;
+  });
+  const mainContainerRef = useRef<HTMLDivElement>(null);
+  const isResizingVerticalRef = useRef(false);
+
+  const startVerticalResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingVerticalRef.current = true;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingVerticalRef.current) return;
+      const container = mainContainerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const pct = Math.max(25, Math.min(80, ((moveEvent.clientY - rect.top) / rect.height) * 100));
+      setRequestHeightPercent(pct);
+    };
+
+    const onMouseUp = () => {
+      isResizingVerticalRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      setRequestHeightPercent((curr) => {
+        localStorage.setItem('api_lab_request_height_pct', String(curr));
+        return curr;
+      });
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
   // Real-time synchronization hook
   useWorkspaceSync();
 
@@ -51,6 +92,19 @@ export const App: React.FC = () => {
     enabled: !!token,
     retry: false,
   });
+
+  // Fetch environments to display active environment name in top header
+  const { data: environments = [] } = useQuery<Environment[]>({
+    queryKey: ['environments', activeWorkspaceId],
+    queryFn: () =>
+      activeWorkspaceId
+        ? apiRequest(`/workspaces/${activeWorkspaceId}/environments`)
+        : Promise.resolve([]),
+    enabled: !!activeWorkspaceId,
+  });
+
+  const activeEnv = environments.find((e) => e.id === activeEnvironmentId);
+  const activeEnvName = activeEnv ? activeEnv.name : 'LOCAL';
 
   useEffect(() => {
     if (meData) {
@@ -133,7 +187,7 @@ export const App: React.FC = () => {
   ]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans selection:bg-zinc-700 selection:text-white">
       {/* Modals */}
       <AuthModal />
       <EnvironmentModal />
@@ -141,38 +195,99 @@ export const App: React.FC = () => {
       <CommandPaletteModal />
       <ShortcutsHelpModal />
 
-      {/* 3-Panel Layout */}
-      {/* Panel 1: Left Sidebar */}
-      <Sidebar />
-
-      {/* Panel 2: Request Editor with Multi-Tab Bar on top */}
-      <div className="flex-1 flex flex-col min-w-0 h-screen bg-zinc-950 border-r border-zinc-800 overflow-hidden">
-        <EndpointTabBar />
-        {activeEndpoint ? (
-          activeEndpoint.protocol === 'http' ? (
-            <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
-          ) : (
-            <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
-          )
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 p-8 text-center select-none">
-            <Layers size={40} className="text-zinc-700 mb-3" />
-            <h3 className="text-sm font-semibold text-zinc-400">No Endpoint Selected</h3>
-            <p className="text-xs text-zinc-600 max-w-sm mt-1">
-              Select an endpoint from the collection tree on the left, or create a new HTTP or gRPC request to start testing.
-            </p>
+      {/* Result V3 Top Window Header */}
+      <header className="h-9 bg-zinc-950 border-b border-zinc-800/80 px-3 flex items-center justify-between text-xs select-none flex-shrink-0 z-30">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 font-medium tracking-tight text-zinc-100">
+            <Layers className="w-4 h-4 text-indigo-400" />
+            <span className="font-semibold text-zinc-200">API Lab</span>
+            <span className="text-[10px] text-zinc-500 font-mono uppercase tracking-wider px-1.5 py-0.5 bg-zinc-900 border border-zinc-800 rounded">
+              v2.4
+            </span>
           </div>
-        )}
-      </div>
-
-      {/* Panel 3: Response Panel */}
-      {activeEndpoint ? (
-        <ResponseViewer key={activeEndpoint.id} endpoint={activeEndpoint} />
-      ) : (
-        <div className="w-96 bg-zinc-950 flex items-center justify-center text-zinc-700 text-xs">
-          Response viewer idle
         </div>
-      )}
+
+        {/* Active Environment Pill */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setEnvModalOpen(true)}
+            className="flex items-center gap-2 bg-zinc-900/90 border border-zinc-800/90 hover:border-zinc-700 text-zinc-300 px-2.5 py-1 rounded-md text-[11px] font-mono cursor-pointer transition shadow-sm"
+            title="Configure Environments (Ctrl+E)"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/20" />
+            <span className="text-zinc-500 text-[10px]">ENV</span>
+            <span className="font-medium text-zinc-200 uppercase truncate max-w-[120px]">{activeEnvName}</span>
+            <ChevronDown className="w-3 h-3 text-zinc-500 ml-0.5" />
+          </button>
+        </div>
+
+        {/* Quick Toolbar Shortcuts */}
+        <div className="flex items-center gap-1.5 text-zinc-500">
+          <button
+            onClick={() => setCommandPaletteOpen(true)}
+            className="p-1 hover:text-zinc-300 hover:bg-zinc-900 rounded transition"
+            title="Command Palette (Ctrl+K)"
+          >
+            <Search className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setShortcutsHelpOpen(true)}
+            className="p-1 hover:text-zinc-300 hover:bg-zinc-900 rounded transition"
+            title="Keyboard Shortcuts (Ctrl+/)"
+          >
+            <Keyboard className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </header>
+
+      {/* Application Body: 2-Column Split */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left Sidebar */}
+        <Sidebar />
+
+        {/* Right Main Area: Tab Bar + Vertical Split (Request Top, Response Bottom) */}
+        <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
+          <EndpointTabBar />
+
+          {activeEndpoint ? (
+            <div ref={mainContainerRef} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* Top: Request Section */}
+              <section
+                style={{ height: `${requestHeightPercent}%` }}
+                className="flex flex-col min-h-[220px] overflow-hidden"
+              >
+                {activeEndpoint.protocol === 'http' ? (
+                  <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+                ) : (
+                  <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+                )}
+              </section>
+
+              {/* Vertical Resizable Split Handle */}
+              <div
+                onMouseDown={startVerticalResize}
+                className="h-1.5 bg-zinc-900/90 border-y border-zinc-800/80 hover:bg-indigo-500/30 cursor-row-resize transition flex items-center justify-center group flex-shrink-0 select-none"
+                title="Drag to resize Request and Response panels"
+              >
+                <div className="w-8 h-0.5 rounded-full bg-zinc-700 group-hover:bg-indigo-400 transition" />
+              </div>
+
+              {/* Bottom: Response Section */}
+              <section className="flex-1 min-h-[160px] flex flex-col overflow-hidden bg-zinc-950">
+                <ResponseViewer key={activeEndpoint.id} endpoint={activeEndpoint} />
+              </section>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 p-8 text-center select-none">
+              <Layers size={40} className="text-zinc-700 mb-3" />
+              <h3 className="text-sm font-semibold text-zinc-400">No Endpoint Selected</h3>
+              <p className="text-xs text-zinc-600 max-w-sm mt-1">
+                Select an endpoint from the collection tree on the left, or create a new HTTP or gRPC request to start testing.
+              </p>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 };

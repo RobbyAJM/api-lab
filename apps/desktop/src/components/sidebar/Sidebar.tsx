@@ -166,15 +166,18 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
-      className="relative bg-zinc-950 border-r border-zinc-800 flex flex-col h-screen select-none text-zinc-300 flex-shrink-0"
+      className="relative bg-zinc-950 border-r border-zinc-800/80 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
     >
       {/* Workspace Switcher */}
-      <div className="p-3 border-b border-zinc-800 flex items-center justify-between">
-        <div className="flex-1 mr-2">
+      <div className="p-3 border-b border-zinc-800/80 flex items-center justify-between">
+        <div className="flex-1 mr-2 flex items-center gap-2 min-w-0">
+          <span className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-300 border border-zinc-700/60 font-mono flex-shrink-0">
+            {workspaces.find((w) => w.id === activeWorkspaceId)?.name?.[0]?.toUpperCase() || 'W'}
+          </span>
           <select
             value={activeWorkspaceId || ''}
             onChange={(e) => setActiveWorkspaceId(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-700/60 rounded px-2 py-1 text-xs font-semibold text-zinc-100 focus:outline-none focus:border-indigo-500"
+            className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-semibold text-zinc-100 focus:outline-none focus:border-indigo-500 truncate"
           >
             {workspaces.map((ws) => (
               <option key={ws.id} value={ws.id}>
@@ -270,25 +273,26 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Collections Header */}
-      <div className="p-3 flex items-center justify-between">
-        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-          Collections
-        </span>
-        <div className="flex items-center gap-1">
+      {/* Collections Header (Result V3) */}
+      <div className="flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider select-none">
+        <div className="flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+          <span>Collections</span>
+        </div>
+        <div className="flex items-center gap-1 text-zinc-400">
           <button
             onClick={() => setCollapseSignal((s) => s + 1)}
-            className="p-1 hover:text-white rounded hover:bg-zinc-800 text-zinc-400"
-            title="Collapse Collections/Folders"
+            className="hover:text-zinc-200 p-0.5 rounded transition"
+            title="Collapse All"
           >
-            <ChevronsDownUp size={14} />
+            <ChevronsDownUp size={13} />
           </button>
           <button
             onClick={() => setShowAddCollection(!showAddCollection)}
-            className="p-1 hover:text-white rounded hover:bg-zinc-800 text-zinc-400"
-            title="Create Collection"
+            className="hover:text-zinc-200 p-0.5 rounded transition"
+            title="New Collection"
           >
-            <Plus size={14} />
+            <Plus size={13} />
           </button>
         </div>
       </div>
@@ -327,35 +331,39 @@ export const Sidebar: React.FC = () => {
         ))}
       </div>
 
-      {/* Footer / User Profile */}
-      <div className="p-3 border-t border-zinc-800 flex items-center justify-between text-xs bg-zinc-900/30">
-        <div className="flex items-center gap-2 truncate">
-          <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-[10px]">
-            {user?.name?.[0]?.toUpperCase() || 'U'}
+      {/* Footer / User Profile (Result V3) */}
+      <div className="p-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs bg-zinc-950 flex-shrink-0">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded bg-zinc-800 border border-zinc-700/80 flex items-center justify-center font-medium text-zinc-200 text-xs flex-shrink-0">
+            {user?.name?.slice(0, 2).toUpperCase() || 'AD'}
           </div>
           <div className="truncate">
-            <div className="font-medium text-zinc-200 truncate">{user?.name}</div>
-            <div className="text-[10px] text-zinc-500 capitalize">{user?.role}</div>
+            <div className="font-medium text-zinc-200 truncate">{user?.name || 'Admin'}</div>
+            <div className="text-[10px] text-zinc-500 font-mono truncate">{user?.email || 'admin@nutrade.internal'}</div>
           </div>
         </div>
 
         <div className="flex items-center gap-1 text-zinc-400">
           <button
             onClick={() => setShortcutsHelpOpen(true)}
-            className="p-1 hover:text-indigo-400 transition"
+            className="p-1 hover:text-indigo-400 hover:bg-zinc-900 rounded transition"
             title="Keyboard Shortcuts (Ctrl+/)"
           >
-            <Keyboard size={14} />
+            <Keyboard size={13} />
           </button>
           <button
             onClick={() => setMembersModalOpen(true)}
-            className="p-1 hover:text-zinc-200"
+            className="p-1 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
             title="Workspace Members"
           >
-            <Users size={14} />
+            <Users size={13} />
           </button>
-          <button onClick={logout} className="p-1 hover:text-red-400" title="Logout">
-            <LogOut size={14} />
+          <button
+            onClick={logout}
+            className="p-1 hover:text-red-400 hover:bg-zinc-900 rounded transition"
+            title="Logout"
+          >
+            <LogOut size={13} />
           </button>
         </div>
       </div>
@@ -542,13 +550,24 @@ const CollectionNode: React.FC<{
         ) : (
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-1 text-zinc-200 font-medium truncate flex-1 text-left"
+            className="flex items-center justify-between text-zinc-200 font-medium truncate flex-1 text-left py-0.5"
           >
-            {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-            <span className="truncate">{collection.name}</span>
-            {collection.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
-              <span title="Shared Auth configured">
-                <Shield size={11} className="text-indigo-400 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 truncate">
+              {isExpanded ? (
+                <ChevronDown size={13} className="text-zinc-400 flex-shrink-0" />
+              ) : (
+                <ChevronRight size={13} className="text-zinc-400 flex-shrink-0" />
+              )}
+              <span className="truncate font-semibold">{collection.name}</span>
+              {collection.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
+                <span title="Shared Auth configured">
+                  <Shield size={11} className="text-indigo-400 flex-shrink-0" />
+                </span>
+              )}
+            </div>
+            {endpoints.length > 0 && (
+              <span className="text-[10px] text-zinc-400 font-mono px-1.5 py-0.2 rounded-full bg-zinc-800/80 border border-zinc-700/60 ml-1">
+                {endpoints.length}
               </span>
             )}
           </button>
@@ -983,8 +1002,8 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
       }}
       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition text-left group ${
         isActive
-          ? 'bg-indigo-950/70 text-indigo-200 font-medium border border-indigo-800/60'
-          : 'hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200'
+          ? 'bg-indigo-950/50 text-indigo-100 font-medium border border-indigo-500/40 shadow-sm shadow-indigo-950/50'
+          : 'hover:bg-zinc-900 text-zinc-300 hover:text-white'
       }`}
     >
       <div className="flex items-center gap-1.5 truncate">
@@ -1008,7 +1027,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
             title="gRPC Bidirectional Stream"
             className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/60 border border-amber-800/60 flex items-center gap-0.5"
           >
-            <ArrowLeftRight size={9} /> gRPC Stream
+            <ArrowLeftRight size={9} /> STREAM
           </span>
         ) : streamType === 'omni_stream' ? (
           /* gRPC Stream Omnidirectional Icon (Yellow badge) */
@@ -1016,19 +1035,23 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
             title="gRPC Omnidirectional Stream"
             className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/60 border border-amber-800/60 flex items-center gap-0.5"
           >
-            <ArrowDownUp size={9} /> gRPC Stream
+            <ArrowDownUp size={9} /> STREAM
           </span>
         ) : (
-          /* gRPC Unary Icon (Purple badge) */
+          /* gRPC Unary Icon (Indigo badge) */
           <span
             title="gRPC Unary Call"
-            className="text-[9px] font-bold font-mono px-1 rounded text-purple-400 bg-purple-950/50 flex items-center gap-0.5"
+            className="text-[9px] font-bold font-mono px-1 rounded text-indigo-300 bg-indigo-950/70 border border-indigo-700/50 flex items-center gap-0.5"
           >
             <Radio size={9} /> gRPC
           </span>
         )}
         <span className="truncate">{endpoint.name}</span>
       </div>
+
+      {isActive && (
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30 flex-shrink-0 ml-1" />
+      )}
     </button>
   );
 };
