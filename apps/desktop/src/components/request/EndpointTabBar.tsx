@@ -87,7 +87,7 @@ export const EndpointTabBar: React.FC = () => {
     return (
       <span
         title="gRPC Unary Call"
-        className="text-[9px] font-mono font-bold px-1 py-0.2 rounded text-purple-400 bg-purple-950/60 border border-purple-800/60 flex items-center gap-0.5 select-none"
+        className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-violet-950/60 text-violet-400 border border-violet-800/40 select-none flex items-center gap-0.5"
       >
         <Radio size={8} /> gRPC
       </span>
@@ -96,7 +96,7 @@ export const EndpointTabBar: React.FC = () => {
 
   return (
     <>
-      <div className="flex items-center h-9 bg-zinc-950 border-b border-zinc-800 overflow-x-auto select-none scrollbar-none flex-shrink-0">
+      <div className="flex items-center h-10 px-2 gap-1.5 bg-zinc-950 border-b border-zinc-800/80 overflow-x-auto select-none scrollbar-none flex-shrink-0">
         {openEndpoints.map((ep) => {
           const isActive = ep.id === activeEndpointId;
           const dirty = isEndpointDirty(ep.id);
@@ -120,15 +120,15 @@ export const EndpointTabBar: React.FC = () => {
                   y: e.clientY,
                 });
               }}
-              className={`group flex items-center gap-1.5 h-full px-3 text-xs cursor-pointer transition-colors border-r ${
+              className={`group flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer transition-all border ${
                 isActive
-                  ? 'bg-zinc-900 text-zinc-100 font-medium border-r-zinc-800 border-t-2 border-t-indigo-500 shadow-sm'
-                  : 'bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50 border-r-zinc-800/60 border-t-2 border-t-transparent'
+                  ? 'bg-zinc-900 border-zinc-800 text-zinc-100 font-medium shadow-sm'
+                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border-transparent'
               }`}
               title={`${ep.name} (${ep.protocol.toUpperCase()})`}
             >
               {renderMethodBadge(ep)}
-              <span className="truncate max-w-[130px] text-xs font-medium">{ep.name}</span>
+              <span className="truncate max-w-[120px] text-xs font-medium">{ep.name}</span>
 
               {/* Unsaved Changes Indicator Dot */}
               {dirty && (
@@ -143,7 +143,7 @@ export const EndpointTabBar: React.FC = () => {
                   e.stopPropagation();
                   handleAttemptClose(ep);
                 }}
-                className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition opacity-60 group-hover:opacity-100 ml-1"
+                className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition opacity-60 group-hover:opacity-100 ml-0.5"
                 title="Close tab (Middle click)"
               >
                 <X size={12} />
