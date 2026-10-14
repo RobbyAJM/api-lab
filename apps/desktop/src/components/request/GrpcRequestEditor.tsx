@@ -40,6 +40,7 @@ import { applyInheritedGrpcAuth } from '../../utils/authInheritance';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
 import { formatRpcSignature, formatMethodStreamingLabel } from '../../utils/grpcSpecification';
+import { getEffectiveEndpointConfig } from '../../utils/tabManager';
 
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -64,18 +65,18 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
 
-  const initialDraft =
-    useAppStore.getState().endpointDrafts[endpoint.id] || endpoint.config || {};
+  const draft = useAppStore.getState().endpointDrafts[endpoint.id];
+  const initialConfig = getEffectiveEndpointConfig(endpoint, draft);
 
   const [serverAddress, setServerAddress] = useState(
-    initialDraft.server_address || 'localhost:50051'
+    initialConfig.server_address || 'localhost:50051'
   );
   const [useTls, setUseTls] = useState<boolean>(() => {
-    if (initialDraft.use_tls !== undefined) return Boolean(initialDraft.use_tls);
-    return shouldAutoDetectTls(initialDraft.server_address || 'localhost:50051');
+    if (initialConfig.use_tls !== undefined) return Boolean(initialConfig.use_tls);
+    return shouldAutoDetectTls(initialConfig.server_address || 'localhost:50051');
   });
-  const [selectedService, setSelectedService] = useState(initialDraft.service || '');
-  const [selectedMethod, setSelectedMethod] = useState(initialDraft.method || '');
+  const [selectedService, setSelectedService] = useState(initialConfig.service || '');
+  const [selectedMethod, setSelectedMethod] = useState(initialConfig.method || '');
 
   const effectiveTls = useTls || shouldAutoDetectTls(serverAddress);
 
@@ -105,24 +106,24 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const discoveredServices = cachedServices;
 
   const [metadata, setMetadata] = useState<[string, string][]>(() => {
-    const raw = initialDraft.metadata || {};
+    const raw = initialConfig.metadata || {};
     return Object.entries(raw);
   });
   const [payloadStr, setPayloadStr] = useState<string>(() => {
-    if (initialDraft.payload !== undefined && initialDraft.payload !== null) {
-      return typeof initialDraft.payload === 'string'
-        ? initialDraft.payload
-        : JSON.stringify(initialDraft.payload, null, 2);
+    if (initialConfig.payload !== undefined && initialConfig.payload !== null) {
+      return typeof initialConfig.payload === 'string'
+        ? initialConfig.payload
+        : JSON.stringify(initialConfig.payload, null, 2);
     }
     return '{}';
   });
 
   // Scripts state
   const [preRequestScript, setPreRequestScript] = useState<string>(
-    initialDraft.pre_request_script || ''
+    initialConfig.pre_request_script || ''
   );
   const [postResponseScript, setPostResponseScript] = useState<string>(
-    initialDraft.post_response_script || initialDraft.post_request_script || ''
+    initialConfig.post_response_script || initialConfig.post_request_script || ''
   );
   const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
@@ -170,21 +171,38 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     resolveVariables().then(setActiveVariables);
   }, [activeEnvironmentId]);
 
+  // Track previous endpoint id to only reinitialize state when switching to a different endpoint without remount
+  const prevEndpointIdRef = useRef(endpoint.id);
   useEffect(() => {
-    setCurrentVersion(endpoint.version);
-    currentVersionRef.current = endpoint.version;
-    setServerAddress(endpoint.config?.server_address || 'localhost:50051');
-    setUseTls(endpoint.config?.use_tls || false);
-    setSelectedService(endpoint.config?.service || '');
-    setSelectedMethod(endpoint.config?.method || '');
-    setMetadata(Object.entries(endpoint.config?.metadata || {}));
-    setPayloadStr(JSON.stringify(endpoint.config?.payload || {}, null, 2));
-    setPreRequestScript(endpoint.config?.pre_request_script || '');
-    setPostResponseScript(
-      endpoint.config?.post_request_script || endpoint.config?.post_response_script || ''
-    );
-    setHookTests([]);
-    setHookLogs([]);
+    if (prevEndpointIdRef.current !== endpoint.id) {
+      prevEndpointIdRef.current = endpoint.id;
+      setCurrentVersion(endpoint.version);
+      currentVersionRef.current = endpoint.version;
+      const currentDraft = useAppStore.getState().endpointDrafts[endpoint.id];
+      const cfg = getEffectiveEndpointConfig(endpoint, currentDraft);
+      setServerAddress(cfg.server_address || 'localhost:50051');
+      setUseTls(
+        cfg.use_tls !== undefined
+          ? Boolean(cfg.use_tls)
+          : shouldAutoDetectTls(cfg.server_address || 'localhost:50051')
+      );
+      setSelectedService(cfg.service || '');
+      setSelectedMethod(cfg.method || '');
+      setMetadata(Object.entries(cfg.metadata || {}));
+      setPayloadStr(
+        cfg.payload !== undefined && cfg.payload !== null
+          ? typeof cfg.payload === 'string'
+            ? cfg.payload
+            : JSON.stringify(cfg.payload, null, 2)
+          : '{}'
+      );
+      setPreRequestScript(cfg.pre_request_script || '');
+      setPostResponseScript(
+        cfg.post_request_script || cfg.post_response_script || ''
+      );
+      setHookTests([]);
+      setHookLogs([]);
+    }
   }, [endpoint.id]);
 
   // Discover services via reflection

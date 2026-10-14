@@ -52,6 +52,21 @@ export function isConfigDirty(
 }
 
 /**
+ * Resolves the effective working configuration for an endpoint editor.
+ * If an unsaved draft exists, that draft is preserved and returned.
+ * Otherwise, falls back to the saved endpoint.config.
+ */
+export function getEffectiveEndpointConfig(
+  endpoint: Endpoint,
+  draft?: Record<string, any> | null
+): Record<string, any> {
+  if (draft && typeof draft === 'object' && Object.keys(draft).length > 0) {
+    return draft;
+  }
+  return endpoint.config || {};
+}
+
+/**
  * Opens an endpoint in tabs. If already open, activates it and updates reference.
  * If not open, appends it and activates it.
  */
