@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect, useRef } from 'react';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import {
   executeNativeGrpc,
   executeNativeGrpcStream,
-  cancelNativeGrpcStream,
   discoverNativeGrpcServices,
   generateNativeGrpcSamplePayload,
 } from '../../api/native';
@@ -47,11 +46,19 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     activeEnvironmentId,
     setLastGrpcResponse,
     isStreaming,
-    activeStreamId,
+    streamingEndpointId,
     setIsStreaming,
     addStreamMessage,
     clearStreamMessages,
+    stopStreaming,
+    setActiveEndpoint,
   } = useAppStore();
+
+  const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
+  const currentVersionRef = useRef<number>(endpoint.version);
+  currentVersionRef.current = currentVersion;
+  const isSavingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
 
   const [serverAddress, setServerAddress] = useState(
     endpoint.config?.server_address || 'localhost:50051'
@@ -144,6 +151,8 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   }, [activeEnvironmentId]);
 
   useEffect(() => {
+    setCurrentVersion(endpoint.version);
+    currentVersionRef.current = endpoint.version;
     setServerAddress(endpoint.config?.server_address || 'localhost:50051');
     setUseTls(endpoint.config?.use_tls || false);
     setSelectedService(endpoint.config?.service || '');
@@ -151,7 +160,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setMetadata(Object.entries(endpoint.config?.metadata || {}));
     setPayloadStr(JSON.stringify(endpoint.config?.payload || {}, null, 2));
     setPreRequestScript(endpoint.config?.pre_request_script || '');
-    setPostResponseScript(endpoint.config?.post_request_script || '');
+    setPostResponseScript(
+      endpoint.config?.post_request_script || endpoint.config?.post_response_script || ''
+    );
     setHookTests([]);
     setHookLogs([]);
   }, [endpoint.id]);
@@ -249,52 +260,123 @@ if (body && body.details && body.details.token) {
       : 'unary');
 
   const isStreamingRpc = streamType !== 'unary';
+  const isCurrentEndpointStreaming = isStreaming && streamingEndpointId === endpoint.id;
 
-  // Save changes to endpoint on server
-  const saveMutation = useMutation({
-    mutationFn: () => {
-      const metaMap: Record<string, string> = {};
-      for (const [k, v] of metadata) {
-        if (k.trim()) metaMap[k.trim()] = v;
-      }
+  function buildConfig() {
+    const metaMap: Record<string, string> = {};
+    for (const [k, v] of metadata) {
+      if (k.trim()) metaMap[k.trim()] = v;
+    }
 
-      let payloadJson = {};
+    let payloadJson = {};
+    try {
+      payloadJson = JSON.parse(payloadStr || '{}');
+    } catch {
+      // ignore
+    }
+
+    return {
+      server_address: serverAddress,
+      service: selectedService,
+      method: selectedMethod,
+      use_tls: useTls,
+      stream_type: streamType,
+      metadata: metaMap,
+      payload: payloadJson,
+      pre_request_script: preRequestScript,
+      post_request_script: postResponseScript,
+      post_response_script: postResponseScript,
+    };
+  }
+
+  const saveChanges = async (options?: { silent?: boolean }) => {
+    if (isSavingRef.current) {
+      pendingSaveRef.current = true;
+      return;
+    }
+    isSavingRef.current = true;
+    try {
+      const cfg = buildConfig();
+      let res: Endpoint;
       try {
-        payloadJson = JSON.parse(payloadStr || '{}');
-      } catch {
-        // ignore
+        res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            version: currentVersionRef.current,
+            config: cfg,
+          }),
+        });
+      } catch (err: any) {
+        if (err?.message?.includes('version mismatch') || err?.status === 409) {
+          const latest = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`);
+          currentVersionRef.current = latest.version;
+          res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              version: latest.version,
+              config: cfg,
+            }),
+          });
+        } else {
+          throw err;
+        }
       }
 
-      return apiRequest(`/endpoints/${endpoint.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          version: endpoint.version,
-          config: {
-            server_address: serverAddress,
-            service: selectedService,
-            method: selectedMethod,
-            use_tls: useTls,
-            stream_type: streamType,
-            metadata: metaMap,
-            payload: payloadJson,
-            pre_request_script: preRequestScript,
-            post_request_script: postResponseScript,
-          },
-        }),
-      });
-    },
-    onSuccess: () => {
-      setStatusMessage('Saved successfully');
-      queryClient.invalidateQueries({ queryKey: ['endpoints', endpoint.collection_id] });
-      setTimeout(() => setStatusMessage(null), 2000);
-    },
-    onError: (err: any) => {
-      setStatusMessage(`Error saving: ${err.message}`);
-    },
-  });
+      setCurrentVersion(res.version);
+      currentVersionRef.current = res.version;
+      setActiveEndpoint(res);
+      queryClient.setQueryData<Endpoint[]>(
+        ['endpoints', endpoint.collection_id],
+        (prev) => prev?.map((ep) => (ep.id === res.id ? res : ep)) || [res]
+      );
+      if (!options?.silent) {
+        setStatusMessage('Saved successfully');
+        setTimeout(() => setStatusMessage(null), 2000);
+      }
+    } catch (err: any) {
+      if (!options?.silent) {
+        setStatusMessage(`Error saving: ${err.message}`);
+      }
+    } finally {
+      isSavingRef.current = false;
+      if (pendingSaveRef.current) {
+        pendingSaveRef.current = false;
+        saveChanges(options);
+      }
+    }
+  };
+
+  // Debounced auto-save on script edits (1000ms)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveChanges({ silent: true });
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [preRequestScript, postResponseScript, payloadStr]);
+
+  // Keyboard shortcuts: Ctrl+S to save, Ctrl+Enter to invoke / stream
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        saveChanges({ silent: false });
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (isStreamingRpc) {
+          if (!isCurrentEndpointStreaming) handleStartStream();
+          else handleStopStream();
+        } else {
+          handleSend();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentVersion, isStreamingRpc, isCurrentEndpointStreaming, selectedService, selectedMethod, preRequestScript, postResponseScript, payloadStr, serverAddress, useTls, metadata]);
 
   // Execute unary gRPC
   async function handleSend() {
+    saveChanges({ silent: true });
     setSending(true);
     setStatusMessage(null);
 
@@ -409,6 +491,7 @@ if (body && body.details && body.details.token) {
 
   // Execute Streaming gRPC (Feature 1)
   async function handleStartStream() {
+    saveChanges({ silent: true });
     setSending(true);
     setStatusMessage('Starting stream...');
     clearStreamMessages();
@@ -446,7 +529,8 @@ if (body && body.details && body.details.token) {
     };
 
     const streamId = `stream-${Date.now()}`;
-    setIsStreaming(true, streamId);
+    setIsStreaming(true, streamId, endpoint.id);
+    addStreamMessage(parsedPayload, 'out');
 
     try {
       const currentVars = await resolveVariables();
@@ -476,7 +560,7 @@ if (body && body.details && body.details.token) {
         beforeResult.variables,
         streamId,
         (msg) => {
-          addStreamMessage(msg);
+          addStreamMessage(msg, 'in');
         }
       );
       setLastGrpcResponse(resp);
@@ -520,18 +604,16 @@ if (body && body.details && body.details.token) {
         error: err.message,
       });
     } finally {
-      setIsStreaming(false, null);
+      setIsStreaming(false, null, null);
       setSending(false);
     }
   }
 
   async function handleStopStream() {
-    if (activeStreamId) {
-      await cancelNativeGrpcStream(activeStreamId);
-      setIsStreaming(false, null);
-      setStatusMessage('Stream stopped by user');
-      setTimeout(() => setStatusMessage(null), 2500);
-    }
+    await stopStreaming();
+    setSending(false);
+    setStatusMessage('Stream stopped by user');
+    setTimeout(() => setStatusMessage(null), 2500);
   }
 
   return (
@@ -593,22 +675,30 @@ if (body && body.details && body.details.token) {
           </button>
 
           {isStreamingRpc ? (
-            isStreaming ? (
+            isCurrentEndpointStreaming ? (
               <button
                 onClick={handleStopStream}
                 className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+                title="Stop Stream (Ctrl+Enter)"
               >
                 <Square size={12} fill="currentColor" />
                 <span>Stop Stream</span>
+                <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-red-800/80 text-red-200 border border-red-700 ml-0.5 select-none">
+                  Ctrl+↵
+                </kbd>
               </button>
             ) : (
               <button
                 onClick={handleStartStream}
                 disabled={sending || !selectedService || !selectedMethod}
                 className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+                title="Start stream (Ctrl+Enter)"
               >
                 <Play size={12} fill="currentColor" />
                 <span>Start Stream</span>
+                <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-cyan-800/80 text-cyan-200 border border-cyan-700 ml-0.5 select-none">
+                  Ctrl+↵
+                </kbd>
               </button>
             )
           ) : (
@@ -616,19 +706,27 @@ if (body && body.details && body.details.token) {
               onClick={handleSend}
               disabled={sending || !selectedService || !selectedMethod}
               className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-medium rounded text-xs flex items-center gap-1.5 shadow-sm transition h-8"
+              title="Invoke method (Ctrl+Enter)"
             >
               <Send size={13} />
               <span>{sending ? 'Calling...' : 'Invoke'}</span>
+              <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-purple-800/80 text-purple-200 border border-purple-700 ml-0.5 select-none">
+                Ctrl+↵
+              </kbd>
             </button>
           )}
 
           <button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
+            onClick={() => saveChanges({ silent: false })}
+            disabled={isSavingRef.current}
             className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs flex items-center gap-1.5 transition h-8"
+            title="Save changes to endpoint (Ctrl+S)"
           >
             <Save size={13} />
             <span>Save</span>
+            <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-zinc-900 text-zinc-400 border border-zinc-700/60 ml-0.5 select-none">
+              Ctrl+S
+            </kbd>
           </button>
         </div>
 

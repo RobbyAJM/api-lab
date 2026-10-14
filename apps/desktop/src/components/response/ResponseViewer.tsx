@@ -14,6 +14,9 @@ import {
   RotateCcw,
   Copy,
   Check,
+  Square,
+  ArrowUpRight,
+  ArrowDownLeft,
 } from 'lucide-react';
 import {
   detectResponseFormat,
@@ -29,6 +32,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     isStreaming,
     streamMessages,
     clearStreamMessages,
+    stopStreaming,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<'body' | 'stream' | 'headers' | 'saved'>('body');
@@ -217,10 +221,20 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-zinc-400">Response</span>
             {isStreaming && (
-              <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-mono font-bold bg-cyan-950/70 border border-cyan-800 px-1.5 py-0.5 rounded animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                STREAMING
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-mono font-bold bg-cyan-950/70 border border-cyan-800 px-1.5 py-0.5 rounded animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                  STREAMING
+                </span>
+                <button
+                  onClick={stopStreaming}
+                  className="px-1.5 py-0.5 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 rounded text-[10px] font-medium flex items-center gap-1 transition"
+                  title="Stop gRPC Stream"
+                >
+                  <Square size={9} fill="currentColor" />
+                  <span>Stop</span>
+                </button>
+              </div>
             )}
           </div>
           {(activeResponse || streamMessages.length > 0) && (
@@ -465,6 +479,16 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {isStreaming && (
+                  <button
+                    onClick={stopStreaming}
+                    className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[10px] font-semibold flex items-center gap-1 transition shadow-sm"
+                    title="Stop gRPC Stream"
+                  >
+                    <Square size={9} fill="currentColor" />
+                    <span>Stop Stream</span>
+                  </button>
+                )}
                 <label className="flex items-center gap-1 cursor-pointer select-none text-[10px]">
                   <input
                     type="checkbox"
@@ -499,15 +523,37 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                 const msgFormat = detectResponseFormat(msg.payload);
                 const formattedMsg = formatResponseBody(msg.payload, msgFormat);
                 const isCopied = copiedMsgId === msg.id;
+                const isOut = msg.direction === 'out';
 
                 return (
                   <div
                     key={msg.id}
-                    className="p-2.5 bg-zinc-900/90 border border-zinc-800 rounded space-y-1.5 hover:border-zinc-700 transition select-text"
+                    className={`p-2.5 rounded space-y-1.5 transition select-text border ${
+                      isOut
+                        ? 'bg-blue-950/25 border-blue-900/50 border-l-4 border-l-blue-500 hover:border-blue-700/60'
+                        : 'bg-zinc-900/90 border-zinc-800 border-l-4 border-l-emerald-500 hover:border-zinc-700'
+                    }`}
                   >
                     <div className="flex items-center justify-between text-[10px] text-zinc-500 border-b border-zinc-800/60 pb-1 select-none">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-cyan-400 font-bold font-mono">#{idx + 1}</span>
+                        <span
+                          className={`font-bold font-mono ${
+                            isOut ? 'text-blue-400' : 'text-emerald-400'
+                          }`}
+                        >
+                          #{idx + 1}
+                        </span>
+                        {isOut ? (
+                          <span className="flex items-center gap-1 text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                            <ArrowUpRight size={10} className="text-blue-400" />
+                            OUT (SENT)
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+                            <ArrowDownLeft size={10} className="text-emerald-400" />
+                            IN (RECV)
+                          </span>
+                        )}
                         <span className="uppercase text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-800 text-zinc-300 font-semibold">
                           {msgFormat}
                         </span>
@@ -527,7 +573,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                         </button>
                       </div>
                     </div>
-                    <div className="bg-zinc-950/70 p-2 rounded border border-zinc-800/50 overflow-x-auto">
+                    <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800/50 overflow-x-auto">
                       <FormattedBodyViewer content={formattedMsg} format={msgFormat} />
                     </div>
                   </div>
