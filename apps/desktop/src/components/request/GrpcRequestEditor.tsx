@@ -52,6 +52,8 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     clearStreamMessages,
     stopStreaming,
     setActiveEndpoint,
+    setEndpointDraft,
+    clearEndpointDraft,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -59,14 +61,16 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   currentVersionRef.current = currentVersion;
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
-  const isFirstMountRef = useRef(true);
+
+  const initialDraft =
+    useAppStore.getState().endpointDrafts[endpoint.id] || endpoint.config || {};
 
   const [serverAddress, setServerAddress] = useState(
-    endpoint.config?.server_address || 'localhost:50051'
+    initialDraft.server_address || 'localhost:50051'
   );
-  const [useTls, setUseTls] = useState<boolean>(endpoint.config?.use_tls || false);
-  const [selectedService, setSelectedService] = useState(endpoint.config?.service || '');
-  const [selectedMethod, setSelectedMethod] = useState(endpoint.config?.method || '');
+  const [useTls, setUseTls] = useState<boolean>(Boolean(initialDraft.use_tls));
+  const [selectedService, setSelectedService] = useState(initialDraft.service || '');
+  const [selectedMethod, setSelectedMethod] = useState(initialDraft.method || '');
 
   // Auto-discover & cache reflection per server address (Fix for Bug 1)
   const {
@@ -94,19 +98,24 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const discoveredServices = cachedServices;
 
   const [metadata, setMetadata] = useState<[string, string][]>(() => {
-    const raw = endpoint.config?.metadata || {};
+    const raw = initialDraft.metadata || {};
     return Object.entries(raw);
   });
   const [payloadStr, setPayloadStr] = useState<string>(() => {
-    return JSON.stringify(endpoint.config?.payload || {}, null, 2);
+    if (initialDraft.payload !== undefined && initialDraft.payload !== null) {
+      return typeof initialDraft.payload === 'string'
+        ? initialDraft.payload
+        : JSON.stringify(initialDraft.payload, null, 2);
+    }
+    return '{}';
   });
 
   // Scripts state
   const [preRequestScript, setPreRequestScript] = useState<string>(
-    endpoint.config?.pre_request_script || ''
+    initialDraft.pre_request_script || ''
   );
   const [postResponseScript, setPostResponseScript] = useState<string>(
-    endpoint.config?.post_request_script || ''
+    initialDraft.post_response_script || initialDraft.post_request_script || ''
   );
   const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
@@ -325,6 +334,7 @@ if (body && body.details && body.details.token) {
 
       setCurrentVersion(res.version);
       currentVersionRef.current = res.version;
+      clearEndpointDraft(endpoint.id);
       if (useAppStore.getState().activeEndpointId === endpoint.id) {
         setActiveEndpoint(res);
       }
@@ -349,17 +359,42 @@ if (body && body.details && body.details.token) {
     }
   };
 
-  // Debounced auto-save on script edits (1000ms, skips initial mount)
+  // Keep working draft synchronized in store so tab switches retain unsaved edits
   useEffect(() => {
-    if (isFirstMountRef.current) {
-      isFirstMountRef.current = false;
-      return;
+    let parsedPayload: any = {};
+    try {
+      parsedPayload = JSON.parse(payloadStr || '{}');
+    } catch {
+      parsedPayload = payloadStr;
     }
-    const timer = setTimeout(() => {
-      saveChanges({ silent: true });
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [preRequestScript, postResponseScript, payloadStr]);
+    const metaMap: Record<string, string> = {};
+    for (const [k, v] of metadata) {
+      if (k.trim()) metaMap[k.trim()] = v;
+    }
+    const cfg = {
+      server_address: serverAddress,
+      use_tls: useTls,
+      service: selectedService,
+      method: selectedMethod,
+      stream_type: streamType,
+      metadata: metaMap,
+      payload: parsedPayload,
+      pre_request_script: preRequestScript,
+      post_request_script: postResponseScript,
+      post_response_script: postResponseScript,
+    };
+    setEndpointDraft(endpoint.id, cfg);
+  }, [
+    serverAddress,
+    useTls,
+    selectedService,
+    selectedMethod,
+    streamType,
+    metadata,
+    payloadStr,
+    preRequestScript,
+    postResponseScript,
+  ]);
 
   // Keyboard shortcuts: Ctrl+S to save, Ctrl+Enter to invoke / stream
   useEffect(() => {

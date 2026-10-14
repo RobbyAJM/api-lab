@@ -4,6 +4,7 @@ import {
   getAllShortcuts,
   matchesShortcut,
   searchEndpointsForCommandPalette,
+  searchUnifiedCommandPalette,
   navigateListIndex,
 } from './shortcuts.ts';
 import type { Endpoint, Collection } from '@api-lab/api-types';
@@ -50,6 +51,21 @@ test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
   // open_environment: Ctrl+E or Cmd+E
   assert.equal(matchesShortcut({ key: 'e', ctrlKey: true }, 'open_environment'), true);
   assert.equal(matchesShortcut({ key: 'E', metaKey: true }, 'open_environment'), true);
+
+  // close_tab: Ctrl+W or Cmd+W (without Shift or Alt)
+  assert.equal(matchesShortcut({ key: 'w', ctrlKey: true }, 'close_tab'), true);
+  assert.equal(matchesShortcut({ key: 'W', metaKey: true }, 'close_tab'), true);
+  assert.equal(matchesShortcut({ key: 'w', ctrlKey: true, shiftKey: true }, 'close_tab'), false);
+
+  // close_other_tabs: Ctrl+Alt+T or Cmd+Alt+T
+  assert.equal(matchesShortcut({ key: 't', ctrlKey: true, altKey: true }, 'close_other_tabs'), true);
+  assert.equal(matchesShortcut({ key: 'T', metaKey: true, altKey: true }, 'close_other_tabs'), true);
+  assert.equal(matchesShortcut({ key: 't', ctrlKey: true }, 'close_other_tabs'), false);
+
+  // close_all_tabs: Ctrl+Shift+W or Cmd+Shift+W
+  assert.equal(matchesShortcut({ key: 'w', ctrlKey: true, shiftKey: true }, 'close_all_tabs'), true);
+  assert.equal(matchesShortcut({ key: 'W', metaKey: true, shiftKey: true }, 'close_all_tabs'), true);
+  assert.equal(matchesShortcut({ key: 'w', ctrlKey: true }, 'close_all_tabs'), false);
 
   // escape
   assert.equal(matchesShortcut({ key: 'Escape' }, 'escape'), true);
@@ -171,6 +187,61 @@ test('searchEndpointsForCommandPalette: searches across names, methods, services
   // 11. No matches
   const none = searchEndpointsForCommandPalette(endpoints, collections, 'NonExistentMethod');
   assert.equal(none.length, 0);
+});
+
+test('searchUnifiedCommandPalette: finds both commands and endpoints in Ctrl+K', () => {
+  const collections: Collection[] = [
+    { id: 'c1', workspace_id: 'w1', name: 'Auth API', sort_order: 0, created_at: '', updated_at: '' },
+  ];
+  const endpoints: Endpoint[] = [
+    {
+      id: 'e1',
+      collection_id: 'c1',
+      name: 'Manager Login',
+      protocol: 'http',
+      config: { method: 'POST', url: '/auth/manager/login' },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  // 1. Search "close tab" finds Close Tab command
+  const res1 = searchUnifiedCommandPalette(endpoints, collections, 'close tab');
+  assert.ok(res1.length >= 1);
+  assert.equal(res1[0].type, 'command');
+  if (res1[0].type === 'command') {
+    assert.equal(res1[0].actionId, 'close_tab');
+  }
+
+  // 2. Search "close other" finds Close All Other Tabs command
+  const res2 = searchUnifiedCommandPalette(endpoints, collections, 'close other');
+  assert.ok(res2.length >= 1);
+  assert.equal(res2[0].type, 'command');
+  if (res2[0].type === 'command') {
+    assert.equal(res2[0].actionId, 'close_other_tabs');
+  }
+
+  // 3. Search "close all" finds Close All Tabs command
+  const res3 = searchUnifiedCommandPalette(endpoints, collections, 'close all');
+  assert.ok(res3.length >= 1);
+  const foundCloseAll = res3.find(
+    (item) => item.type === 'command' && item.actionId === 'close_all_tabs'
+  );
+  assert.ok(foundCloseAll);
+
+  // 4. Search "manager login" finds endpoint
+  const res4 = searchUnifiedCommandPalette(endpoints, collections, 'manager login');
+  assert.equal(res4.length, 1);
+  assert.equal(res4[0].type, 'endpoint');
+  if (res4[0].type === 'endpoint') {
+    assert.equal(res4[0].endpoint.name, 'Manager Login');
+  }
+
+  // 5. Empty search returns commands plus endpoints
+  const all = searchUnifiedCommandPalette(endpoints, collections, '');
+  assert.equal(all.length, 4); // 3 commands + 1 endpoint
 });
 
 test('navigateListIndex: wraps correctly for up and down arrow keys', () => {

@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import {
   openEndpointInTabs,
   closeEndpointInTabs,
+  closeOtherEndpointsInTabs,
+  closeAllEndpointsInTabs,
   updateEndpointInTabs,
+  setEndpointDraftInState,
+  clearEndpointDraftInState,
+  isEndpointDirtyInState,
+  isConfigDirty,
   type TabState,
 } from './tabManager.ts';
 import type { Endpoint } from '@api-lab/api-types';
@@ -14,7 +20,7 @@ function createMockEndpoint(id: string, name: string): Endpoint {
     collection_id: 'c1',
     name,
     protocol: 'http',
-    config: { method: 'GET', url: `https://api.example.com/${id}` },
+    config: { method: 'GET', url: `https://api.example.com/${id}`, body: '', headers: {} },
     sort_order: 0,
     version: 1,
     created_at: new Date().toISOString(),
@@ -108,7 +114,6 @@ test('closeEndpointInTabs: closing active tab activates left adjacent tab', () =
   assert.equal(result.openEndpoints.length, 2);
   assert.equal(result.openEndpoints[0].id, 'ep1');
   assert.equal(result.openEndpoints[1].id, 'ep3');
-  // Left tab was ep1
   assert.equal(result.activeEndpointId, 'ep1');
   assert.equal(result.activeEndpoint?.id, 'ep1');
 });
@@ -147,19 +152,53 @@ test('closeEndpointInTabs: closing the last remaining tab clears active endpoint
   assert.equal(result.activeEndpoint, null);
 });
 
-test('closeEndpointInTabs: closing non-existent tab returns unchanged state', () => {
-  const ep1 = createMockEndpoint('ep1', 'Existing Tab');
+test('closeOtherEndpointsInTabs: leaves only targeted tab and cleans up other drafts', () => {
+  const ep1 = createMockEndpoint('ep1', 'First');
+  const ep2 = createMockEndpoint('ep2', 'Target');
+  const ep3 = createMockEndpoint('ep3', 'Third');
 
   const initial: TabState = {
-    openEndpoints: [ep1],
+    openEndpoints: [ep1, ep2, ep3],
     activeEndpointId: 'ep1',
     activeEndpoint: ep1,
+    endpointDrafts: {
+      ep1: { url: 'changed1' },
+      ep2: { url: 'changed2' },
+      ep3: { url: 'changed3' },
+    },
   };
 
-  const result = closeEndpointInTabs(initial, 'unknown_id');
+  const result = closeOtherEndpointsInTabs(initial, 'ep2');
 
   assert.equal(result.openEndpoints.length, 1);
-  assert.equal(result.activeEndpointId, 'ep1');
+  assert.equal(result.openEndpoints[0].id, 'ep2');
+  assert.equal(result.activeEndpointId, 'ep2');
+  assert.equal(result.activeEndpoint?.id, 'ep2');
+  // Keeps ep2 draft, deletes others
+  assert.ok(result.endpointDrafts?.ep2);
+  assert.equal(result.endpointDrafts?.ep1, undefined);
+  assert.equal(result.endpointDrafts?.ep3, undefined);
+});
+
+test('closeAllEndpointsInTabs: empties all tabs, resets active and clears drafts', () => {
+  const ep1 = createMockEndpoint('ep1', 'First');
+  const ep2 = createMockEndpoint('ep2', 'Second');
+
+  const initial: TabState = {
+    openEndpoints: [ep1, ep2],
+    activeEndpointId: 'ep1',
+    activeEndpoint: ep1,
+    endpointDrafts: {
+      ep1: { body: 'draft' },
+    },
+  };
+
+  const result = closeAllEndpointsInTabs();
+
+  assert.equal(result.openEndpoints.length, 0);
+  assert.equal(result.activeEndpointId, null);
+  assert.equal(result.activeEndpoint, null);
+  assert.deepEqual(result.endpointDrafts, {});
 });
 
 test('updateEndpointInTabs: updates matching endpoint properties in open tabs list', () => {
@@ -176,4 +215,70 @@ test('updateEndpointInTabs: updates matching endpoint properties in open tabs li
   assert.equal(result.openEndpoints[0].name, 'New Name');
   assert.equal(result.openEndpoints[0].version, 2);
   assert.equal(result.activeEndpoint?.name, 'New Name');
+});
+
+test('isConfigDirty: accurately detects HTTP and gRPC unsaved changes', () => {
+  const baseHttp = {
+    method: 'GET',
+    url: 'https://httpbin.org/get',
+    body: '{"foo":1}',
+    headers: { 'X-Auth': 'token123' },
+  };
+
+  // 1. Exact match returns false
+  assert.equal(isConfigDirty(baseHttp, { ...baseHttp }), false);
+
+  // 2. Undefined draft returns false
+  assert.equal(isConfigDirty(baseHttp, undefined), false);
+
+  // 3. Changed URL returns true
+  assert.equal(isConfigDirty(baseHttp, { ...baseHttp, url: 'https://httpbin.org/post' }), true);
+
+  // 4. Changed Method returns true
+  assert.equal(isConfigDirty(baseHttp, { ...baseHttp, method: 'POST' }), true);
+
+  // 5. Changed Headers returns true
+  assert.equal(isConfigDirty(baseHttp, { ...baseHttp, headers: { 'X-Auth': 'modified' } }), true);
+
+  // 6. Changed Body returns true
+  assert.equal(isConfigDirty(baseHttp, { ...baseHttp, body: '{"foo":2}' }), true);
+
+  // 7. Changed Script returns true
+  assert.equal(
+    isConfigDirty(baseHttp, { ...baseHttp, pre_request_script: 'console.log(1);' }),
+    true
+  );
+
+  // 8. gRPC payload change
+  const baseGrpc = {
+    server_address: 'localhost:50051',
+    service: 'user.Service',
+    method: 'GetUser',
+    payload: { id: 1 },
+  };
+  assert.equal(isConfigDirty(baseGrpc, { ...baseGrpc, payload: { id: 2 } }), true);
+});
+
+test('draft management in TabState preserves unsaved changes across switches', () => {
+  const ep1 = createMockEndpoint('ep1', 'User Endpoint');
+  const state0: TabState = {
+    openEndpoints: [ep1],
+    activeEndpointId: 'ep1',
+    activeEndpoint: ep1,
+    endpointDrafts: {},
+  };
+
+  // Initially clean
+  assert.equal(isEndpointDirtyInState(state0, 'ep1'), false);
+
+  // User edits URL in draft
+  const state1 = setEndpointDraftInState(state0, 'ep1', {
+    ...ep1.config,
+    url: 'https://api.example.com/modified',
+  });
+  assert.equal(isEndpointDirtyInState(state1, 'ep1'), true);
+
+  // User saves, clearing draft
+  const state2 = clearEndpointDraftInState(state1, 'ep1');
+  assert.equal(isEndpointDirtyInState(state2, 'ep1'), false);
 });
