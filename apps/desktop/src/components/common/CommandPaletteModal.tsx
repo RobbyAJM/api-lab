@@ -3,19 +3,24 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Collection, Endpoint } from '@api-lab/api-types';
-import { Search, X, CornerDownLeft, Layers, Radio } from 'lucide-react';
+import { Search, X, CornerDownLeft, Layers, Radio, Terminal } from 'lucide-react';
 import {
-  searchEndpointsForCommandPalette,
+  searchUnifiedCommandPalette,
   navigateListIndex,
+  type UnifiedPaletteItem,
 } from '../../utils/shortcuts';
 
 export const CommandPaletteModal: React.FC = () => {
   const queryClient = useQueryClient();
   const {
     activeWorkspaceId,
+    activeEndpointId,
     commandPaletteOpen,
     setCommandPaletteOpen,
     setActiveEndpoint,
+    closeEndpoint,
+    closeOtherEndpoints,
+    closeAllEndpoints,
   } = useAppStore();
 
   const [query, setQuery] = useState('');
@@ -66,7 +71,7 @@ export const CommandPaletteModal: React.FC = () => {
     }
   }, [commandPaletteOpen]);
 
-  const items = searchEndpointsForCommandPalette(allEndpoints, collections, query);
+  const items = searchUnifiedCommandPalette(allEndpoints, collections, query);
 
   // Reset selected index when query changes
   useEffect(() => {
@@ -85,9 +90,23 @@ export const CommandPaletteModal: React.FC = () => {
 
   if (!commandPaletteOpen) return null;
 
-  function handleSelect(ep: Endpoint) {
-    setActiveEndpoint(ep);
-    localStorage.setItem('api_lab_active_endpoint_id', ep.id);
+  function handleSelect(item: UnifiedPaletteItem) {
+    if (item.type === 'command') {
+      if (item.actionId === 'close_tab') {
+        if (activeEndpointId) {
+          closeEndpoint(activeEndpointId);
+        }
+      } else if (item.actionId === 'close_other_tabs') {
+        if (activeEndpointId) {
+          closeOtherEndpoints(activeEndpointId);
+        }
+      } else if (item.actionId === 'close_all_tabs') {
+        closeAllEndpoints();
+      }
+    } else {
+      setActiveEndpoint(item.endpoint);
+      localStorage.setItem('api_lab_active_endpoint_id', item.endpoint.id);
+    }
     setCommandPaletteOpen(false);
   }
 
@@ -101,7 +120,7 @@ export const CommandPaletteModal: React.FC = () => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (items[selectedIndex]) {
-        handleSelect(items[selectedIndex].endpoint);
+        handleSelect(items[selectedIndex]);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -148,17 +167,58 @@ export const CommandPaletteModal: React.FC = () => {
           {items.length === 0 ? (
             <div className="py-8 text-center text-xs text-zinc-500 flex flex-col items-center gap-1.5 select-none">
               <Layers size={24} className="text-zinc-700" />
-              <span>No endpoints matching "{query}"</span>
+              <span>No commands or endpoints matching "{query}"</span>
             </div>
           ) : (
             items.map((item, idx) => {
               const isSelected = idx === selectedIndex;
+
+              if (item.type === 'command') {
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => handleSelect(item)}
+                    onMouseEnter={() => setSelectedIndex(idx)}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition ${
+                      isSelected
+                        ? 'bg-indigo-600/20 text-white border border-indigo-500/40'
+                        : 'hover:bg-zinc-900/80 text-zinc-300 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-indigo-300 border border-zinc-700/60 flex items-center gap-1 select-none">
+                        <Terminal size={10} />
+                        COMMAND
+                      </span>
+                      <div className="truncate">
+                        <span className="font-semibold text-zinc-200">{item.title}</span>
+                        <span className="text-zinc-500 text-[11px] ml-2">
+                          {item.description}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60 select-none">
+                        {item.keyLabel}
+                      </kbd>
+                      {isSelected && (
+                        <div className="flex items-center gap-1 text-[11px] text-indigo-400 font-medium">
+                          <span>Run</span>
+                          <CornerDownLeft size={12} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
               const isHttp = item.protocol === 'http';
 
               return (
                 <div
-                  key={item.endpoint.id}
-                  onClick={() => handleSelect(item.endpoint)}
+                  key={item.id}
+                  onClick={() => handleSelect(item)}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition ${
                     isSelected
@@ -234,7 +294,7 @@ export const CommandPaletteModal: React.FC = () => {
               <span>to select</span>
             </span>
           </div>
-          <span>{items.length} endpoint{items.length === 1 ? '' : 's'}</span>
+          <span>{items.length} item{items.length === 1 ? '' : 's'}</span>
         </div>
       </div>
     </div>

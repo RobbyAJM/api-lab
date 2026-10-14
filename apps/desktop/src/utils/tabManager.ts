@@ -4,6 +4,51 @@ export interface TabState {
   openEndpoints: Endpoint[];
   activeEndpointId: string | null;
   activeEndpoint: Endpoint | null;
+  endpointDrafts?: Record<string, Record<string, any>>;
+}
+
+/**
+ * Checks if a working draft has unsaved changes compared to the base saved config.
+ */
+export function isConfigDirty(
+  base: Record<string, any> | undefined | null,
+  draft: Record<string, any> | undefined | null
+): boolean {
+  if (!draft) return false;
+  const b = base || {};
+
+  const normalize = (cfg: Record<string, any>) => {
+    return {
+      method: cfg.method || '',
+      url: (cfg.url || '').trim(),
+      server_address: (cfg.server_address || '').trim(),
+      use_tls: Boolean(cfg.use_tls),
+      service: (cfg.service || '').trim(),
+      stream_type: cfg.stream_type || 'unary',
+      body_type: cfg.body_type || 'json',
+      body: typeof cfg.body === 'string' ? cfg.body.trim() : '',
+      payload:
+        cfg.payload !== undefined && cfg.payload !== null
+          ? typeof cfg.payload === 'string'
+            ? cfg.payload.trim()
+            : JSON.stringify(cfg.payload)
+          : '',
+      headers: Object.entries(cfg.headers || {})
+        .filter(([k]) => k.trim())
+        .sort(([k1], [k2]) => k1.localeCompare(k2)),
+      metadata: Object.entries(cfg.metadata || {})
+        .filter(([k]) => k.trim())
+        .sort(([k1], [k2]) => k1.localeCompare(k2)),
+      query_params: (cfg.query_params || [])
+        .filter(([k]: [string, string]) => k && k.trim())
+        .sort(([k1]: [string, string], [k2]: [string, string]) => k1.localeCompare(k2)),
+      auth: cfg.auth || { auth_type: 'none' },
+      pre_request_script: (cfg.pre_request_script || '').trim(),
+      post_response_script: (cfg.post_response_script || cfg.post_request_script || '').trim(),
+    };
+  };
+
+  return JSON.stringify(normalize(b)) !== JSON.stringify(normalize(draft));
 }
 
 /**
@@ -17,6 +62,7 @@ export function openEndpointInTabs(state: TabState, endpoint: Endpoint): TabStat
     : [...state.openEndpoints, endpoint];
 
   return {
+    ...state,
     openEndpoints: nextOpen,
     activeEndpoint: endpoint,
     activeEndpointId: endpoint.id,
@@ -24,7 +70,7 @@ export function openEndpointInTabs(state: TabState, endpoint: Endpoint): TabStat
 }
 
 /**
- * Closes an endpoint tab.
+ * Closes an endpoint tab and cleans up its draft.
  * If closed tab was active, activates adjacent tab (left preferred, else next).
  * If no tabs remain, activeEndpoint becomes null.
  */
@@ -33,6 +79,8 @@ export function closeEndpointInTabs(state: TabState, endpointId: string): TabSta
   if (idx === -1) return state;
 
   const nextOpen = state.openEndpoints.filter((e) => e.id !== endpointId);
+  const nextDrafts = { ...(state.endpointDrafts || {}) };
+  delete nextDrafts[endpointId];
 
   // Non-active tab closed: keep current active endpoint
   if (state.activeEndpointId !== endpointId) {
@@ -40,6 +88,7 @@ export function closeEndpointInTabs(state: TabState, endpointId: string): TabSta
       openEndpoints: nextOpen,
       activeEndpointId: state.activeEndpointId,
       activeEndpoint: state.activeEndpoint,
+      endpointDrafts: nextDrafts,
     };
   }
 
@@ -49,6 +98,7 @@ export function closeEndpointInTabs(state: TabState, endpointId: string): TabSta
       openEndpoints: [],
       activeEndpoint: null,
       activeEndpointId: null,
+      endpointDrafts: nextDrafts,
     };
   }
 
@@ -60,6 +110,39 @@ export function closeEndpointInTabs(state: TabState, endpointId: string): TabSta
     openEndpoints: nextOpen,
     activeEndpoint: nextActive,
     activeEndpointId: nextActive.id,
+    endpointDrafts: nextDrafts,
+  };
+}
+
+/**
+ * Closes all other tabs except the specified endpoint tab.
+ */
+export function closeOtherEndpointsInTabs(state: TabState, endpointId: string): TabState {
+  const target = state.openEndpoints.find((e) => e.id === endpointId);
+  if (!target) return state;
+
+  const nextDrafts: Record<string, Record<string, any>> = {};
+  if (state.endpointDrafts && state.endpointDrafts[endpointId]) {
+    nextDrafts[endpointId] = state.endpointDrafts[endpointId];
+  }
+
+  return {
+    openEndpoints: [target],
+    activeEndpointId: target.id,
+    activeEndpoint: target,
+    endpointDrafts: nextDrafts,
+  };
+}
+
+/**
+ * Closes all open tabs.
+ */
+export function closeAllEndpointsInTabs(): TabState {
+  return {
+    openEndpoints: [],
+    activeEndpointId: null,
+    activeEndpoint: null,
+    endpointDrafts: {},
   };
 }
 
@@ -73,8 +156,53 @@ export function updateEndpointInTabs(state: TabState, updated: Endpoint): TabSta
     : state.openEndpoints;
 
   return {
+    ...state,
     openEndpoints: nextOpen,
     activeEndpointId: state.activeEndpointId,
     activeEndpoint: state.activeEndpointId === updated.id ? updated : state.activeEndpoint,
   };
+}
+
+/**
+ * Records or updates an unsaved draft for a specific endpoint.
+ */
+export function setEndpointDraftInState(
+  state: TabState,
+  endpointId: string,
+  draft: Record<string, any>
+): TabState {
+  return {
+    ...state,
+    endpointDrafts: {
+      ...(state.endpointDrafts || {}),
+      [endpointId]: draft,
+    },
+  };
+}
+
+/**
+ * Clears an unsaved draft (e.g. after successful save).
+ */
+export function clearEndpointDraftInState(
+  state: TabState,
+  endpointId: string
+): TabState {
+  const nextDrafts = { ...(state.endpointDrafts || {}) };
+  delete nextDrafts[endpointId];
+  return {
+    ...state,
+    endpointDrafts: nextDrafts,
+  };
+}
+
+/**
+ * Determines whether an open tab has unsaved changes.
+ */
+export function isEndpointDirtyInState(state: TabState, endpointId: string): boolean {
+  const ep =
+    state.openEndpoints.find((e) => e.id === endpointId) ||
+    (state.activeEndpointId === endpointId ? state.activeEndpoint : null);
+  if (!ep) return false;
+  const draft = state.endpointDrafts?.[endpointId];
+  return isConfigDirty(ep.config, draft);
 }

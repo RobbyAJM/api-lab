@@ -11,7 +11,12 @@ import { cancelNativeGrpcStream } from '../api/native';
 import {
   openEndpointInTabs,
   closeEndpointInTabs,
+  closeOtherEndpointsInTabs,
+  closeAllEndpointsInTabs,
   updateEndpointInTabs,
+  setEndpointDraftInState,
+  clearEndpointDraftInState,
+  isEndpointDirtyInState,
 } from '../utils/tabManager';
 
 export interface StreamMessageItem {
@@ -33,8 +38,14 @@ interface AppState {
   openEndpoints: Endpoint[];
   activeEndpointId: string | null;
   activeEndpoint: Endpoint | null;
+  endpointDrafts: Record<string, Record<string, any>>;
   openEndpoint: (endpoint: Endpoint) => void;
   closeEndpoint: (endpointId: string) => void;
+  closeOtherEndpoints: (endpointId: string) => void;
+  closeAllEndpoints: () => void;
+  setEndpointDraft: (endpointId: string, draft: Record<string, any>) => void;
+  clearEndpointDraft: (endpointId: string) => void;
+  isEndpointDirty: (endpointId: string) => boolean;
 
   lastHttpResponse: HttpExecutionResponse | null;
   lastGrpcResponse: GrpcExecutionResponse | null;
@@ -90,6 +101,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   openEndpoints: [],
   activeEndpointId: null,
   activeEndpoint: null,
+  endpointDrafts: {},
 
   lastHttpResponse: null,
   lastGrpcResponse: null,
@@ -246,6 +258,78 @@ export const useAppStore = create<AppState>((set, get) => ({
         lastGrpcResponse: wasActive ? null : state.lastGrpcResponse,
       };
     });
+  },
+
+  closeOtherEndpoints: (endpointId) => {
+    set((state) => {
+      const tabState = closeOtherEndpointsInTabs(
+        {
+          openEndpoints: state.openEndpoints,
+          activeEndpointId: state.activeEndpointId,
+          activeEndpoint: state.activeEndpoint,
+          endpointDrafts: state.endpointDrafts,
+        },
+        endpointId
+      );
+
+      const targetChanged = state.activeEndpointId !== endpointId;
+      return {
+        ...tabState,
+        lastHttpResponse: targetChanged ? null : state.lastHttpResponse,
+        lastGrpcResponse: targetChanged ? null : state.lastGrpcResponse,
+      };
+    });
+  },
+
+  closeAllEndpoints: () => {
+    localStorage.removeItem('api_lab_active_endpoint_id');
+    set({
+      ...closeAllEndpointsInTabs(),
+      lastHttpResponse: null,
+      lastGrpcResponse: null,
+    });
+  },
+
+  setEndpointDraft: (endpointId, draft) => {
+    set((state) =>
+      setEndpointDraftInState(
+        {
+          openEndpoints: state.openEndpoints,
+          activeEndpointId: state.activeEndpointId,
+          activeEndpoint: state.activeEndpoint,
+          endpointDrafts: state.endpointDrafts,
+        },
+        endpointId,
+        draft
+      )
+    );
+  },
+
+  clearEndpointDraft: (endpointId) => {
+    set((state) =>
+      clearEndpointDraftInState(
+        {
+          openEndpoints: state.openEndpoints,
+          activeEndpointId: state.activeEndpointId,
+          activeEndpoint: state.activeEndpoint,
+          endpointDrafts: state.endpointDrafts,
+        },
+        endpointId
+      )
+    );
+  },
+
+  isEndpointDirty: (endpointId) => {
+    const state = get();
+    return isEndpointDirtyInState(
+      {
+        openEndpoints: state.openEndpoints,
+        activeEndpointId: state.activeEndpointId,
+        activeEndpoint: state.activeEndpoint,
+        endpointDrafts: state.endpointDrafts,
+      },
+      endpointId
+    );
   },
 
   setActiveEndpoint: (endpoint) => {
