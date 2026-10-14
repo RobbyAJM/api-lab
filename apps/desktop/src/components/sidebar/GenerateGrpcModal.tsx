@@ -8,6 +8,7 @@ import {
 import {
   planGrpcHierarchy,
   executeGrpcHierarchyCreation,
+  shouldAutoDetectTls,
 } from '../../utils/grpcReflectionGenerator';
 import { VariableInput } from '../common/VariableInput';
 import { X, RefreshCw, FolderPlus, Radio, CheckCircle2 } from 'lucide-react';
@@ -76,11 +77,13 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
     setErrorText(null);
     setStatusText('Discovering services via reflection...');
 
+    const effectiveTls = useTls || shouldAutoDetectTls(serverAddress);
+
     try {
       const activeVars = await resolveVariables();
 
       const reflection = await discoverNativeGrpcServices(
-        { server_address: serverAddress.trim(), use_tls: useTls },
+        { server_address: serverAddress.trim(), use_tls: effectiveTls },
         activeVars
       );
 
@@ -105,7 +108,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
                   server_address: serverAddress.trim(),
                   service: svc.name,
                   method: method.name,
-                  use_tls: useTls,
+                  use_tls: effectiveTls,
                 },
                 activeVars
               );
@@ -124,6 +127,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
       const planned = planGrpcHierarchy({
         folderName: folderName.trim(),
         serverAddress: serverAddress.trim(),
+        useTls: effectiveTls,
         services: reflection.services,
         samplePayloads,
       });
@@ -224,9 +228,14 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
             <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-purple-500">
               <VariableInput
                 value={serverAddress}
-                onChange={setServerAddress}
+                onChange={(val) => {
+                  setServerAddress(val);
+                  if (shouldAutoDetectTls(val)) {
+                    setUseTls(true);
+                  }
+                }}
                 disabled={loading}
-                placeholder="localhost:9091 or {{GRPC_HOST}}"
+                placeholder="localhost:9091, nu-trade.dev.dxtr.asia, or {{GRPC_HOST}}"
                 className="w-full h-8"
               />
             </div>

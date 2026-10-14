@@ -39,6 +39,7 @@ import { JavaScriptEditor } from '../common/JavaScriptEditor';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
 import { applyInheritedGrpcAuth } from '../../utils/authInheritance';
 import { syncEnvironmentVariables } from '../../utils/envSync';
+import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
 
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -68,9 +69,14 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [serverAddress, setServerAddress] = useState(
     initialDraft.server_address || 'localhost:50051'
   );
-  const [useTls, setUseTls] = useState<boolean>(Boolean(initialDraft.use_tls));
+  const [useTls, setUseTls] = useState<boolean>(() => {
+    if (initialDraft.use_tls !== undefined) return Boolean(initialDraft.use_tls);
+    return shouldAutoDetectTls(initialDraft.server_address || 'localhost:50051');
+  });
   const [selectedService, setSelectedService] = useState(initialDraft.service || '');
   const [selectedMethod, setSelectedMethod] = useState(initialDraft.method || '');
+
+  const effectiveTls = useTls || shouldAutoDetectTls(serverAddress);
 
   // Auto-discover & cache reflection per server address (Fix for Bug 1)
   const {
@@ -78,12 +84,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     isFetching: discovering,
     refetch: refetchReflection,
   } = useQuery<GrpcServiceSummary[]>({
-    queryKey: ['reflection', serverAddress, useTls],
+    queryKey: ['reflection', serverAddress, effectiveTls],
     queryFn: async () => {
       if (!serverAddress.trim()) return [];
       const activeVars = await resolveVariables();
       const res = await discoverNativeGrpcServices(
-        { server_address: serverAddress, use_tls: useTls },
+        { server_address: serverAddress, use_tls: effectiveTls },
         activeVars
       );
       if (res.error) {
@@ -289,7 +295,7 @@ if (body && body.details && body.details.token) {
       server_address: serverAddress,
       service: selectedService,
       method: selectedMethod,
-      use_tls: useTls,
+      use_tls: effectiveTls,
       stream_type: streamType,
       metadata: metaMap,
       payload: payloadJson,
@@ -450,7 +456,7 @@ if (body && body.details && body.details.token) {
       method: selectedMethod,
       metadata: metaMap,
       payload: parsedPayload,
-      use_tls: useTls,
+      use_tls: effectiveTls,
       timeout_ms: 30000,
     };
 
@@ -566,7 +572,7 @@ if (body && body.details && body.details.token) {
       method: selectedMethod,
       metadata: metaMap,
       payload: parsedPayload,
-      use_tls: useTls,
+      use_tls: effectiveTls,
       timeout_ms: 60000,
     };
 
@@ -699,7 +705,12 @@ if (body && body.details && body.details.token) {
           <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-purple-500 h-8">
             <VariableInput
               value={serverAddress}
-              onChange={setServerAddress}
+              onChange={(val) => {
+                setServerAddress(val);
+                if (shouldAutoDetectTls(val)) {
+                  setUseTls(true);
+                }
+              }}
               variables={activeVariables}
               placeholder="localhost:50051 or {{GRPC_ADDR}}"
               className="w-full h-full"
