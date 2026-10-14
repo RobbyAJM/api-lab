@@ -45,6 +45,37 @@ mod tests {
         let count = counter.load(std::sync::atomic::Ordering::SeqCst);
         assert!(count >= 2, "Expected multiple stream messages, got {}", count);
     }
+
+    #[tokio::test]
+    async fn test_probe_nutrade_discovery() {
+        if std::net::TcpStream::connect("grpcb.in:9001").is_err() {
+            return;
+        }
+
+        // Test 1: use_tls: None with pure hostname
+        let req_none = rust_core::dto::GrpcReflectionRequest {
+            server_address: "grpcb.in:9001".into(),
+            use_tls: None,
+        };
+        let res_none = client::discover_services(req_none).await;
+        assert!(!res_none.services.is_empty(), "None TLS should succeed via auto negotiation: {:?}", res_none.error);
+
+        // Test 2: use_tls: Some(false) with fallback to TLS
+        let req_false = rust_core::dto::GrpcReflectionRequest {
+            server_address: "grpcb.in:9001".into(),
+            use_tls: Some(false),
+        };
+        let res_false = client::discover_services(req_false).await;
+        assert!(!res_false.services.is_empty(), "False TLS should succeed via fallback: {:?}", res_false.error);
+
+        // Test 3: use_tls: Some(true)
+        let req_true = rust_core::dto::GrpcReflectionRequest {
+            server_address: "grpcb.in:9001".into(),
+            use_tls: Some(true),
+        };
+        let res_true = client::discover_services(req_true).await;
+        assert!(!res_true.services.is_empty(), "True TLS should succeed: {:?}", res_true.error);
+    }
 }
 
 

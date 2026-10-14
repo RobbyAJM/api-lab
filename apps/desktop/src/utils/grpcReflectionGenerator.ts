@@ -7,6 +7,7 @@ export interface PlannedEndpoint {
   method: string;
   config: {
     server_address: string;
+    use_tls?: boolean;
     service: string;
     method: string;
     stream_type?: 'unary' | 'omni_stream' | 'bidi_stream';
@@ -27,6 +28,24 @@ export interface PlannedHierarchy {
 }
 
 /**
+ * Auto-detects whether an address should default to TLS.
+ * Defaults to true for remote domain names (e.g. grpcb.in:9001), https, and :443.
+ */
+export function shouldAutoDetectTls(addr: string): boolean {
+  const clean = (addr || '').trim().toLowerCase();
+  if (clean.startsWith('https://') || clean.endsWith(':443')) {
+    return true;
+  }
+  if (clean.startsWith('http://')) {
+    return false;
+  }
+  const host = clean.split(':')[0];
+  const isLocal =
+    host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1';
+  return !isLocal && host.includes('.');
+}
+
+/**
  * Plans the folder and endpoint hierarchy:
  * {folderName}/
  * |-- {service}
@@ -35,12 +54,15 @@ export interface PlannedHierarchy {
 export function planGrpcHierarchy(options: {
   folderName: string;
   serverAddress: string;
+  useTls?: boolean;
   services: GrpcServiceSummary[];
   samplePayloads?: Record<string, any>; // key format: "{service}/{method}"
 }): PlannedHierarchy {
   const rootFolderName = options.folderName.trim() || 'gRPC Services';
   const serviceFolders: PlannedServiceFolder[] = [];
   let totalEndpoints = 0;
+  const useTls =
+    options.useTls !== undefined ? options.useTls : shouldAutoDetectTls(options.serverAddress);
 
   for (const svc of options.services) {
     if (!svc.name) continue;
@@ -58,6 +80,7 @@ export function planGrpcHierarchy(options: {
         method: method.name,
         config: {
           server_address: options.serverAddress,
+          use_tls: useTls,
           service: svc.name,
           method: method.name,
           stream_type: method.stream_type || 'unary',
