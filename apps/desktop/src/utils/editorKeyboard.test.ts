@@ -1,0 +1,106 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  handleTabIndentation,
+  handleEnterKey,
+  handlePairInsertion,
+  handleBackspacePair,
+  handleEditorKeyDown,
+} from './editorKeyboard.ts';
+
+test('handleTabIndentation: single cursor inserts 2 spaces', () => {
+  const result = handleTabIndentation('hello', 5, 5, false);
+  assert.equal(result.text, 'hello  ');
+  assert.equal(result.selectionStart, 7);
+  assert.equal(result.selectionEnd, 7);
+});
+
+test('handleTabIndentation: single cursor Shift+Tab removes 2 leading spaces', () => {
+  const result = handleTabIndentation('  hello', 4, 4, true);
+  assert.equal(result.text, 'hello');
+  assert.equal(result.selectionStart, 2);
+});
+
+test('handleTabIndentation: multi-line selection indents all affected lines', () => {
+  const original = 'line1\nline2\nline3';
+  // select from line1 to line2
+  const start = 2; // in 'line1'
+  const end = 8; // in 'line2'
+
+  const result = handleTabIndentation(original, start, end, false);
+  assert.equal(result.text, '  line1\n  line2\nline3');
+  assert.equal(result.selectionStart, start + 2);
+  assert.equal(result.selectionEnd, end + 4); // 2 lines indented
+});
+
+test('handleTabIndentation: multi-line selection Shift+Tab unindents all affected lines', () => {
+  const original = '  line1\n  line2\nline3';
+  const start = 3;
+  const end = 12;
+
+  const result = handleTabIndentation(original, start, end, true);
+  assert.equal(result.text, 'line1\nline2\nline3');
+  assert.equal(result.selectionStart, 1);
+  assert.equal(result.selectionEnd, 8);
+});
+
+test('handleEnterKey: auto-indents matching previous line indentation', () => {
+  const original = '  const a = 1;';
+  const result = handleEnterKey(original, original.length, original.length);
+  assert.equal(result.text, '  const a = 1;\n  ');
+  assert.equal(result.selectionStart, original.length + 3);
+});
+
+test('handleEnterKey: expands braces between {|} with nested indentation', () => {
+  const original = '{}';
+  const result = handleEnterKey(original, 1, 1);
+  assert.equal(result.text, '{\n  \n}');
+  assert.equal(result.selectionStart, 4); // inside the indented empty line
+});
+
+test('handlePairInsertion: wraps selected text in quotes and braces', () => {
+  const original = 'hello world';
+  // select 'world'
+  const start = 6;
+  const end = 11;
+
+  const quoted = handlePairInsertion(original, start, end, '"');
+  assert.ok(quoted);
+  assert.equal(quoted.text, 'hello "world"');
+  assert.equal(quoted.selectionStart, 7);
+  assert.equal(quoted.selectionEnd, 12);
+
+  const braced = handlePairInsertion(original, start, end, '{');
+  assert.ok(braced);
+  assert.equal(braced.text, 'hello {world}');
+});
+
+test('handlePairInsertion: auto-closes bracket and quotes at idle cursor', () => {
+  const res = handlePairInsertion('', 0, 0, '{');
+  assert.ok(res);
+  assert.equal(res.text, '{}');
+  assert.equal(res.selectionStart, 1);
+
+  const quote = handlePairInsertion('', 0, 0, '"');
+  assert.ok(quote);
+  assert.equal(quote.text, '""');
+  assert.equal(quote.selectionStart, 1);
+});
+
+test('handleBackspacePair: deletes empty pair when cursor is in middle', () => {
+  const res = handleBackspacePair('{}', 1, 1);
+  assert.ok(res);
+  assert.equal(res.text, '');
+  assert.equal(res.selectionStart, 0);
+
+  const resQuote = handleBackspacePair('""', 1, 1);
+  assert.ok(resQuote);
+  assert.equal(resQuote.text, '');
+  assert.equal(resQuote.selectionStart, 0);
+});
+
+test('handleEditorKeyDown: dispatches Tab correctly', () => {
+  const res = handleEditorKeyDown('foo\nbar', 1, 5, { key: 'Tab' });
+  assert.ok(res);
+  assert.equal(res.text, '  foo\n  bar');
+});
