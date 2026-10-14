@@ -433,13 +433,15 @@ const CollectionNode: React.FC<{
 
   const { activeEndpointId, setActiveEndpoint } = useAppStore();
 
-  // Auto-restore last active endpoint on boot
+  // Auto-restore last active endpoint strictly once on initial boot
+  const hasAttemptedRestoreRef = useRef(false);
   useEffect(() => {
-    if (!activeEndpointId && endpoints.length > 0) {
+    if (!hasAttemptedRestoreRef.current && !activeEndpointId && endpoints.length > 0) {
       const savedId = localStorage.getItem('api_lab_active_endpoint_id');
       if (savedId) {
         const found = endpoints.find((ep) => ep.id === savedId);
         if (found) {
+          hasAttemptedRestoreRef.current = true;
           setActiveEndpoint(found);
         }
       }

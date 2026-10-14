@@ -13,9 +13,9 @@ import { EnvironmentModal } from './components/environments/EnvironmentModal';
 import { MembersModal } from './components/members/MembersModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
+import { EmptyWorkspaceView } from './components/common/EmptyWorkspaceView';
 import { matchesShortcut } from './utils/shortcuts';
 import type { UserSummary, WorkspaceSummary } from '@api-lab/api-types';
-import { Layers } from 'lucide-react';
 
 interface MeApiResponse {
   user: UserSummary;
@@ -117,7 +117,17 @@ export const App: React.FC = () => {
         e.preventDefault();
         setShortcutsHelpOpen(!shortcutsHelpOpen);
       }
-      // 3. Open / Toggle Environments (Ctrl + E)
+      // 3. Create New / Open Command Palette (Ctrl + N)
+      else if (matchesShortcut(e, 'create_new')) {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+      // 4. Import / Open Command Palette (Ctrl + O)
+      else if (matchesShortcut(e, 'import_workspace')) {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+      }
+      // 5. Open / Toggle Environments (Ctrl + E)
       else if (matchesShortcut(e, 'open_environment')) {
         e.preventDefault();
         setEnvModalOpen(!envModalOpen);
@@ -216,13 +226,7 @@ export const App: React.FC = () => {
             </section>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 p-8 text-center select-none">
-            <Layers size={40} className="text-zinc-700 mb-3" />
-            <h3 className="text-sm font-semibold text-zinc-400">No Endpoint Selected</h3>
-            <p className="text-xs text-zinc-600 max-w-sm mt-1">
-              Select an endpoint from the collection tree on the left, or create a new HTTP or gRPC request to start testing.
-            </p>
-          </div>
+          <EmptyWorkspaceView />
         )}
       </main>
     </div>
