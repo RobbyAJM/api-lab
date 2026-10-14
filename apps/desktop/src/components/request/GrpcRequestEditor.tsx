@@ -16,25 +16,22 @@ import type {
   Collection,
 } from '@api-lab/api-types';
 import {
-  Send,
   Save,
   RefreshCw,
   Plus,
   Trash2,
   Wand2,
-  Code,
-  CheckCircle,
-  XCircle,
-  Terminal,
-  Play,
-  Square,
   BookOpen,
   Copy,
   Check,
+  ChevronDown,
+  Radio,
+  ArrowDownUp,
+  Shield,
 } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
-import { JavaScriptEditor } from '../common/JavaScriptEditor';
+import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
 import { applyInheritedGrpcAuth } from '../../utils/authInheritance';
 import { syncEnvironmentVariables } from '../../utils/envSync';
@@ -138,6 +135,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
+  const [isMethodPickerOpen, setIsMethodPickerOpen] = useState(false);
+  const methodPickerRef = useRef<HTMLDivElement>(null);
+
   // Fetch parent collection for inherited settings
   const { data: collection } = useQuery<Collection>({
     queryKey: ['collection', endpoint.collection_id],
@@ -223,33 +223,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setTimeout(() => setStatusMessage(null), 3500);
   }
 
-  // Generate example script for Before or After hook (New Feature 1)
-  function handleGenerateScript() {
-    if (hookScriptTab === 'pre') {
-      const samplePre = `// Pre-request Script Example
-pm.environment.set("REQUEST_TIME", Date.now());
-pm.request.metadata['x-client-timestamp'] = String(Date.now());
-console.log("Calling gRPC:", pm.request.service + "/" + pm.request.method);`;
-      setPreRequestScript((prev) => (prev ? prev + '\n\n' + samplePre : samplePre));
-      setStatusMessage('Generated example Pre-request script');
-    } else {
-      const samplePost = `// Post-response Script Example
-pm.test("Status is OK (0)", function () {
-  pm.expect(pm.response.code).to.equal(0);
-});
-
-const body = pm.response.json();
-console.log("gRPC Response body:", body);
-if (body && body.details && body.details.token) {
-  pm.environment.set("GRPC_TOKEN", body.details.token);
-  console.log("Saved token to environment:", body.details.token);
-}`;
-      setPostResponseScript((prev) => (prev ? prev + '\n\n' + samplePost : samplePost));
-      setStatusMessage('Generated example Post-response script');
-    }
-    setTimeout(() => setStatusMessage(null), 2500);
-  }
-
   // Generate example JSON payload from reflection schema (Feature 4)
   async function handleGenerateSamplePayload() {
     if (!selectedService || !selectedMethod) {
@@ -289,6 +262,21 @@ if (body && body.details && body.details.token) {
   const currentServiceObj = discoveredServices.find((s) => s.name === selectedService);
   const availableMethods = currentServiceObj?.methods || [];
   const currentMethodObj = availableMethods.find((m) => m.name === selectedMethod);
+  const shortServiceName = selectedService
+    ? selectedService.split('.').pop() || selectedService
+    : '';
+
+  // Close method picker dropdown on outside click
+  useEffect(() => {
+    if (!isMethodPickerOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (methodPickerRef.current && !methodPickerRef.current.contains(e.target as Node)) {
+        setIsMethodPickerOpen(false);
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [isMethodPickerOpen]);
 
   // Auto-fetch sample message struct for specification tab
   useEffect(() => {
@@ -720,15 +708,52 @@ if (body && body.details && body.details.token) {
 
   return (
     <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden select-none">
-      {/* Request Configuration Section */}
-      <div className="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800/80 flex flex-col gap-2.5 flex-shrink-0">
-        {/* Host Address & Action Bar */}
-        <div className="flex items-center gap-2.5">
-          <div className="relative flex-1">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-zinc-500 font-mono text-xs">
-              grpc://
-            </div>
-            <div className="pl-14 w-full h-8 bg-zinc-900 border border-zinc-800 rounded-md focus-within:border-zinc-700 transition flex items-center">
+      {/* Breadcrumbs Row + Save Button (Image 1) */}
+      <div className="px-4 py-2 flex items-center justify-between text-xs select-none flex-shrink-0">
+        <div className="flex items-center gap-1.5 font-mono text-[11px] truncate mr-2">
+          <Radio size={13} className="text-violet-400 flex-shrink-0" />
+          <span className="text-zinc-400">{collection?.name?.toUpperCase() || 'COLLECTION'}</span>
+          <span className="text-zinc-600">&gt;</span>
+          <span className="text-zinc-400">{shortServiceName || 'Service'}</span>
+          <span className="text-zinc-600">&gt;</span>
+          <span className="text-white font-semibold">{selectedMethod || endpoint.name}</span>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {statusMessage && (
+            <span className="text-[10px] font-mono text-indigo-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded select-text">
+              {statusMessage}
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => saveChanges({ silent: false })}
+            disabled={isSavingRef.current}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded-md transition shadow-sm disabled:opacity-50"
+            title="Save changes (Ctrl+S)"
+          >
+            <Save size={12} className="text-zinc-400" />
+            <span>Save</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Combined Address & Service/Method Bar (Image 1) */}
+      <div className="px-4 pb-2.5 flex items-center gap-2.5 flex-shrink-0">
+        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-lg h-9 focus-within:border-blue-600 transition relative">
+          {/* Left Segment: TLS Icon + Address Input */}
+          <div className="flex-1 flex items-center pl-2 min-w-0">
+            <button
+              type="button"
+              onClick={() => setUseTls(!useTls)}
+              className="p-1 text-zinc-500 hover:text-zinc-300 transition mr-1 flex-shrink-0"
+              title={effectiveTls ? 'TLS Enabled (Click to disable)' : 'TLS Disabled (Click to enable)'}
+            >
+              <Shield size={14} className={effectiveTls ? 'text-indigo-400' : 'text-zinc-600'} />
+            </button>
+
+            <div className="flex-1 h-full flex items-center min-w-0">
               <VariableInput
                 value={serverAddress}
                 onChange={(val) => {
@@ -739,144 +764,126 @@ if (body && body.details && body.details.token) {
                 }}
                 variables={activeVariables}
                 placeholder="localhost:50051 or {{GRPC_ADDR}}"
-                className="w-full h-full text-xs font-mono"
+                className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
               />
             </div>
           </div>
 
-          {/* Reflection Button */}
-          <button
-            onClick={handleDiscover}
-            disabled={discovering}
-            title="Discover services via gRPC server reflection"
-            className="px-3 py-1.5 text-xs font-medium text-zinc-300 bg-zinc-900 hover:bg-zinc-850 hover:text-white border border-zinc-800 rounded-md transition flex items-center gap-1.5 shadow-sm h-8 disabled:opacity-50"
-          >
-            <RefreshCw size={12} className={discovering ? 'animate-spin text-indigo-400' : 'text-zinc-400'} />
-            <span>{discovering ? 'Querying...' : 'Reflection'}</span>
-          </button>
+          {/* Vertical Divider */}
+          <div className="h-4 w-px bg-zinc-800 mx-1 flex-shrink-0" />
 
-          {/* Invoke Primary Button */}
-          {isStreamingRpc ? (
-            isCurrentEndpointStreaming ? (
-              <button
-                onClick={handleStopStream}
-                className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white font-medium rounded-md text-xs flex items-center gap-1.5 shadow-sm transition h-8"
-                title="Stop Stream (Ctrl+Enter)"
-              >
-                <Square size={12} fill="currentColor" />
-                <span>Stop Stream</span>
-                <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-red-800/80 text-red-200 border border-red-700 ml-0.5 select-none">
-                  Ctrl+↵
-                </kbd>
-              </button>
-            ) : (
-              <button
-                onClick={handleStartStream}
-                disabled={sending || !selectedService || !selectedMethod}
-                className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white font-medium rounded-md text-xs flex items-center gap-1.5 shadow-sm transition h-8"
-                title="Start stream (Ctrl+Enter)"
-              >
-                <Play size={12} fill="currentColor" />
-                <span>Start Stream</span>
-                <kbd className="text-[10px] font-mono px-1 py-0.5 rounded bg-cyan-800/80 text-cyan-200 border border-cyan-700 ml-0.5 select-none">
-                  Ctrl+↵
-                </kbd>
-              </button>
-            )
-          ) : (
+          {/* Right Segment: Combined Service & Method Selector Trigger */}
+          <div className="flex-1 relative min-w-0 pr-1">
             <button
-              onClick={handleSend}
-              disabled={sending || !selectedService || !selectedMethod}
-              className="px-4 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 border border-indigo-400/50 rounded-md transition flex items-center gap-1.5 shadow-sm shadow-indigo-950/50 h-8"
-              title="Invoke method (Ctrl+Enter)"
+              type="button"
+              onClick={() => setIsMethodPickerOpen(!isMethodPickerOpen)}
+              className="w-full h-8 flex items-center justify-between px-2 text-xs font-mono text-left hover:bg-zinc-850/60 rounded transition"
             >
-              <Send size={12} />
-              <span>{sending ? 'Calling...' : 'Invoke'}</span>
-              <kbd className="text-[10px] font-mono text-indigo-200 bg-indigo-950/70 border border-indigo-500/40 px-1 py-0.2 rounded font-normal ml-0.5 select-none">
-                Ctrl+↵
-              </kbd>
+              <div className="flex items-center gap-1.5 truncate">
+                <ArrowDownUp size={12} className="text-zinc-400 flex-shrink-0" />
+                <span className="truncate">
+                  {selectedService && selectedMethod ? (
+                    <>
+                      <span className="text-zinc-400">{shortServiceName}</span>
+                      <span className="text-zinc-600 mx-1">/</span>
+                      <span className="text-white font-semibold">{selectedMethod}</span>
+                    </>
+                  ) : (
+                    <span className="text-zinc-500">Select a method</span>
+                  )}
+                </span>
+              </div>
+              <ChevronDown size={13} className="text-zinc-500 flex-shrink-0 ml-1" />
             </button>
-          )}
 
-          {/* Save Button */}
-          <button
-            onClick={() => saveChanges({ silent: false })}
-            disabled={isSavingRef.current}
-            className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-md transition flex items-center gap-1.5 shadow-sm h-8 disabled:opacity-50"
-            title="Save changes to endpoint (Ctrl+S)"
-          >
-            <Save size={12} className="text-zinc-400" />
-            <span>Save</span>
-            <kbd className="text-[10px] font-mono text-zinc-500 bg-zinc-800/80 px-1 py-0.2 rounded border border-zinc-700/60 ml-0.5 select-none">
-              Ctrl+S
-            </kbd>
-          </button>
-        </div>
-
-        {/* Service and Method Selectors (2-Column Grid, NO intermediate border) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-          <div>
-            <label className="block text-[11px] font-medium text-zinc-400 mb-1">Service</label>
-            <div className="relative">
-              <select
-                value={selectedService}
-                onChange={(e) => {
-                  setSelectedService(e.target.value);
-                  setSpecSamplePayload(null);
-                  const svc = discoveredServices.find((s) => s.name === e.target.value);
-                  if (svc && svc.methods.length > 0) {
-                    setSelectedMethod(svc.methods[0].name);
-                  }
-                }}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 px-3 text-xs font-mono text-zinc-200 focus:border-zinc-700 focus:ring-0 cursor-pointer h-8"
+            {/* Floating Dropdown (Image 2) */}
+            {isMethodPickerOpen && (
+              <div
+                ref={methodPickerRef}
+                className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl overflow-hidden text-xs select-none max-h-80 flex flex-col font-mono"
               >
-                {selectedService && !discoveredServices.some((s) => s.name === selectedService) && (
-                  <option value={selectedService}>{selectedService}</option>
-                )}
-                {discoveredServices.length === 0 && !selectedService && (
-                  <option value="">{discovering ? 'Discovering services...' : 'Click Reflection to discover'}</option>
-                )}
-                {discoveredServices.map((s) => (
-                  <option key={s.name} value={s.name}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+                <div className="overflow-y-auto p-1 flex-1 space-y-2">
+                  {discoveredServices.length === 0 ? (
+                    <div className="p-4 text-center text-zinc-500 font-sans">
+                      {discovering
+                        ? 'Discovering services via reflection...'
+                        : 'No services found. Click ↻ below to query reflection.'}
+                    </div>
+                  ) : (
+                    discoveredServices.map((svc) => (
+                      <div key={svc.name} className="space-y-0.5">
+                        <div className="text-[11px] font-semibold text-zinc-400 px-2.5 pt-2 pb-0.5 truncate">
+                          {svc.name}
+                        </div>
+                        {svc.methods.map((m) => {
+                          const isSelected = selectedService === svc.name && selectedMethod === m.name;
+                          return (
+                            <button
+                              key={m.name}
+                              type="button"
+                              onClick={() => {
+                                setSelectedService(svc.name);
+                                setSelectedMethod(m.name);
+                                setIsMethodPickerOpen(false);
+                              }}
+                              className={`w-full flex items-center gap-2 px-3 py-1.5 rounded text-left transition ${
+                                isSelected
+                                  ? 'bg-zinc-800 text-white font-semibold'
+                                  : 'text-zinc-300 hover:text-white hover:bg-zinc-900'
+                              }`}
+                            >
+                              <ArrowDownUp size={12} className={isSelected ? 'text-indigo-400' : 'text-zinc-500'} />
+                              <span className="truncate">{m.name}</span>
+                              {m.stream_type && m.stream_type !== 'unary' && (
+                                <span className="ml-auto text-[10px] text-amber-400/80 font-sans">
+                                  stream
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))
+                  )}
+                </div>
 
-          <div>
-            <label className="block text-[11px] font-medium text-zinc-400 mb-1">Method</label>
-            <div className="relative">
-              <select
-                value={selectedMethod}
-                onChange={(e) => {
-                  setSelectedMethod(e.target.value);
-                  setSpecSamplePayload(null);
-                }}
-                className="w-full bg-zinc-900 border border-zinc-800 rounded-md py-1.5 px-3 text-xs font-mono text-zinc-200 focus:border-zinc-700 focus:ring-0 cursor-pointer h-8"
-              >
-                {selectedMethod && !availableMethods.some((m) => m.name === selectedMethod) && (
-                  <option value={selectedMethod}>{selectedMethod}</option>
-                )}
-                {availableMethods.length === 0 && !selectedMethod && (
-                  <option value="">{selectedService ? 'No methods found' : 'Select service first'}</option>
-                )}
-                {availableMethods.map((m) => (
-                  <option key={m.name} value={m.name}>
-                    {m.name} ({m.stream_type === 'bidi_stream' ? 'bidi stream' : m.stream_type === 'omni_stream' ? 'stream' : 'unary'})
-                  </option>
-                ))}
-              </select>
-            </div>
+                {/* Footer: Using server reflection. ↻ (Image 2) */}
+                <div className="border-t border-zinc-800/80 px-3 py-2 bg-zinc-900/60 flex items-center justify-between text-[11px] text-zinc-400 font-sans">
+                  <span>Using server reflection.</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDiscover();
+                    }}
+                    disabled={discovering}
+                    className="p-1 hover:text-white rounded hover:bg-zinc-800 text-zinc-400 transition"
+                    title="Refresh server reflection"
+                  >
+                    <RefreshCw size={12} className={discovering ? 'animate-spin text-indigo-400' : ''} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {statusMessage && (
-          <div className="text-[11px] font-mono text-indigo-300 bg-zinc-900/80 px-2.5 py-0.5 rounded border border-zinc-800 self-start select-text">
-            {statusMessage}
-          </div>
-        )}
+        {/* Invoke Primary Button */}
+        <button
+          type="button"
+          onClick={isStreamingRpc ? (isCurrentEndpointStreaming ? handleStopStream : handleStartStream) : handleSend}
+          disabled={sending || (!isCurrentEndpointStreaming && (!selectedService || !selectedMethod))}
+          className={`px-5 py-2 text-xs font-semibold rounded-lg shadow-sm transition flex items-center gap-1.5 h-9 flex-shrink-0 ${
+            isStreamingRpc && isCurrentEndpointStreaming
+              ? 'bg-red-600 hover:bg-red-500 text-white'
+              : 'bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white'
+          }`}
+          title="Invoke method (Ctrl+Enter)"
+        >
+          <span>
+            {sending ? 'Calling...' : isStreamingRpc ? (isCurrentEndpointStreaming ? 'Stop' : 'Stream') : 'Invoke'}
+          </span>
+        </button>
       </div>
 
       {/* Tabs Bar */}
@@ -902,9 +909,6 @@ if (body && body.details && body.details.token) {
             }`}
           >
             <span>Metadata</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
-              {metadata.length}
-            </span>
           </button>
 
           <button
@@ -915,7 +919,6 @@ if (body && body.details && body.details.token) {
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <Code size={12} />
             <span>Scripts</span>
             {hookTests.length > 0 && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
@@ -943,7 +946,6 @@ if (body && body.details && body.details.token) {
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <BookOpen size={12} className="text-indigo-400" />
             <span>Specification</span>
           </button>
         </div>
@@ -1055,135 +1057,17 @@ if (body && body.details && body.details.token) {
 
         {/* Scripts Panel (Before & After Hooks for gRPC) */}
         {activeTab === 'scripts' && (
-          <div className="space-y-3 h-full flex flex-col">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setHookScriptTab('pre')}
-                  className={`px-3 py-1 rounded text-xs font-medium transition ${
-                    hookScriptTab === 'pre'
-                      ? 'bg-purple-900/60 text-purple-300 border border-purple-700/60'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Pre-request Script (Before)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHookScriptTab('post')}
-                  className={`px-3 py-1 rounded text-xs font-medium transition ${
-                    hookScriptTab === 'post'
-                      ? 'bg-purple-900/60 text-purple-300 border border-purple-700/60'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Post-response Script (After)
-                </button>
-              </div>
-
-              <span className="text-[10px] text-zinc-500 font-mono">
-                JavaScript (Postman syntax: pm.*)
-              </span>
-            </div>
-
-            <div className="flex-1 flex flex-col space-y-2">
-              {hookScriptTab === 'pre' ? (
-                <div className="flex-1 flex flex-col space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-400">
-                      Runs before invoking gRPC. Use <code className="text-purple-300 font-mono">pm.environment.set(key, val)</code> or mutate <code className="text-purple-300 font-mono">pm.request.payload</code> or <code className="text-purple-300 font-mono">pm.request.metadata</code>.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleGenerateScript}
-                      className="text-[11px] text-purple-300 hover:text-white px-2 py-0.5 bg-purple-950/70 border border-purple-800/60 rounded flex items-center gap-1 font-medium transition flex-shrink-0"
-                    >
-                      <Wand2 size={11} />
-                      <span>Generate Example</span>
-                    </button>
-                  </div>
-                  <div className="flex-1 min-h-[160px]">
-                    <JavaScriptEditor
-                      value={preRequestScript}
-                      onChange={setPreRequestScript}
-                      placeholder={`// Example gRPC Pre-request Script:\npm.environment.set("REQ_ID", "req_" + Date.now());\npm.request.metadata['x-request-id'] = pm.variables.get('REQ_ID');\nconsole.log('Invoking gRPC method...');`}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-400">
-                      Runs after gRPC response arrives. Use <code className="text-purple-300 font-mono">pm.test(...)</code> and <code className="text-purple-300 font-mono">pm.response.json()</code>.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleGenerateScript}
-                      className="text-[11px] text-purple-300 hover:text-white px-2 py-0.5 bg-purple-950/70 border border-purple-800/60 rounded flex items-center gap-1 font-medium transition flex-shrink-0"
-                    >
-                      <Wand2 size={11} />
-                      <span>Generate Example</span>
-                    </button>
-                  </div>
-                  <div className="flex-1 min-h-[160px]">
-                    <JavaScriptEditor
-                      value={postResponseScript}
-                      onChange={setPostResponseScript}
-                      placeholder={`// Example gRPC Post-response Script:\npm.test("Status code is 0 (OK)", () => {\n  pm.expect(pm.response.code).to.equal(0);\n});\n\nconst body = pm.response.json();\nif (body && body.details && body.details.token) {\n  pm.environment.set("GRPC_TOKEN", body.details.token);\n}`}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Test Results & Logs Output */}
-            {(hookTests.length > 0 || hookLogs.length > 0) && (
-              <div className="mt-2 p-2.5 bg-zinc-900/80 border border-zinc-800 rounded space-y-2 max-h-44 overflow-y-auto font-mono text-xs">
-                {hookTests.length > 0 && (
-                  <div>
-                    <span className="text-[11px] font-semibold text-zinc-300 block mb-1">
-                      Test Results:
-                    </span>
-                    <div className="space-y-1">
-                      {hookTests.map((t, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5">
-                          {t.passed ? (
-                            <CheckCircle size={13} className="text-emerald-400" />
-                          ) : (
-                            <XCircle size={13} className="text-rose-400" />
-                          )}
-                          <span className={t.passed ? 'text-zinc-200' : 'text-rose-300'}>
-                            {t.name}
-                          </span>
-                          {t.error && (
-                            <span className="text-[10px] text-rose-400 ml-1">
-                              ({t.error})
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {hookLogs.length > 0 && (
-                  <div>
-                    <span className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1 mb-1">
-                      <Terminal size={11} /> Logs:
-                    </span>
-                    <div className="bg-zinc-950 p-2 rounded text-[11px] text-zinc-300 space-y-0.5">
-                      {hookLogs.map((log, idx) => (
-                        <div key={idx} className="break-all">
-                          {log}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <ScriptEditorPane
+            protocol="grpc"
+            activeSubTab={hookScriptTab}
+            onSubTabChange={setHookScriptTab}
+            preScript={preRequestScript}
+            onPreScriptChange={setPreRequestScript}
+            postScript={postResponseScript}
+            onPostScriptChange={setPostResponseScript}
+            tests={hookTests}
+            logs={hookLogs}
+          />
         )}
 
         {activeTab === 'options' && (

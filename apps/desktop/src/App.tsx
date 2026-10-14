@@ -117,17 +117,7 @@ export const App: React.FC = () => {
         e.preventDefault();
         setShortcutsHelpOpen(!shortcutsHelpOpen);
       }
-      // 3. Create New / Open Command Palette (Ctrl + N)
-      else if (matchesShortcut(e, 'create_new')) {
-        e.preventDefault();
-        setCommandPaletteOpen(true);
-      }
-      // 4. Import / Open Command Palette (Ctrl + O)
-      else if (matchesShortcut(e, 'import_workspace')) {
-        e.preventDefault();
-        setCommandPaletteOpen(true);
-      }
-      // 5. Open / Toggle Environments (Ctrl + E)
+      // 3. Open / Toggle Environments (Ctrl + E)
       else if (matchesShortcut(e, 'open_environment')) {
         e.preventDefault();
         setEnvModalOpen(!envModalOpen);

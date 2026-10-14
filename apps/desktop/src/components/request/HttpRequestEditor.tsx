@@ -4,10 +4,10 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection } from '@api-lab/api-types';
-import { Send, Save, Plus, Trash2, CheckCircle, XCircle, Terminal, Code, Shield, Wand2 } from 'lucide-react';
+import { Save, Plus, Trash2, Shield, Globe } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
-import { JavaScriptEditor } from '../common/JavaScriptEditor';
+import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
 import { applyInheritedHttpAuth } from '../../utils/authInheritance';
 import { syncEnvironmentVariables } from '../../utils/envSync';
@@ -242,40 +242,6 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentVersion, preRequestScript, postResponseScript, method, url, queryParams, headers, bodyType, body, auth]);
 
-  // Generate example script for Before or After hook
-  function handleGenerateScript() {
-    if (hookScriptTab === 'pre') {
-      const samplePre = `// Pre-request Script Example
-pm.environment.set("TIMESTAMP", Date.now());
-pm.request.headers['X-Request-ID'] = 'req_' + Math.random().toString(36).substring(2, 9);
-console.log("Preparing HTTP request to:", pm.request.url);`;
-      setPreRequestScript((prev) => (prev ? prev + '\n\n' + samplePre : samplePre));
-      setStatusMessage('Generated example Pre-request script');
-    } else {
-      const samplePost = `// Post-response Script Example
-pm.test("Status code is 200", function () {
-  pm.expect(pm.response.code).to.equal(200);
-});
-
-pm.test("Response time is under 1500ms", function () {
-  pm.expect(pm.response.responseTime < 1500).to.be.true();
-});
-
-try {
-  const data = pm.response.json();
-  if (data && data.token) {
-    pm.environment.set("AUTH_TOKEN", data.token);
-    console.log("Saved AUTH_TOKEN to environment");
-  }
-} catch (e) {
-  console.log("Response is not JSON or token missing");
-}`;
-      setPostResponseScript((prev) => (prev ? prev + '\n\n' + samplePost : samplePost));
-      setStatusMessage('Generated example Post-response script');
-    }
-    setTimeout(() => setStatusMessage(null), 2500);
-  }
-
   async function handleSend() {
     saveChanges({ silent: true });
     setSending(true);
@@ -376,70 +342,80 @@ try {
 
   return (
     <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden select-none">
-      {/* URL & Action Bar */}
-      <div className="px-4 py-2.5 bg-zinc-950 border-b border-zinc-800/80 flex items-center gap-2.5 flex-shrink-0">
-        <select
-          value={method}
-          onChange={(e) => setMethod(e.target.value)}
-          className={`bg-zinc-900 border border-zinc-800 rounded-md px-2.5 py-1 text-xs font-mono font-bold focus:outline-none focus:border-zinc-700 h-8 ${
-            method === 'GET'
-              ? 'text-emerald-400'
-              : method === 'POST'
-              ? 'text-blue-400'
-              : method === 'PUT' || method === 'PATCH'
-              ? 'text-amber-400'
-              : 'text-rose-400'
-          }`}
-        >
-          <option value="GET">GET</option>
-          <option value="POST">POST</option>
-          <option value="PUT">PUT</option>
-          <option value="PATCH">PATCH</option>
-          <option value="DELETE">DELETE</option>
-          <option value="HEAD">HEAD</option>
-          <option value="OPTIONS">OPTIONS</option>
-        </select>
-
-        <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded-md focus-within:border-zinc-700 h-8 flex items-center px-1">
-          <VariableInput
-            value={url}
-            onChange={setUrl}
-            variables={activeVariables}
-            placeholder="https://api.example.com/v1/users/{{USER_ID}}"
-            className="w-full h-full text-xs font-mono"
-          />
+      {/* Breadcrumbs Row + Save Button (Image 1) */}
+      <div className="px-4 py-2 flex items-center justify-between text-xs select-none flex-shrink-0">
+        <div className="flex items-center gap-1.5 font-mono text-[11px] truncate mr-2">
+          <Globe size={13} className="text-emerald-400 flex-shrink-0" />
+          <span className="text-zinc-400">{collection?.name?.toUpperCase() || 'COLLECTION'}</span>
+          <span className="text-zinc-600">&gt;</span>
+          <span className="text-white font-semibold">{endpoint.name}</span>
         </div>
 
-        {statusMessage && (
-          <span className="text-[11px] font-mono text-indigo-300 bg-zinc-900/80 px-2.5 py-1 rounded border border-zinc-800 truncate max-w-xs select-text">
-            {statusMessage}
-          </span>
-        )}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {statusMessage && (
+            <span className="text-[10px] font-mono text-indigo-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded select-text">
+              {statusMessage}
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={() => saveChanges({ silent: false })}
+            disabled={isSavingRef.current}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded-md transition shadow-sm disabled:opacity-50"
+            title="Save changes (Ctrl+S)"
+          >
+            <Save size={12} className="text-zinc-400" />
+            <span>Save</span>
+          </button>
+        </div>
+      </div>
+
+      {/* URL & Action Bar */}
+      <div className="px-4 pb-2.5 flex items-center gap-2.5 flex-shrink-0">
+        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-lg h-9 focus-within:border-blue-600 transition overflow-hidden">
+          <select
+            value={method}
+            onChange={(e) => setMethod(e.target.value)}
+            className={`bg-transparent border-0 px-2.5 py-1 text-xs font-mono font-bold focus:outline-none cursor-pointer h-full ${
+              method === 'GET'
+                ? 'text-emerald-400'
+                : method === 'POST'
+                ? 'text-blue-400'
+                : method === 'PUT' || method === 'PATCH'
+                ? 'text-amber-400'
+                : 'text-rose-400'
+            }`}
+          >
+            <option value="GET" className="bg-zinc-900">GET</option>
+            <option value="POST" className="bg-zinc-900">POST</option>
+            <option value="PUT" className="bg-zinc-900">PUT</option>
+            <option value="PATCH" className="bg-zinc-900">PATCH</option>
+            <option value="DELETE" className="bg-zinc-900">DELETE</option>
+            <option value="HEAD" className="bg-zinc-900">HEAD</option>
+            <option value="OPTIONS" className="bg-zinc-900">OPTIONS</option>
+          </select>
+
+          <div className="h-4 w-px bg-zinc-800 mx-1 flex-shrink-0" />
+
+          <div className="flex-1 h-full flex items-center px-1 min-w-0">
+            <VariableInput
+              value={url}
+              onChange={setUrl}
+              variables={activeVariables}
+              placeholder="https://api.example.com/v1/users/{{USER_ID}}"
+              className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
+            />
+          </div>
+        </div>
 
         <button
           onClick={handleSend}
           disabled={sending}
-          className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-md text-xs flex items-center gap-1.5 shadow-sm shadow-indigo-950/50 transition h-8 border border-indigo-400/50"
+          className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition h-9 flex-shrink-0"
           title="Send request (Ctrl+Enter)"
         >
-          <Send size={12} />
           <span>{sending ? 'Sending...' : 'Send'}</span>
-          <kbd className="text-[10px] font-mono text-indigo-200 bg-indigo-950/70 border border-indigo-500/40 px-1 py-0.2 rounded font-normal ml-0.5 select-none">
-            Ctrl+↵
-          </kbd>
-        </button>
-
-        <button
-          onClick={() => saveChanges({ silent: false })}
-          disabled={isSavingRef.current}
-          className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 rounded-md transition flex items-center gap-1.5 shadow-sm h-8 disabled:opacity-50"
-          title="Save changes to endpoint (Ctrl+S)"
-        >
-          <Save size={12} className="text-zinc-400" />
-          <span>Save</span>
-          <kbd className="text-[10px] font-mono text-zinc-500 bg-zinc-800/80 px-1 py-0.2 rounded border border-zinc-700/60 ml-0.5 select-none">
-            Ctrl+S
-          </kbd>
         </button>
       </div>
 
@@ -508,7 +484,6 @@ try {
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
-            <Code size={12} />
             <span>Scripts</span>
             {hookTests.length > 0 && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
@@ -788,135 +763,17 @@ try {
 
         {/* Scripts Panel (Before & After Hooks) */}
         {activeTab === 'scripts' && (
-          <div className="space-y-3 h-full flex flex-col">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setHookScriptTab('pre')}
-                  className={`px-3 py-1 rounded text-xs font-medium transition ${
-                    hookScriptTab === 'pre'
-                      ? 'bg-indigo-900/60 text-indigo-300 border border-indigo-700/60'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Pre-request Script (Before)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setHookScriptTab('post')}
-                  className={`px-3 py-1 rounded text-xs font-medium transition ${
-                    hookScriptTab === 'post'
-                      ? 'bg-indigo-900/60 text-indigo-300 border border-indigo-700/60'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Post-response Script (After)
-                </button>
-              </div>
-
-              <span className="text-[10px] text-zinc-500 font-mono">
-                JavaScript (Postman syntax: pm.*)
-              </span>
-            </div>
-
-            <div className="flex-1 flex flex-col space-y-2">
-              {hookScriptTab === 'pre' ? (
-                <div className="flex-1 flex flex-col space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-400">
-                      Runs before sending request. Use <code className="text-indigo-300 font-mono">pm.environment.set(key, val)</code> or mutate <code className="text-indigo-300 font-mono">pm.request.headers[...]</code>.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleGenerateScript}
-                      className="text-[11px] text-indigo-300 hover:text-white px-2 py-0.5 bg-indigo-950/70 border border-indigo-800/60 rounded flex items-center gap-1 font-medium transition flex-shrink-0"
-                    >
-                      <Wand2 size={11} />
-                      <span>Generate Example</span>
-                    </button>
-                  </div>
-                  <div className="flex-1 min-h-[160px]">
-                    <JavaScriptEditor
-                      value={preRequestScript}
-                      onChange={setPreRequestScript}
-                      placeholder={`// Example Pre-request Script:\npm.environment.set("TIMESTAMP", Date.now());\npm.request.headers['Authorization'] = 'Bearer ' + pm.variables.get('API_KEY');\nconsole.log('Sending request...');`}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-zinc-400">
-                      Runs after response arrives. Use <code className="text-indigo-300 font-mono">pm.test(...)</code>, <code className="text-indigo-300 font-mono">pm.response.json()</code>, and extract values into variables.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleGenerateScript}
-                      className="text-[11px] text-indigo-300 hover:text-white px-2 py-0.5 bg-indigo-950/70 border border-indigo-800/60 rounded flex items-center gap-1 font-medium transition flex-shrink-0"
-                    >
-                      <Wand2 size={11} />
-                      <span>Generate Example</span>
-                    </button>
-                  </div>
-                  <div className="flex-1 min-h-[160px]">
-                    <JavaScriptEditor
-                      value={postResponseScript}
-                      onChange={setPostResponseScript}
-                      placeholder={`// Example Post-response Script:\npm.test("Status code is 200", () => {\n  pm.expect(pm.response.code).to.equal(200);\n});\n\nconst data = pm.response.json();\npm.environment.set("USER_TOKEN", data.token);`}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Test Results & Logs Output */}
-            {(hookTests.length > 0 || hookLogs.length > 0) && (
-              <div className="mt-2 p-2.5 bg-zinc-900/80 border border-zinc-800 rounded space-y-2 max-h-44 overflow-y-auto font-mono text-xs">
-                {hookTests.length > 0 && (
-                  <div>
-                    <span className="text-[11px] font-semibold text-zinc-300 block mb-1">
-                      Test Results:
-                    </span>
-                    <div className="space-y-1">
-                      {hookTests.map((t, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5">
-                          {t.passed ? (
-                            <CheckCircle size={13} className="text-emerald-400" />
-                          ) : (
-                            <XCircle size={13} className="text-rose-400" />
-                          )}
-                          <span className={t.passed ? 'text-zinc-200' : 'text-rose-300'}>
-                            {t.name}
-                          </span>
-                          {t.error && (
-                            <span className="text-[10px] text-rose-400 ml-1">
-                              ({t.error})
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {hookLogs.length > 0 && (
-                  <div>
-                    <span className="text-[11px] font-semibold text-zinc-400 flex items-center gap-1 mb-1">
-                      <Terminal size={11} /> Logs:
-                    </span>
-                    <div className="bg-zinc-950 p-2 rounded text-[11px] text-zinc-300 space-y-0.5">
-                      {hookLogs.map((log, idx) => (
-                        <div key={idx} className="break-all">
-                          {log}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <ScriptEditorPane
+            protocol="http"
+            activeSubTab={hookScriptTab}
+            onSubTabChange={setHookScriptTab}
+            preScript={preRequestScript}
+            onPreScriptChange={setPreRequestScript}
+            postScript={postResponseScript}
+            onPostScriptChange={setPostResponseScript}
+            tests={hookTests}
+            logs={hookLogs}
+          />
         )}
       </div>
     </div>
