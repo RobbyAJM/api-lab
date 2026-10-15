@@ -1,4 +1,26 @@
-const API_BASE = 'http://localhost:8080/api/v1';
+import {
+  getApiBaseUrl,
+  getServerUrl,
+  setServerUrl,
+  resetServerUrl,
+  getWsBaseUrl,
+  DEFAULT_SERVER_URL,
+  testServerConnection,
+  normalizeServerUrl,
+  type ServerConnectionTestResult,
+} from '../utils/serverConfig';
+
+export {
+  getServerUrl,
+  setServerUrl,
+  resetServerUrl,
+  getApiBaseUrl,
+  getWsBaseUrl,
+  DEFAULT_SERVER_URL,
+  testServerConnection,
+  normalizeServerUrl,
+  type ServerConnectionTestResult,
+};
 
 export function getAuthToken(): string | null {
   return localStorage.getItem('api_lab_token');
@@ -24,7 +46,8 @@ export async function apiRequest<T>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
+  const apiBase = getApiBaseUrl();
+  const response = await fetch(`${apiBase}${path}`, {
     ...options,
     headers,
   });
