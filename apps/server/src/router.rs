@@ -15,6 +15,7 @@ pub fn create_router(state: SharedState) -> Router {
         .allow_headers(Any);
 
     let api_routes = Router::new()
+        .route("/health", get(|| async { "ok" }))
         // Auth
         .route("/auth/register", post(auth::register))
         .route("/invitations/accept", post(auth::accept_invitation))
@@ -103,6 +104,7 @@ pub fn create_router(state: SharedState) -> Router {
         .route("/workspaces/{workspace_id}/ws", get(ws::ws_handler));
 
     Router::new()
+        .route("/health", get(|| async { "ok" }))
         .nest("/api/v1", api_routes)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
