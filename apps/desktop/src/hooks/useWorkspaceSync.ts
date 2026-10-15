@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
+import { getWsBaseUrl } from '../api/client';
 import type { WsSyncEvent } from '@api-lab/api-types';
 
 export function useWorkspaceSync() {
@@ -23,7 +24,8 @@ export function useWorkspaceSync() {
 
     function connect() {
       if (!isMounted) return;
-      const url = `ws://localhost:8080/api/v1/workspaces/${workspaceId}/ws?token=${token}`;
+      const wsBase = getWsBaseUrl();
+      const url = `${wsBase}/workspaces/${workspaceId}/ws?token=${token}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
