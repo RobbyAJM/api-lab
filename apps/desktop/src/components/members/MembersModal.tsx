@@ -136,14 +136,14 @@ export const MembersModal: React.FC = () => {
           {/* Admin Invite Generator */}
           {isAdmin && (
             <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-lg space-y-2.5">
-              <span className="text-xs font-semibold text-indigo-400 flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
                 <UserPlus size={14} /> Invite New Member
               </span>
               <div className="flex items-center gap-2">
                 <select
                   value={inviteRole}
                   onChange={(e) => setInviteRole(e.target.value as Role)}
-                  className="bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                  className="bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
                 >
                   <option value="developer">Role: Developer</option>
                   <option value="admin">Role: Admin</option>
@@ -151,14 +151,14 @@ export const MembersModal: React.FC = () => {
                 <button
                   onClick={() => inviteMutation.mutate()}
                   disabled={inviteMutation.isPending}
-                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded text-xs transition"
+                  className="px-3 py-1 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-medium rounded text-xs transition"
                 >
                   {inviteMutation.isPending ? 'Generating...' : 'Generate Invite Link'}
                 </button>
               </div>
 
               {generatedToken && (
-                <div className="mt-2 p-2.5 bg-zinc-900 border border-indigo-900/60 rounded text-xs space-y-1">
+                <div className="mt-2 p-2.5 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-1">
                   <div className="text-zinc-400 font-medium">Shareable Invitation Token:</div>
                   <div className="flex items-center gap-2">
                     <input
@@ -203,7 +203,7 @@ export const MembersModal: React.FC = () => {
                             role: e.target.value as Role,
                           })
                         }
-                        className="bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
+                        className="bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700"
                       >
                         <option value="developer">Developer</option>
                         <option value="admin">Admin</option>

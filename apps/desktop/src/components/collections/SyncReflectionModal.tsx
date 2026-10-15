@@ -246,7 +246,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
           <div className="flex items-center gap-2">
-            <RefreshCw size={15} className="text-purple-400" />
+            <RefreshCw size={15} className="text-secondary" />
             <h2 className="text-xs font-semibold text-zinc-100">
               Sync Reflection — {collection.name}
             </h2>
@@ -263,7 +263,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
             <select
               value={selectedRootFolderId}
               onChange={(e) => setSelectedRootFolderId(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-purple-500"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-zinc-700"
             >
               {rootFolders.map((rf) => (
                 <option key={rf.id} value={rf.id}>
@@ -275,7 +275,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
 
           <div>
             <label className="block text-zinc-400 mb-1">gRPC Server Address</label>
-            <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-purple-500 h-8">
+            <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-700 h-8">
               <VariableInput
                 value={serverAddress}
                 onChange={(val) => {
@@ -296,7 +296,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
               type="checkbox"
               checked={useTls}
               onChange={(e) => setUseTls(e.target.checked)}
-              className="rounded bg-zinc-950 border-zinc-700 text-purple-600"
+              className="rounded bg-zinc-950 border-zinc-700 text-primary"
             />
             <span className="text-zinc-300">Use TLS</span>
           </label>
@@ -304,7 +304,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
           <button
             onClick={handleScanAndCompare}
             disabled={scanning || syncing}
-            className="w-full py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-purple-300 rounded text-xs font-medium flex items-center justify-center gap-1.5 border border-zinc-700/60 transition"
+            className="w-full py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 rounded text-xs font-medium flex items-center justify-center gap-1.5 border border-zinc-700/60 transition"
           >
             <RefreshCw size={12} className={scanning ? 'animate-spin' : ''} />
             <span>{scanning ? 'Scanning Reflection...' : 'Scan & Compare Changes'}</span>
@@ -318,8 +318,8 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
           )}
 
           {statusMessage && (
-            <div className="p-2 bg-zinc-950 border border-zinc-800 rounded text-purple-300 text-xs font-mono flex items-center gap-2">
-              <RefreshCw size={12} className="animate-spin" />
+            <div className="p-2 bg-zinc-950 border border-zinc-800 rounded text-zinc-300 text-xs font-mono flex items-center gap-2">
+              <RefreshCw size={12} className="animate-spin text-primary" />
               <span>{statusMessage}</span>
             </div>
           )}
@@ -404,7 +404,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
               type="button"
               onClick={handleApplySync}
               disabled={syncing}
-              className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded text-xs font-medium flex items-center gap-1.5 shadow transition"
+              className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded text-xs font-medium flex items-center gap-1.5 shadow transition"
             >
               {syncing ? (
                 <>

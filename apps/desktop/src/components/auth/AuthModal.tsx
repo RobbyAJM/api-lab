@@ -126,7 +126,7 @@ export const AuthModal: React.FC = () => {
       <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-6 text-zinc-100">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-5">
           <div className="flex items-center gap-2">
-            <span className="h-6 w-6 rounded bg-indigo-600 flex items-center justify-center font-bold text-xs">
+            <span className="h-6 w-6 rounded bg-primary flex items-center justify-center font-bold text-xs text-white">
               AL
             </span>
             <h2 className="font-semibold text-lg tracking-tight">API Lab</h2>
@@ -156,7 +156,7 @@ export const AuthModal: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
                 placeholder="developer@example.com"
               />
             </div>
@@ -166,7 +166,7 @@ export const AuthModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setTab('forgot')}
-                  className="text-xs text-indigo-400 hover:underline"
+                  className="text-xs text-primary hover:underline"
                 >
                   Forgot?
                 </button>
@@ -176,14 +176,14 @@ export const AuthModal: React.FC = () => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
                 placeholder="••••••••"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 font-medium rounded text-sm text-white transition disabled:opacity-50"
+              className="w-full py-2 bg-primary hover:bg-primary-hover font-medium rounded text-sm text-white transition disabled:opacity-50"
             >
               {loading ? 'Signing in...' : 'Sign In'}
             </button>
@@ -194,7 +194,7 @@ export const AuthModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setTab('register_invite')}
-                  className="text-indigo-400 hover:underline"
+                  className="text-primary hover:underline"
                 >
                   Accept Invitation
                 </button>
@@ -204,7 +204,7 @@ export const AuthModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setTab('register_bootstrap')}
-                  className="text-indigo-400 hover:underline"
+                  className="text-primary hover:underline"
                 >
                   Create Workspace
                 </button>
@@ -223,7 +223,7 @@ export const AuthModal: React.FC = () => {
                 required
                 value={invitationToken}
                 onChange={(e) => setInvitationToken(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs font-mono focus:outline-none focus:border-zinc-700"
                 placeholder="paste 64-character token"
               />
             </div>
@@ -234,7 +234,7 @@ export const AuthModal: React.FC = () => {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
                 placeholder="Alex Developer"
               />
             </div>
@@ -245,7 +245,7 @@ export const AuthModal: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
               />
             </div>
             <div>
@@ -256,13 +256,13 @@ export const AuthModal: React.FC = () => {
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 font-medium rounded text-sm text-white transition disabled:opacity-50"
+              className="w-full py-2 bg-primary hover:bg-primary-hover font-medium rounded text-sm text-white transition disabled:opacity-50"
             >
               {loading ? 'Joining...' : 'Accept & Register'}
             </button>
@@ -287,7 +287,7 @@ export const AuthModal: React.FC = () => {
                 type="text"
                 value={workspaceName}
                 onChange={(e) => setWorkspaceName(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
                 placeholder="Engineering Lab"
               />
             </div>
@@ -298,7 +298,7 @@ export const AuthModal: React.FC = () => {
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
               />
             </div>
             <div>
@@ -308,7 +308,7 @@ export const AuthModal: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
               />
             </div>
             <div>
@@ -319,13 +319,13 @@ export const AuthModal: React.FC = () => {
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 font-medium rounded text-sm text-white transition disabled:opacity-50"
+              className="w-full py-2 bg-primary hover:bg-primary-hover font-medium rounded text-sm text-white transition disabled:opacity-50"
             >
               {loading ? 'Creating...' : 'Create Account & Workspace'}
             </button>
@@ -354,18 +354,18 @@ export const AuthModal: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 font-medium rounded text-sm text-white transition disabled:opacity-50"
+              className="w-full py-2 bg-primary hover:bg-primary-hover font-medium rounded text-sm text-white transition disabled:opacity-50"
             >
               {loading ? 'Sending...' : 'Generate Reset Link'}
             </button>
             <div className="flex justify-between text-xs text-zinc-400 pt-2">
-              <button type="button" onClick={() => setTab('reset')} className="text-indigo-400 hover:underline">
+              <button type="button" onClick={() => setTab('reset')} className="text-primary hover:underline">
                 Have a token?
               </button>
               <button type="button" onClick={() => setTab('login')} className="hover:text-zinc-200">
@@ -385,7 +385,7 @@ export const AuthModal: React.FC = () => {
                 required
                 value={resetToken}
                 onChange={(e) => setResetToken(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs font-mono focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-xs font-mono focus:outline-none focus:border-zinc-700"
               />
             </div>
             <div>
@@ -396,13 +396,13 @@ export const AuthModal: React.FC = () => {
                 minLength={8}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-indigo-500"
+                className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded text-sm focus:outline-none focus:border-zinc-700"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 font-medium rounded text-sm text-white transition disabled:opacity-50"
+              className="w-full py-2 bg-primary hover:bg-primary-hover font-medium rounded text-sm text-white transition disabled:opacity-50"
             >
               {loading ? 'Resetting...' : 'Set New Password'}
             </button>

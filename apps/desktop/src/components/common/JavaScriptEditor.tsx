@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { tokenizeJsLine } from '../../utils/jsHighlight';
 import { handleEditorKeyDown } from '../../utils/editorKeyboard';
+import { EditorHistory } from '../../utils/editorHistory';
 
 interface JavaScriptEditorProps {
   value: string;
@@ -18,6 +19,11 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<EditorHistory | null>(null);
+
+  if (!historyRef.current) {
+    historyRef.current = new EditorHistory(value, 0, 0);
+  }
 
   function handleScroll(e: React.UIEvent<HTMLTextAreaElement>) {
     if (preRef.current) {
@@ -43,11 +49,16 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,
         altKey: e.altKey,
-      }
+      },
+      historyRef.current || undefined
     );
 
     if (result) {
       e.preventDefault();
+      const isUndoRedo = (e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y');
+      if (!isUndoRedo && historyRef.current) {
+        historyRef.current.recordChange(result.text, result.selectionStart, result.selectionEnd, true);
+      }
       onChange(result.text);
       requestAnimationFrame(() => {
         if (textareaRef.current) {
@@ -55,6 +66,17 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
         }
       });
     }
+  }
+
+  function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const nextVal = e.target.value;
+    historyRef.current?.recordChange(
+      nextVal,
+      e.target.selectionStart,
+      e.target.selectionEnd,
+      false
+    );
+    onChange(nextVal);
   }
 
   const lineCount = Math.max(1, value.split('\n').length);
@@ -69,7 +91,7 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
           {tokens.map((token, tIdx) => {
             let colorClass = 'text-zinc-200';
             if (token.type === 'keyword') {
-              colorClass = 'text-purple-400 font-semibold';
+              colorClass = 'text-secondary font-semibold';
             } else if (token.type === 'global') {
               colorClass = 'text-cyan-400 font-semibold';
             } else if (token.type === 'string') {
@@ -132,12 +154,12 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             onScroll={handleScroll}
             placeholder={placeholder}
             spellCheck={false}
-            className="absolute inset-0 w-full h-full m-0 py-3 px-3 font-mono text-xs leading-5 bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-indigo-600/40 whitespace-pre"
+            className="absolute inset-0 w-full h-full m-0 py-3 px-3 font-mono text-xs leading-5 bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-primary/40 whitespace-pre"
           />
         </div>
       </div>

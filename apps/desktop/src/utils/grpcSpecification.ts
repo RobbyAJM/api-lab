@@ -1,3 +1,5 @@
+import type { GrpcServiceSummary } from '@api-lab/api-types';
+
 /**
  * Utilities for formatting and inspecting gRPC Reflection specifications & error statuses.
  */
@@ -119,3 +121,41 @@ export function formatMethodStreamingLabel(
   }
   return 'Unary RPC';
 }
+
+/**
+ * Filters discovered gRPC services and methods by query keywords.
+ * Matches service names and method names.
+ */
+export function filterGrpcServices(
+  services: GrpcServiceSummary[],
+  query: string
+): GrpcServiceSummary[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return services;
+
+  const keywords = q.split(/\s+/).filter(Boolean);
+  const result: GrpcServiceSummary[] = [];
+
+  for (const svc of services) {
+    const serviceNameMatches = keywords.every((kw) => svc.name.toLowerCase().includes(kw));
+
+    if (serviceNameMatches) {
+      result.push(svc);
+    } else {
+      const matchingMethods = svc.methods.filter((m) => {
+        const text = `${svc.name} ${m.name} ${m.stream_type || ''}`.toLowerCase();
+        return keywords.every((kw) => text.includes(kw));
+      });
+
+      if (matchingMethods.length > 0) {
+        result.push({
+          ...svc,
+          methods: matchingMethods,
+        });
+      }
+    }
+  }
+
+  return result;
+}
+

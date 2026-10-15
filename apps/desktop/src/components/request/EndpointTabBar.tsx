@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Endpoint, Environment } from '@api-lab/api-types';
-import { X, Radio, ArrowLeftRight, ArrowDownUp, AlertTriangle, Plus, Settings } from 'lucide-react';
+import { X, Radio, ArrowDownUp, AlertTriangle, Plus, Settings } from 'lucide-react';
 
 export const EndpointTabBar: React.FC = () => {
   const {
@@ -105,12 +105,12 @@ export const EndpointTabBar: React.FC = () => {
       const method = ep.config?.method || 'GET';
       const colorCls =
         method === 'GET'
-          ? 'text-emerald-400 bg-emerald-950/60 border-emerald-900/50'
+          ? 'text-emerald-400 bg-emerald-950/40 border-emerald-900/40'
           : method === 'POST'
-          ? 'text-blue-400 bg-blue-950/60 border-blue-900/50'
+          ? 'text-primary bg-primary-subtle border-primary-border'
           : method === 'PUT' || method === 'PATCH'
-          ? 'text-amber-400 bg-amber-950/60 border-amber-900/50'
-          : 'text-red-400 bg-red-950/60 border-red-900/50';
+          ? 'text-amber-400 bg-amber-950/40 border-amber-900/40'
+          : 'text-red-400 bg-red-950/40 border-red-900/40';
 
       return (
         <span
@@ -122,22 +122,11 @@ export const EndpointTabBar: React.FC = () => {
     }
 
     const streamType = ep.config?.stream_type || 'unary';
-    if (streamType === 'bidi_stream') {
+    if (streamType === 'bidi_stream' || streamType === 'omni_stream') {
       return (
         <span
-          title="gRPC Bidirectional Stream"
-          className="text-[9px] font-mono font-bold px-1 py-0.2 rounded text-amber-300 bg-amber-950/60 border border-amber-800/60 flex items-center gap-0.5 select-none"
-        >
-          <ArrowLeftRight size={8} /> STREAM
-        </span>
-      );
-    }
-
-    if (streamType === 'omni_stream') {
-      return (
-        <span
-          title="gRPC Omnidirectional Stream"
-          className="text-[9px] font-mono font-bold px-1 py-0.2 rounded text-amber-300 bg-amber-950/60 border border-amber-800/60 flex items-center gap-0.5 select-none"
+          title="gRPC Stream"
+          className="text-[9px] font-mono font-bold px-1 py-0.2 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5 select-none"
         >
           <ArrowDownUp size={8} /> STREAM
         </span>
@@ -147,7 +136,7 @@ export const EndpointTabBar: React.FC = () => {
     return (
       <span
         title="gRPC Unary Call"
-        className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-violet-950/60 text-violet-400 border border-violet-800/40 select-none flex items-center gap-0.5"
+        className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 select-none flex items-center gap-0.5"
       >
         <Radio size={8} /> gRPC
       </span>

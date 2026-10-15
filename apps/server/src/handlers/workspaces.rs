@@ -320,3 +320,60 @@ pub async fn revoke_invitation(
 
     Ok(Json(json!({ "message": "invitation revoked" })))
 }
+
+pub async fn update_workspace(
+    auth: AuthUser,
+    Path(workspace_id): Path<Uuid>,
+    State(state): State<SharedState>,
+    Json(dto): Json<CreateWorkspaceDto>,
+) -> Result<Json<WorkspaceSummary>, ApiError> {
+    let role = require_workspace_role(&state.pool, workspace_id, auth.user.id, Role::Admin).await?;
+    let name = dto.name.trim();
+    if name.is_empty() {
+        return Err(ApiError::BadRequest("workspace name cannot be empty".into()));
+    }
+
+    sqlx::query!(
+        "UPDATE workspaces SET name = $1, updated_at = NOW() WHERE id = $2",
+        name,
+        workspace_id
+    )
+    .execute(&state.pool)
+    .await
+    .map_err(ApiError::Database)?;
+
+    let _ = state.tx_ws.send(WsSyncEvent {
+        workspace_id,
+        entity: "workspace".into(),
+        action: "update".into(),
+        entity_id: workspace_id,
+    });
+
+    Ok(Json(WorkspaceSummary {
+        id: workspace_id,
+        name: name.to_string(),
+        role,
+    }))
+}
+
+pub async fn delete_workspace(
+    auth: AuthUser,
+    Path(workspace_id): Path<Uuid>,
+    State(state): State<SharedState>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    require_workspace_role(&state.pool, workspace_id, auth.user.id, Role::Admin).await?;
+
+    sqlx::query!("DELETE FROM workspaces WHERE id = $1", workspace_id)
+        .execute(&state.pool)
+        .await
+        .map_err(ApiError::Database)?;
+
+    let _ = state.tx_ws.send(WsSyncEvent {
+        workspace_id,
+        entity: "workspace".into(),
+        action: "delete".into(),
+        entity_id: workspace_id,
+    });
+
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}

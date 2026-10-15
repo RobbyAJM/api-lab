@@ -11,6 +11,7 @@ import { ResponseViewer } from './components/response/ResponseViewer';
 import { AuthModal } from './components/auth/AuthModal';
 import { EnvironmentModal } from './components/environments/EnvironmentModal';
 import { MembersModal } from './components/members/MembersModal';
+import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSettingsModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
 import { EmptyWorkspaceView } from './components/common/EmptyWorkspaceView';
@@ -177,6 +178,7 @@ export const App: React.FC = () => {
       <AuthModal />
       <EnvironmentModal />
       <MembersModal />
+      <WorkspaceSettingsModal />
       <CommandPaletteModal />
       <ShortcutsHelpModal />
 
@@ -201,14 +203,14 @@ export const App: React.FC = () => {
               )}
             </section>
 
-            {/* Vertical Resizable Split Handle */}
-            <div
-              onMouseDown={startVerticalResize}
-              className="h-1.5 bg-zinc-900/90 border-y border-zinc-800/80 hover:bg-indigo-500/30 cursor-row-resize transition flex items-center justify-center group flex-shrink-0 select-none"
-              title="Drag to resize Request and Response panels"
-            >
-              <div className="w-8 h-0.5 rounded-full bg-zinc-700 group-hover:bg-indigo-400 transition" />
-            </div>
+              {/* Vertical Resizable Split Handle */}
+              <div
+                onMouseDown={startVerticalResize}
+                className="h-1.5 bg-zinc-900/90 border-y border-zinc-800/80 hover:bg-zinc-800 cursor-row-resize transition flex items-center justify-center group flex-shrink-0 select-none"
+                title="Drag to resize Request and Response panels"
+              >
+                <div className="w-8 h-0.5 rounded-full bg-zinc-700 group-hover:bg-zinc-400 transition" />
+              </div>
 
             {/* Bottom: Response Section */}
             <section className="flex-1 min-h-[160px] flex flex-col overflow-hidden bg-zinc-950">

@@ -229,8 +229,8 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
 
           {isStreaming && (
             <div className="flex items-center gap-1.5">
-              <span className="flex items-center gap-1 text-[10px] text-cyan-400 font-mono font-bold bg-cyan-950/70 border border-cyan-800 px-2 py-0.5 rounded animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+              <span className="flex items-center gap-1 text-[10px] text-amber-300 font-mono font-bold bg-amber-950/50 border border-amber-800/60 px-2 py-0.5 rounded animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                 STREAMING
               </span>
               <button
@@ -397,14 +397,14 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
               onClick={() => setActiveTab('stream')}
               className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
                 activeTab === 'stream'
-                  ? 'border-cyan-400 text-cyan-300'
+                  ? 'border-zinc-200 text-zinc-100'
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
               <ArrowDownUp size={11} />
               <span>Stream</span>
               {streamMessages.length > 0 && (
-                <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-cyan-400 rounded border border-zinc-800">
+                <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-amber-300 rounded border border-zinc-800">
                   {streamMessages.length}
                 </span>
               )}
@@ -689,10 +689,10 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
               Object.entries(headersDisplay).map(([k, v]) => (
                 <div
                   key={k}
-                  className="flex justify-between py-1 border-b border-zinc-900 text-xs selection:bg-indigo-600/40"
+                  className="flex justify-between py-1 border-b border-zinc-900 text-xs"
                 >
-                  <span className="text-indigo-400 font-semibold">{k}:</span>
-                  <span className="text-zinc-300 break-all pl-2 text-right">{v}</span>
+                  <span className="text-zinc-300 font-semibold">{k}:</span>
+                  <span className="text-zinc-400 break-all pl-2 text-right">{v}</span>
                 </div>
               ))
             )}

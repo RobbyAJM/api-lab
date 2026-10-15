@@ -25,6 +25,9 @@ export function isConfigDirty(
       use_tls: Boolean(cfg.use_tls),
       service: (cfg.service || '').trim(),
       stream_type: cfg.stream_type || 'unary',
+      authority_override: (cfg.authority_override || '').trim(),
+      timeout_seconds: cfg.timeout_seconds !== undefined ? Number(cfg.timeout_seconds) : 30,
+      max_msg_size_mb: cfg.max_msg_size_mb !== undefined ? Number(cfg.max_msg_size_mb) : 4,
       body_type: cfg.body_type || 'json',
       body: typeof cfg.body === 'string' ? cfg.body.trim() : '',
       payload:
