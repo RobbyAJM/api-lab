@@ -32,7 +32,10 @@ export function useWorkspaceSync() {
           const syncEvent: WsSyncEvent = JSON.parse(event.data);
           if (syncEvent.workspace_id === workspaceId) {
             // Invalidate relevant TanStack queries
-            if (syncEvent.entity === 'collection' || syncEvent.entity === 'folder') {
+            if (syncEvent.entity === 'workspace') {
+              queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+              queryClient.invalidateQueries({ queryKey: ['auth_me'] });
+            } else if (syncEvent.entity === 'collection' || syncEvent.entity === 'folder') {
               queryClient.invalidateQueries({ queryKey: ['collections', workspaceId] });
             } else if (syncEvent.entity === 'endpoint') {
               queryClient.invalidateQueries({ queryKey: ['collections', workspaceId] });
