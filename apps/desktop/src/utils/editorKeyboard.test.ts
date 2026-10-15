@@ -7,6 +7,7 @@ import {
   handleBackspacePair,
   handleEditorKeyDown,
 } from './editorKeyboard.ts';
+import { EditorHistory } from './editorHistory.ts';
 
 test('handleTabIndentation: single cursor inserts 2 spaces', () => {
   const result = handleTabIndentation('hello', 5, 5, false);
@@ -104,3 +105,27 @@ test('handleEditorKeyDown: dispatches Tab correctly', () => {
   assert.ok(res);
   assert.equal(res.text, '  foo\n  bar');
 });
+
+test('handleEditorKeyDown: dispatches Ctrl+Z (undo) and Ctrl+Y (redo) with history', () => {
+  const history = new EditorHistory('hello', 5, 5);
+  history.recordChange('hello world', 11, 11, true);
+
+  // Undo via Ctrl+Z
+  const undoResult = handleEditorKeyDown('hello world', 11, 11, { key: 'z', ctrlKey: true }, history);
+  assert.ok(undoResult);
+  assert.equal(undoResult.text, 'hello');
+  assert.equal(undoResult.selectionStart, 5);
+
+  // Redo via Ctrl+Y
+  const redoResult = handleEditorKeyDown('hello', 5, 5, { key: 'y', ctrlKey: true }, history);
+  assert.ok(redoResult);
+  assert.equal(redoResult.text, 'hello world');
+  assert.equal(redoResult.selectionStart, 11);
+
+  // Redo via Cmd+Shift+Z (Mac style)
+  history.undo('hello world', 11, 11);
+  const macRedo = handleEditorKeyDown('hello', 5, 5, { key: 'z', metaKey: true, shiftKey: true }, history);
+  assert.ok(macRedo);
+  assert.equal(macRedo.text, 'hello world');
+});
+

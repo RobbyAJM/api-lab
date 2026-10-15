@@ -88,7 +88,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         onScroll={handleScroll}
         placeholder={placeholder}
         spellCheck={false}
-        className={`w-full h-full px-3 py-1.5 font-mono text-xs bg-transparent text-transparent caret-zinc-100 focus:outline-none placeholder-transparent selection:bg-indigo-600/40 ${inputClassName}`}
+        className={`w-full h-full px-3 py-1.5 font-mono text-xs bg-transparent text-transparent caret-zinc-100 focus:outline-none placeholder-transparent selection:bg-primary/40 ${inputClassName}`}
       />
     </div>
   );

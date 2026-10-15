@@ -5,7 +5,9 @@ import {
   formatMethodStreamingLabel,
   getGrpcStatusLabel,
   formatExecutionError,
+  filterGrpcServices,
 } from './grpcSpecification.ts';
+import type { GrpcServiceSummary } from '@api-lab/api-types';
 
 test('formatRpcSignature: formats full protobuf rpc signature', () => {
   const sig = formatRpcSignature('Login', 'nutrade.client.LoginRequest', 'nutrade.client.LoginResponse');
@@ -50,3 +52,47 @@ test('formatExecutionError: parses deadline exceeded and TLS errors', () => {
   const tlsErr = formatExecutionError('tls handshake failed: invalid peer cert');
   assert.equal(tlsErr.title, 'TLS Handshake Failed');
 });
+
+test('filterGrpcServices: matches method names, service names, and multi-keywords', () => {
+  const services: GrpcServiceSummary[] = [
+    {
+      name: 'grpc.health.v1.Health',
+      methods: [
+        { name: 'Check', input_type: '', output_type: '' },
+        { name: 'Watch', input_type: '', output_type: '', stream_type: 'omni_stream' },
+      ],
+    },
+    {
+      name: 'nutrade.client.ClientAuthAPI',
+      methods: [
+        { name: 'Login', input_type: '', output_type: '' },
+        { name: 'Register', input_type: '', output_type: '' },
+        { name: 'GetProfile', input_type: '', output_type: '' },
+      ],
+    },
+  ];
+
+  // Empty query returns all
+  assert.equal(filterGrpcServices(services, '').length, 2);
+
+  // Filter by method name
+  const filteredLogin = filterGrpcServices(services, 'login');
+  assert.equal(filteredLogin.length, 1);
+  assert.equal(filteredLogin[0].name, 'nutrade.client.ClientAuthAPI');
+  assert.equal(filteredLogin[0].methods.length, 1);
+  assert.equal(filteredLogin[0].methods[0].name, 'Login');
+
+  // Filter by service name
+  const filteredHealth = filterGrpcServices(services, 'health');
+  assert.equal(filteredHealth.length, 1);
+  assert.equal(filteredHealth[0].methods.length, 2);
+
+  // Multi-keyword filter
+  const multi = filterGrpcServices(services, 'auth register');
+  assert.equal(multi.length, 1);
+  assert.equal(multi[0].methods[0].name, 'Register');
+
+  // No match
+  assert.equal(filterGrpcServices(services, 'nonexistent').length, 0);
+});
+

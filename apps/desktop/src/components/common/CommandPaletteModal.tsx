@@ -181,12 +181,12 @@ export const CommandPaletteModal: React.FC = () => {
                     onMouseEnter={() => setSelectedIndex(idx)}
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition ${
                       isSelected
-                        ? 'bg-indigo-600/20 text-white border border-indigo-500/40'
+                        ? 'bg-zinc-800 text-white border border-zinc-700/80'
                         : 'hover:bg-zinc-900/80 text-zinc-300 border border-transparent'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 truncate">
-                      <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-indigo-300 border border-zinc-700/60 flex items-center gap-1 select-none">
+                      <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60 flex items-center gap-1 select-none">
                         <Terminal size={10} />
                         COMMAND
                       </span>
@@ -203,7 +203,7 @@ export const CommandPaletteModal: React.FC = () => {
                         {item.keyLabel}
                       </kbd>
                       {isSelected && (
-                        <div className="flex items-center gap-1 text-[11px] text-indigo-400 font-medium">
+                        <div className="flex items-center gap-1 text-[11px] text-primary font-medium">
                           <span>Run</span>
                           <CornerDownLeft size={12} />
                         </div>
@@ -222,7 +222,7 @@ export const CommandPaletteModal: React.FC = () => {
                   onMouseEnter={() => setSelectedIndex(idx)}
                   className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition ${
                     isSelected
-                      ? 'bg-indigo-600/20 text-white border border-indigo-500/40'
+                      ? 'bg-zinc-800 text-white border border-zinc-700/80'
                       : 'hover:bg-zinc-900/80 text-zinc-300 border border-transparent'
                   }`}
                 >
@@ -234,7 +234,7 @@ export const CommandPaletteModal: React.FC = () => {
                           item.methodLabel === 'GET'
                             ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800/40'
                             : item.methodLabel === 'POST'
-                            ? 'text-blue-400 bg-blue-950/60 border border-blue-800/40'
+                            ? 'text-primary bg-primary-subtle border border-primary-border'
                             : item.methodLabel === 'PUT' || item.methodLabel === 'PATCH'
                             ? 'text-amber-400 bg-amber-950/60 border border-amber-800/40'
                             : 'text-red-400 bg-red-950/60 border border-red-800/40'
@@ -248,7 +248,7 @@ export const CommandPaletteModal: React.FC = () => {
                         STREAM
                       </span>
                     ) : (
-                      <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded text-purple-300 bg-purple-950/60 border border-purple-800/40">
+                      <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded text-zinc-300 bg-zinc-900 border border-zinc-800">
                         gRPC
                       </span>
                     )}
@@ -270,7 +270,7 @@ export const CommandPaletteModal: React.FC = () => {
                   </div>
 
                   {isSelected && (
-                    <div className="flex items-center gap-1 text-[11px] text-indigo-400 flex-shrink-0 font-medium">
+                    <div className="flex items-center gap-1 text-[11px] text-primary flex-shrink-0 font-medium">
                       <span>Jump</span>
                       <CornerDownLeft size={12} />
                     </div>
