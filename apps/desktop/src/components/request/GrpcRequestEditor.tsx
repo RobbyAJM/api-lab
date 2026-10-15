@@ -18,8 +18,6 @@ import type {
 import {
   Save,
   RefreshCw,
-  Plus,
-  Trash2,
   Wand2,
   BookOpen,
   Copy,
@@ -28,15 +26,23 @@ import {
   Radio,
   ArrowDownUp,
   Shield,
+  Search,
+  X,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
+import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
 import { applyInheritedGrpcAuth } from '../../utils/authInheritance';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
-import { formatRpcSignature, formatMethodStreamingLabel } from '../../utils/grpcSpecification';
+import {
+  formatRpcSignature,
+  filterGrpcServices,
+} from '../../utils/grpcSpecification';
 import { getEffectiveEndpointConfig } from '../../utils/tabManager';
 
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
@@ -74,6 +80,21 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   });
   const [selectedService, setSelectedService] = useState(initialConfig.service || '');
   const [selectedMethod, setSelectedMethod] = useState(initialConfig.method || '');
+
+  // Options state
+  const [authorityOverride, setAuthorityOverride] = useState(
+    initialConfig.authority_override || ''
+  );
+  const [timeoutSeconds, setTimeoutSeconds] = useState(
+    initialConfig.timeout_seconds !== undefined ? String(initialConfig.timeout_seconds) : '30'
+  );
+  const [maxMsgSizeMb, setMaxMsgSizeMb] = useState(
+    initialConfig.max_msg_size_mb !== undefined ? String(initialConfig.max_msg_size_mb) : '4'
+  );
+
+  // Specification state
+  const [showReqSchemaPreview, setShowReqSchemaPreview] = useState(false);
+  const [showResSchemaPreview, setShowResSchemaPreview] = useState(false);
 
   const effectiveTls = useTls || shouldAutoDetectTls(serverAddress);
 
@@ -136,7 +157,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const [isMethodPickerOpen, setIsMethodPickerOpen] = useState(false);
+  const [methodSearchQuery, setMethodSearchQuery] = useState('');
   const methodPickerRef = useRef<HTMLDivElement>(null);
+  const methodSearchInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch parent collection for inherited settings
   const { data: collection } = useQuery<Collection>({
@@ -188,6 +211,11 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       );
       setSelectedService(cfg.service || '');
       setSelectedMethod(cfg.method || '');
+      setAuthorityOverride(cfg.authority_override || '');
+      setTimeoutSeconds(cfg.timeout_seconds !== undefined ? String(cfg.timeout_seconds) : '30');
+      setMaxMsgSizeMb(cfg.max_msg_size_mb !== undefined ? String(cfg.max_msg_size_mb) : '4');
+      setShowReqSchemaPreview(false);
+      setShowResSchemaPreview(false);
       setMetadata(Object.entries(cfg.metadata || {}));
       setPayloadStr(
         cfg.payload !== undefined && cfg.payload !== null
@@ -266,6 +294,19 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     ? selectedService.split('.').pop() || selectedService
     : '';
 
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (isMethodPickerOpen) {
+      setMethodSearchQuery('');
+      setTimeout(() => {
+        methodSearchInputRef.current?.focus();
+      }, 50);
+    }
+  }, [isMethodPickerOpen]);
+
+  // Filtered services for method picker dropdown
+  const filteredServices = filterGrpcServices(discoveredServices, methodSearchQuery);
+
   // Close method picker dropdown on outside click
   useEffect(() => {
     if (!isMethodPickerOpen) return;
@@ -339,6 +380,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       method: selectedMethod,
       use_tls: effectiveTls,
       stream_type: streamType,
+      authority_override: authorityOverride.trim(),
+      timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
+      max_msg_size_mb: maxMsgSizeMb ? Number(maxMsgSizeMb) : 4,
       metadata: metaMap,
       payload: payloadJson,
       pre_request_script: preRequestScript,
@@ -425,6 +469,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       service: selectedService,
       method: selectedMethod,
       stream_type: streamType,
+      authority_override: authorityOverride.trim(),
+      timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
+      max_msg_size_mb: maxMsgSizeMb ? Number(maxMsgSizeMb) : 4,
       metadata: metaMap,
       payload: parsedPayload,
       pre_request_script: preRequestScript,
@@ -438,6 +485,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     selectedService,
     selectedMethod,
     streamType,
+    authorityOverride,
+    timeoutSeconds,
+    maxMsgSizeMb,
     metadata,
     payloadStr,
     preRequestScript,
@@ -711,7 +761,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       {/* Breadcrumbs Row + Save Button (Image 1) */}
       <div className="px-4 py-2 flex items-center justify-between text-xs select-none flex-shrink-0">
         <div className="flex items-center gap-1.5 font-mono text-[11px] truncate mr-2">
-          <Radio size={13} className="text-violet-400 flex-shrink-0" />
+          <Radio size={13} className="text-secondary flex-shrink-0" />
           <span className="text-zinc-400">{collection?.name?.toUpperCase() || 'COLLECTION'}</span>
           <span className="text-zinc-600">&gt;</span>
           <span className="text-zinc-400">{shortServiceName || 'Service'}</span>
@@ -721,7 +771,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
         <div className="flex items-center gap-2 flex-shrink-0">
           {statusMessage && (
-            <span className="text-[10px] font-mono text-indigo-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded select-text">
+            <span className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded select-text">
               {statusMessage}
             </span>
           )}
@@ -741,7 +791,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       {/* Combined Address & Service/Method Bar (Image 1) */}
       <div className="px-4 pb-2.5 flex items-center gap-2.5 flex-shrink-0">
-        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-lg h-9 focus-within:border-blue-600 transition relative">
+        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-lg h-9 focus-within:border-primary transition relative">
           {/* Left Segment: TLS Icon + Address Input */}
           <div className="flex-1 flex items-center pl-2 min-w-0">
             <button
@@ -750,7 +800,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               className="p-1 text-zinc-500 hover:text-zinc-300 transition mr-1 flex-shrink-0"
               title={effectiveTls ? 'TLS Enabled (Click to disable)' : 'TLS Disabled (Click to enable)'}
             >
-              <Shield size={14} className={effectiveTls ? 'text-indigo-400' : 'text-zinc-600'} />
+              <Shield size={14} className={effectiveTls ? 'text-emerald-400' : 'text-zinc-600'} />
             </button>
 
             <div className="flex-1 h-full flex items-center min-w-0">
@@ -796,12 +846,39 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               <ChevronDown size={13} className="text-zinc-500 flex-shrink-0 ml-1" />
             </button>
 
-            {/* Floating Dropdown (Image 2) */}
+            {/* Floating Dropdown (Image 2 + Search) */}
             {isMethodPickerOpen && (
               <div
                 ref={methodPickerRef}
                 className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl overflow-hidden text-xs select-none max-h-80 flex flex-col font-mono"
               >
+                {/* Search Bar */}
+                <div className="p-2 border-b border-zinc-800/80 bg-zinc-900/70 flex items-center gap-2">
+                  <Search size={13} className="text-zinc-500 flex-shrink-0" />
+                  <input
+                    ref={methodSearchInputRef}
+                    type="text"
+                    value={methodSearchQuery}
+                    onChange={(e) => setMethodSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setIsMethodPickerOpen(false);
+                      }
+                    }}
+                    placeholder="Search service or method..."
+                    className="w-full bg-transparent text-xs font-mono text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                  />
+                  {methodSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setMethodSearchQuery('')}
+                      className="p-0.5 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+
                 <div className="overflow-y-auto p-1 flex-1 space-y-2">
                   {discoveredServices.length === 0 ? (
                     <div className="p-4 text-center text-zinc-500 font-sans">
@@ -809,8 +886,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                         ? 'Discovering services via reflection...'
                         : 'No services found. Click ↻ below to query reflection.'}
                     </div>
+                  ) : filteredServices.length === 0 ? (
+                    <div className="p-4 text-center text-zinc-500 font-sans">
+                      No methods matching "{methodSearchQuery}"
+                    </div>
                   ) : (
-                    discoveredServices.map((svc) => (
+                    filteredServices.map((svc) => (
                       <div key={svc.name} className="space-y-0.5">
                         <div className="text-[11px] font-semibold text-zinc-400 px-2.5 pt-2 pb-0.5 truncate">
                           {svc.name}
@@ -832,7 +913,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                                   : 'text-zinc-300 hover:text-white hover:bg-zinc-900'
                               }`}
                             >
-                              <ArrowDownUp size={12} className={isSelected ? 'text-indigo-400' : 'text-zinc-500'} />
+                              <ArrowDownUp size={12} className={isSelected ? 'text-primary' : 'text-zinc-500'} />
                               <span className="truncate">{m.name}</span>
                               {m.stream_type && m.stream_type !== 'unary' && (
                                 <span className="ml-auto text-[10px] text-amber-400/80 font-sans">
@@ -860,7 +941,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                     className="p-1 hover:text-white rounded hover:bg-zinc-800 text-zinc-400 transition"
                     title="Refresh server reflection"
                   >
-                    <RefreshCw size={12} className={discovering ? 'animate-spin text-indigo-400' : ''} />
+                    <RefreshCw size={12} className={discovering ? 'animate-spin text-primary' : ''} />
                   </button>
                 </div>
               </div>
@@ -876,7 +957,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           className={`px-5 py-2 text-xs font-semibold rounded-lg shadow-sm transition flex items-center gap-1.5 h-9 flex-shrink-0 ${
             isStreamingRpc && isCurrentEndpointStreaming
               ? 'bg-red-600 hover:bg-red-500 text-white'
-              : 'bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white'
+              : 'bg-primary hover:bg-primary-hover disabled:opacity-50 text-white'
           }`}
           title="Invoke method (Ctrl+Enter)"
         >
@@ -942,7 +1023,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('specification')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'specification'
-                ? 'border-indigo-400 text-indigo-200'
+                ? 'border-zinc-200 text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -960,7 +1041,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               title="Generate example JSON payload with types & enums from reflection"
               className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1 shadow-sm disabled:opacity-50"
             >
-              <Wand2 size={11} className={generatingPayload ? 'animate-spin text-indigo-400' : 'text-zinc-400'} />
+              <Wand2 size={11} className={generatingPayload ? 'animate-spin text-zinc-300' : 'text-zinc-400'} />
               <span>{generatingPayload ? 'Generating...' : 'Generate Example'}</span>
             </button>
             <div className="h-3 w-px bg-zinc-800 mx-0.5" />
@@ -1008,51 +1089,15 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         )}
 
         {activeTab === 'metadata' && (
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-zinc-400 pb-1">
-              <span>gRPC Request Metadata</span>
-              <button
-                onClick={() => setMetadata([...metadata, ['', '']])}
-                className="text-purple-400 hover:text-purple-300 flex items-center gap-1"
-              >
-                <Plus size={12} /> Add Key
-              </button>
-            </div>
-            {metadata.map(([key, val], idx) => (
-              <div key={idx} className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={key}
-                  onChange={(e) => {
-                    const next = [...metadata];
-                    next[idx][0] = e.target.value;
-                    setMetadata(next);
-                  }}
-                  placeholder="Key"
-                  className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-purple-500 h-7"
-                />
-                <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-purple-500 h-7">
-                  <VariableInput
-                    value={val}
-                    onChange={(newVal) => {
-                      const next = [...metadata];
-                      next[idx][1] = newVal;
-                      setMetadata(next);
-                    }}
-                    variables={activeVariables}
-                    placeholder="Value (or {{VAR}})"
-                    className="w-full h-full"
-                  />
-                </div>
-                <button
-                  onClick={() => setMetadata(metadata.filter((_, i) => i !== idx))}
-                  className="text-zinc-500 hover:text-red-400 p-1"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
+          <KeyValueTable
+            title="gRPC Request Metadata"
+            items={metadata}
+            onChange={setMetadata}
+            variables={activeVariables}
+            keyPlaceholder="x-metadata-key"
+            valuePlaceholder="metadata-value (or {{TOKEN}})"
+            addLabel="Add Metadata"
+          />
         )}
 
         {/* Scripts Panel (Before & After Hooks for gRPC) */}
@@ -1071,16 +1116,92 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         )}
 
         {activeTab === 'options' && (
-          <div className="space-y-3 max-w-sm">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={useTls}
-                onChange={(e) => setUseTls(e.target.checked)}
-                className="rounded bg-zinc-900 border-zinc-700"
-              />
-              <span>Enable TLS (Transport Layer Security)</span>
-            </label>
+          <div className="space-y-4 max-w-2xl text-xs">
+            {/* Group 1: Connection & Security */}
+            <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-4 space-y-3">
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                Connection & Security
+              </h4>
+              <div className="space-y-3">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={useTls}
+                    onChange={(e) => setUseTls(e.target.checked)}
+                    className="mt-0.5 rounded bg-zinc-950 border-zinc-700 text-primary focus:ring-0"
+                  />
+                  <div>
+                    <span className="text-zinc-200 font-medium block">
+                      Enable TLS / SSL Encryption
+                    </span>
+                    <span className="text-zinc-500 text-[11px]">
+                      Encrypt communication channel using Transport Layer Security.
+                    </span>
+                  </div>
+                </label>
+
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    Authority / Host Header Override
+                  </label>
+                  <input
+                    type="text"
+                    value={authorityOverride}
+                    onChange={(e) => setAuthorityOverride(e.target.value)}
+                    placeholder="e.g. auth-service.internal or custom :authority"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-700"
+                  />
+                  <span className="text-[10px] text-zinc-500 block mt-1">
+                    Overrides the pseudo <code>:authority</code> header for routing behind reverse proxies or Envoy ingresses.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Group 2: Deadlines & Message Limits */}
+            <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-4 space-y-3">
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                Deadlines & Message Framing
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    Call Timeout (seconds)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="600"
+                    value={timeoutSeconds}
+                    onChange={(e) => setTimeoutSeconds(e.target.value)}
+                    placeholder="30"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-700"
+                  />
+                  <span className="text-[10px] text-zinc-500 block mt-1">
+                    Cancel RPC execution if no response received before deadline.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-400 font-medium mb-1">
+                    Max Message Limit (MB)
+                  </label>
+                  <select
+                    value={maxMsgSizeMb}
+                    onChange={(e) => setMaxMsgSizeMb(e.target.value)}
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700 cursor-pointer"
+                  >
+                    <option value="4">4 MB (Standard default)</option>
+                    <option value="16">16 MB (Medium payloads)</option>
+                    <option value="64">64 MB (Large streaming batches)</option>
+                    <option value="256">256 MB (Very large)</option>
+                  </select>
+                  <span className="text-[10px] text-zinc-500 block mt-1">
+                    Maximum incoming protobuf byte frame threshold.
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -1088,68 +1209,54 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           <div className="h-full flex flex-col space-y-3 overflow-y-auto pr-1">
             {currentMethodObj ? (
               <>
-                {/* Method Overview Banner */}
-                <div className="p-3 bg-zinc-900/70 border border-zinc-800/80 rounded-lg space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded font-mono text-[10px] uppercase font-semibold bg-indigo-950/70 text-indigo-300 border border-indigo-800/50">
-                        {formatMethodStreamingLabel(
-                          streamType,
-                          currentMethodObj.is_client_streaming,
-                          currentMethodObj.is_server_streaming
-                        )}
-                      </span>
-                      <span className="font-mono text-xs text-zinc-300 font-medium">
-                        {selectedService} / <span className="text-white font-semibold">{selectedMethod}</span>
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const sig = formatRpcSignature(
-                          currentMethodObj.name,
-                          currentMethodObj.input_type,
-                          currentMethodObj.output_type
-                        );
-                        navigator.clipboard.writeText(sig);
-                        setCopiedSpec('signature');
-                        setTimeout(() => setCopiedSpec(null), 2000);
-                      }}
-                      className="text-[11px] text-zinc-400 hover:text-zinc-200 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-2 py-1 rounded flex items-center gap-1 transition"
-                      title="Copy full RPC signature"
-                    >
-                      {copiedSpec === 'signature' ? (
-                        <>
-                          <Check size={11} className="text-emerald-400" />
-                          <span className="text-emerald-400">Copied</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy size={11} />
-                          <span>Copy Signature</span>
-                        </>
-                      )}
-                    </button>
+                {/* Method Overview Pill */}
+                <div className="p-2.5 bg-zinc-900/60 border border-zinc-800 rounded-lg flex items-center justify-between text-xs select-none">
+                  <div className="flex items-center gap-2 font-mono text-xs">
+                    <span className="text-secondary font-semibold">rpc</span>
+                    <span className="text-white font-bold">{currentMethodObj.name}</span>
+                    <span className="text-zinc-500">(</span>
+                    <span className="text-amber-300 font-medium">{currentMethodObj.input_type || 'Empty'}</span>
+                    <span className="text-zinc-500">)</span>
+                    <span className="text-secondary font-semibold">returns</span>
+                    <span className="text-zinc-500">(</span>
+                    <span className="text-emerald-300 font-medium">{currentMethodObj.output_type || 'Empty'}</span>
+                    <span className="text-zinc-500">);</span>
                   </div>
 
-                  {/* Proto Signature Code Box */}
-                  <div className="p-2.5 bg-zinc-950 border border-zinc-850 rounded font-mono text-xs text-zinc-300 flex items-center justify-between overflow-x-auto">
-                    <code>
-                      <span className="text-indigo-400 font-semibold">rpc</span>{' '}
-                      <span className="text-zinc-100 font-bold">{currentMethodObj.name}</span> (
-                      <span className="text-amber-300">{currentMethodObj.input_type || 'Unknown'}</span>)
-                      {' '}<span className="text-indigo-400 font-semibold">returns</span> (
-                      <span className="text-emerald-300">{currentMethodObj.output_type || 'Unknown'}</span>);
-                    </code>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const sig = formatRpcSignature(
+                        currentMethodObj.name,
+                        currentMethodObj.input_type,
+                        currentMethodObj.output_type
+                      );
+                      navigator.clipboard.writeText(sig);
+                      setCopiedSpec('signature');
+                      setTimeout(() => setCopiedSpec(null), 2000);
+                    }}
+                    className="text-[11px] text-zinc-400 hover:text-zinc-200 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-2 py-0.5 rounded flex items-center gap-1 transition"
+                    title="Copy RPC signature"
+                  >
+                    {copiedSpec === 'signature' ? (
+                      <>
+                        <Check size={11} className="text-emerald-400" />
+                        <span className="text-emerald-400">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={11} />
+                        <span>Copy</span>
+                      </>
+                    )}
+                  </button>
                 </div>
 
-                {/* Two Struct Cards Grid: Request Message Struct & Response Message Struct */}
+                {/* 2 Clean Cards: Request & Response Structs */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0">
-                  {/* Card 1: Request Message Struct */}
-                  <div className="flex flex-col bg-zinc-900/60 border border-zinc-800/80 rounded-lg p-3 space-y-2 min-h-[220px]">
-                    <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2">
+                  {/* Card 1: Request Type */}
+                  <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-amber-400" />
                         <span className="font-semibold text-zinc-200 text-xs">Request Message Struct</span>
@@ -1164,66 +1271,59 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                           }
                         }}
                         className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 font-mono transition"
-                        title="Copy input struct name"
                       >
                         {copiedSpec === 'input' ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
                         <span>Copy Type</span>
                       </button>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <div className="text-[11px] text-zinc-400">
-                        Type Definition:{' '}
-                        <code className="text-amber-300 font-mono bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-[10px]">
+                    <div className="space-y-1 font-mono text-xs">
+                      <div className="text-[11px] text-zinc-400 flex items-center justify-between">
+                        <span>Type:</span>
+                        <code className="text-amber-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-[10px]">
                           {currentMethodObj.input_type || 'Unknown'}
                         </code>
                       </div>
-                      <div className="text-[10px] text-zinc-500 font-mono">
-                        Client Streaming: {currentMethodObj.is_client_streaming ? 'Enabled' : 'Disabled'}
+                      <div className="text-[11px] text-zinc-400 flex items-center justify-between">
+                        <span>Streaming:</span>
+                        <span className="text-zinc-300">
+                          {currentMethodObj.is_client_streaming ? 'Client Streaming' : 'Unary'}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Reflected Request Struct / Sample JSON Preview */}
-                    <div className="flex-1 flex flex-col min-h-0 pt-1">
-                      <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
-                        <span>Reflected Schema Preview:</span>
-                        {specSamplePayload && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(JSON.stringify(specSamplePayload, null, 2));
-                              setCopiedSpec('sample');
-                              setTimeout(() => setCopiedSpec(null), 2000);
-                            }}
-                            className="text-zinc-400 hover:text-zinc-200 flex items-center gap-1"
-                          >
-                            {copiedSpec === 'sample' ? <Check size={9} className="text-emerald-400" /> : <Copy size={9} />}
-                            <span>Copy JSON</span>
-                          </button>
-                        )}
-                      </div>
+                    {/* Toggle button: Show/Hide schema preview */}
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowReqSchemaPreview(!showReqSchemaPreview)}
+                        className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded px-2.5 py-1 transition flex items-center gap-1.5"
+                      >
+                        {showReqSchemaPreview ? <EyeOff size={12} /> : <Eye size={12} />}
+                        <span>{showReqSchemaPreview ? 'Hide schema preview' : 'Show schema preview'}</span>
+                      </button>
 
-                      <div className="flex-1 bg-zinc-950 border border-zinc-850 rounded p-2 overflow-auto font-mono text-[11px] text-zinc-300 leading-relaxed max-h-48">
-                        {sampleSpecLoading ? (
-                          <div className="text-zinc-500 italic py-4 text-center">Loading reflected structure...</div>
-                        ) : specSamplePayload ? (
-                          <pre className="whitespace-pre">
-                            {JSON.stringify(specSamplePayload, null, 2)}
-                          </pre>
-                        ) : payloadStr && payloadStr.trim() !== '{}' ? (
-                          <pre className="whitespace-pre">{payloadStr}</pre>
-                        ) : (
-                          <div className="text-zinc-500 italic py-4 text-center">
-                            Click 'Generate Example' on Message tab or invoke reflection to preview full message struct fields.
-                          </div>
-                        )}
-                      </div>
+                      {showReqSchemaPreview && (
+                        <div className="mt-2 bg-zinc-950 border border-zinc-850 rounded p-2.5 font-mono text-[11px] text-zinc-300 max-h-52 overflow-auto">
+                          {sampleSpecLoading ? (
+                            <span className="text-zinc-500 italic">Loading reflected structure...</span>
+                          ) : specSamplePayload ? (
+                            <pre className="whitespace-pre">
+                              {JSON.stringify(specSamplePayload, null, 2)}
+                            </pre>
+                          ) : payloadStr && payloadStr.trim() !== '{}' ? (
+                            <pre className="whitespace-pre">{payloadStr}</pre>
+                          ) : (
+                            <span className="text-zinc-500 italic">No schema structure available.</span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Card 2: Response Message Struct */}
-                  <div className="flex flex-col bg-zinc-900/60 border border-zinc-800/80 rounded-lg p-3 space-y-2 min-h-[220px]">
-                    <div className="flex items-center justify-between border-b border-zinc-800/60 pb-2">
+                  {/* Card 2: Response Type */}
+                  <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-400" />
                         <span className="font-semibold text-zinc-200 text-xs">Response Message Struct</span>
@@ -1238,68 +1338,64 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                           }
                         }}
                         className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 font-mono transition"
-                        title="Copy response struct name"
                       >
                         {copiedSpec === 'output' ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
                         <span>Copy Type</span>
                       </button>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <div className="text-[11px] text-zinc-400">
-                        Type Definition:{' '}
-                        <code className="text-emerald-300 font-mono bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-[10px]">
+                    <div className="space-y-1 font-mono text-xs">
+                      <div className="text-[11px] text-zinc-400 flex items-center justify-between">
+                        <span>Type:</span>
+                        <code className="text-emerald-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-[10px]">
                           {currentMethodObj.output_type || 'Unknown'}
                         </code>
                       </div>
-                      <div className="text-[10px] text-zinc-500 font-mono">
-                        Server Streaming: {currentMethodObj.is_server_streaming ? 'Enabled' : 'Disabled'}
+                      <div className="text-[11px] text-zinc-400 flex items-center justify-between">
+                        <span>Streaming:</span>
+                        <span className="text-zinc-300">
+                          {currentMethodObj.is_server_streaming ? 'Server Streaming' : 'Unary'}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Response Struct Details / Last Executed Schema Preview */}
-                    <div className="flex-1 flex flex-col min-h-0 pt-1">
-                      <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
-                        <span>Expected Response Contract:</span>
-                      </div>
+                    {/* Toggle button: Show/Hide schema preview */}
+                    <div className="pt-1">
+                      <button
+                        type="button"
+                        onClick={() => setShowResSchemaPreview(!showResSchemaPreview)}
+                        className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded px-2.5 py-1 transition flex items-center gap-1.5"
+                      >
+                        {showResSchemaPreview ? <EyeOff size={12} /> : <Eye size={12} />}
+                        <span>{showResSchemaPreview ? 'Hide schema preview' : 'Show schema preview'}</span>
+                      </button>
 
-                      <div className="flex-1 bg-zinc-950 border border-zinc-850 rounded p-2.5 overflow-auto font-mono text-[11px] text-zinc-300 leading-relaxed max-h-48">
-                        {lastGrpcResponse && lastGrpcResponse.body ? (
-                          <div className="space-y-1.5">
-                            <div className="text-[10px] text-emerald-400/90 font-sans font-medium flex items-center gap-1">
-                              <Check size={10} /> Runtime Verified Struct:
-                            </div>
-                            <pre className="whitespace-pre text-zinc-300">
+                      {showResSchemaPreview && (
+                        <div className="mt-2 bg-zinc-950 border border-zinc-850 rounded p-2.5 font-mono text-[11px] text-zinc-300 max-h-52 overflow-auto">
+                          {lastGrpcResponse && lastGrpcResponse.body ? (
+                            <pre className="whitespace-pre">
                               {typeof lastGrpcResponse.body === 'string'
                                 ? lastGrpcResponse.body
                                 : JSON.stringify(lastGrpcResponse.body, null, 2)}
                             </pre>
-                          </div>
-                        ) : (
-                          <div className="space-y-2 text-zinc-400 font-sans text-xs">
-                            <p>
-                              The gRPC server will serialize and return protobuf message instances of type{' '}
-                              <code className="text-emerald-300 font-mono text-[10px]">
-                                {currentMethodObj.output_type}
-                              </code>.
-                            </p>
-                            <p className="text-[11px] text-zinc-500">
-                              Execute an <strong className="text-zinc-300">Invoke</strong> call to inspect live decoded fields, status trailers, and stream frames in the Response section below.
-                            </p>
-                          </div>
-                        )}
-                      </div>
+                          ) : (
+                            <span className="text-zinc-500 italic">
+                              Invoke method to view live decoded response payload.
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center p-8 bg-zinc-900/40 border border-zinc-800/80 rounded-lg text-center">
-                <BookOpen size={32} className="text-zinc-600 mb-2" />
-                <h4 className="text-xs font-semibold text-zinc-300">No Method Specification Selected</h4>
-                <p className="text-[11px] text-zinc-500 max-w-sm mt-1">
-                  Select a gRPC service and method above or click <strong className="text-zinc-400">Reflection</strong> to load protobuf message descriptors from the server.
-                </p>
+              <div className="flex flex-col items-center justify-center p-8 text-center text-zinc-500">
+                <BookOpen size={28} className="text-zinc-600 mb-2" />
+                <span className="text-xs font-semibold text-zinc-300">No Method Specification</span>
+                <span className="text-[11px] text-zinc-500 mt-0.5">
+                  Select a gRPC service and method above to view its protobuf type definitions.
+                </span>
               </div>
             )}
           </div>

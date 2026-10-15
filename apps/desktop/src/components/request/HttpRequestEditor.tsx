@@ -4,9 +4,10 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection } from '@api-lab/api-types';
-import { Save, Plus, Trash2, Shield, Globe } from 'lucide-react';
+import { Save, Shield, Globe } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
+import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
 import { applyInheritedHttpAuth } from '../../utils/authInheritance';
@@ -353,7 +354,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
         <div className="flex items-center gap-2 flex-shrink-0">
           {statusMessage && (
-            <span className="text-[10px] font-mono text-indigo-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded select-text">
+            <span className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded select-text">
               {statusMessage}
             </span>
           )}
@@ -431,9 +432,6 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Params</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
-              {queryParams.length}
-            </span>
           </button>
           <button
             onClick={() => setActiveTab('headers')}
@@ -444,9 +442,6 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Headers</span>
-            <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
-              {headers.length}
-            </span>
           </button>
           <button
             onClick={() => setActiveTab('body')}
@@ -457,11 +452,6 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Body</span>
-            {bodyType !== 'none' && (
-              <span className="text-[9px] font-mono uppercase px-1 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
-                {bodyType}
-              </span>
-            )}
           </button>
           <button
             onClick={() => setActiveTab('auth')}
@@ -498,100 +488,28 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       <div className="flex-1 overflow-y-auto p-3 text-xs">
         {/* Params Panel */}
         {activeTab === 'params' && (
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-zinc-400 pb-1">
-              <span>Query Parameters</span>
-              <button
-                onClick={() => setQueryParams([...queryParams, ['', '']])}
-                className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
-              >
-                <Plus size={12} /> Add Param
-              </button>
-            </div>
-            {queryParams.map(([key, val], idx) => (
-              <div key={idx} className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={key}
-                  onChange={(e) => {
-                    const next = [...queryParams];
-                    next[idx][0] = e.target.value;
-                    setQueryParams(next);
-                  }}
-                  placeholder="Key"
-                  className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-indigo-500 h-7"
-                />
-                <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-7">
-                  <VariableInput
-                    value={val}
-                    onChange={(newVal) => {
-                      const next = [...queryParams];
-                      next[idx][1] = newVal;
-                      setQueryParams(next);
-                    }}
-                    variables={activeVariables}
-                    placeholder="Value (or {{VAR}})"
-                    className="w-full h-full"
-                  />
-                </div>
-                <button
-                  onClick={() => setQueryParams(queryParams.filter((_, i) => i !== idx))}
-                  className="text-zinc-500 hover:text-red-400 p-1"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
+          <KeyValueTable
+            title="Query Parameters"
+            items={queryParams}
+            onChange={setQueryParams}
+            variables={activeVariables}
+            keyPlaceholder="parameter"
+            valuePlaceholder="value (or {{VAR}})"
+            addLabel="Add Param"
+          />
         )}
 
         {/* Headers Panel */}
         {activeTab === 'headers' && (
-          <div className="space-y-2">
-            <div className="flex justify-between items-center text-zinc-400 pb-1">
-              <span>Request Headers</span>
-              <button
-                onClick={() => setHeaders([...headers, ['', '']])}
-                className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
-              >
-                <Plus size={12} /> Add Header
-              </button>
-            </div>
-            {headers.map(([key, val], idx) => (
-              <div key={idx} className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={key}
-                  onChange={(e) => {
-                    const next = [...headers];
-                    next[idx][0] = e.target.value;
-                    setHeaders(next);
-                  }}
-                  placeholder="Header Name"
-                  className="w-1/3 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 font-mono text-xs focus:outline-none focus:border-indigo-500 h-7"
-                />
-                <div className="flex-1 bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-7">
-                  <VariableInput
-                    value={val}
-                    onChange={(newVal) => {
-                      const next = [...headers];
-                      next[idx][1] = newVal;
-                      setHeaders(next);
-                    }}
-                    variables={activeVariables}
-                    placeholder="Header Value (or {{VAR}})"
-                    className="w-full h-full"
-                  />
-                </div>
-                <button
-                  onClick={() => setHeaders(headers.filter((_, i) => i !== idx))}
-                  className="text-zinc-500 hover:text-red-400 p-1"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
+          <KeyValueTable
+            title="Request Headers"
+            items={headers}
+            onChange={setHeaders}
+            variables={activeVariables}
+            keyPlaceholder="Header-Name"
+            valuePlaceholder="Header-Value (or {{VAR}})"
+            addLabel="Add Header"
+          />
         )}
 
         {/* Body Panel */}
@@ -650,7 +568,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="raw payload"
-                className="flex-1 w-full bg-zinc-900 border border-zinc-800 rounded p-3 font-mono text-xs focus:outline-none focus:border-indigo-500 resize-none h-64"
+                className="flex-1 w-full bg-zinc-900 border border-zinc-800 rounded p-3 font-mono text-xs focus:outline-none focus:border-zinc-700 resize-none h-64"
               />
             ) : null}
           </div>
@@ -666,7 +584,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 onChange={(e) =>
                   setAuth({ ...auth, auth_type: e.target.value as any })
                 }
-                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-indigo-500 font-mono"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-zinc-700 font-mono"
               >
                 <option value="inherit">Inherit auth from collection</option>
                 <option value="none">No Auth</option>
@@ -679,7 +597,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             {auth.auth_type === 'inherit' && (
               <div className="p-3 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-1">
                 <div className="text-zinc-200 font-medium flex items-center gap-1.5">
-                  <Shield size={13} className="text-indigo-400" />
+                  <Shield size={13} className="text-secondary" />
                   <span>Inherited from Collection: {collection?.name || 'Current'}</span>
                 </div>
                 <div className="text-zinc-400 text-[11px]">
@@ -697,7 +615,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             {auth.auth_type === 'bearer' && (
               <div>
                 <label className="block text-zinc-400 mb-1">Token</label>
-                <div className="bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-8">
+                <div className="bg-zinc-900 border border-zinc-800 rounded focus-within:border-zinc-700 h-8">
                   <VariableInput
                     value={auth.token || ''}
                     onChange={(newVal) => setAuth({ ...auth, token: newVal })}
@@ -717,7 +635,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                     type="text"
                     value={auth.username || ''}
                     onChange={(e) => setAuth({ ...auth, username: e.target.value })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-zinc-700"
                   />
                 </div>
                 <div>
@@ -726,7 +644,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                     type="password"
                     value={auth.password || ''}
                     onChange={(e) => setAuth({ ...auth, password: e.target.value })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-zinc-700"
                   />
                 </div>
               </div>
@@ -741,12 +659,12 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                     value={auth.header_name || ''}
                     onChange={(e) => setAuth({ ...auth, header_name: e.target.value })}
                     placeholder="X-API-Key"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-zinc-700"
                   />
                 </div>
                 <div>
                   <label className="block text-zinc-400 mb-1">Header Value</label>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded focus-within:border-indigo-500 h-8">
+                  <div className="bg-zinc-900 border border-zinc-800 rounded focus-within:border-zinc-700 h-8">
                     <VariableInput
                       value={auth.header_value || ''}
                       onChange={(newVal) => setAuth({ ...auth, header_value: newVal })}

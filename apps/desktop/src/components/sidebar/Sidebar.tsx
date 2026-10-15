@@ -50,16 +50,29 @@ export const Sidebar: React.FC = () => {
     setActiveEnvironmentId,
     logout,
     setMembersModalOpen,
+    setWorkspaceModalOpen,
     setCommandPaletteOpen,
     setShortcutsHelpOpen,
   } = useAppStore();
 
   const [newCollectionName, setNewCollectionName] = useState('');
   const [showAddCollection, setShowAddCollection] = useState(false);
-  const [newWsName, setNewWsName] = useState('');
-  const [showAddWs, setShowAddWs] = useState(false);
+  const [isWsDropdownOpen, setIsWsDropdownOpen] = useState(false);
+  const wsDropdownRef = useRef<HTMLDivElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [collapseSignal, setCollapseSignal] = useState(0);
+
+  // Close workspace dropdown on outside click
+  useEffect(() => {
+    if (!isWsDropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (wsDropdownRef.current && !wsDropdownRef.current.contains(e.target as Node)) {
+        setIsWsDropdownOpen(false);
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside);
+    return () => window.removeEventListener('mousedown', handleClickOutside);
+  }, [isWsDropdownOpen]);
 
   // Resizable sidebar state (New Feature 2)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -138,21 +151,6 @@ export const Sidebar: React.FC = () => {
     },
   });
 
-  // Create Workspace
-  const createWsMutation = useMutation({
-    mutationFn: (name: string) =>
-      apiRequest(`/workspaces`, {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      }),
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
-      setActiveWorkspaceId(data.id);
-      setNewWsName('');
-      setShowAddWs(false);
-    },
-  });
-
   // Delete Collection
   const deleteCollectionMutation = useMutation({
     mutationFn: (id: string) =>
@@ -162,55 +160,113 @@ export const Sidebar: React.FC = () => {
     },
   });
 
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
       className="relative bg-zinc-950 border-r border-zinc-800/80 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
     >
       {/* Workspace Switcher */}
-      <div className="p-3 border-b border-zinc-800/80 flex items-center justify-between">
-        <div className="flex-1 mr-2 flex items-center gap-2 min-w-0">
-          <span className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-300 border border-zinc-700/60 font-mono flex-shrink-0">
-            {workspaces.find((w) => w.id === activeWorkspaceId)?.name?.[0]?.toUpperCase() || 'W'}
-          </span>
-          <select
-            value={activeWorkspaceId || ''}
-            onChange={(e) => setActiveWorkspaceId(e.target.value)}
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs font-semibold text-zinc-100 focus:outline-none focus:border-indigo-500 truncate"
+      <div className="p-2.5 border-b border-zinc-800/80 flex items-center gap-2 relative select-none">
+        {/* Workspace Emblem */}
+        <span className="w-6 h-6 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[11px] text-zinc-300 font-mono font-semibold flex-shrink-0">
+          {activeWorkspace?.name?.[0]?.toUpperCase() || 'W'}
+        </span>
+
+        {/* Minimalist Modern Dropdown Button */}
+        <div className="flex-1 relative min-w-0" ref={wsDropdownRef}>
+          <button
+            type="button"
+            onClick={() => setIsWsDropdownOpen(!isWsDropdownOpen)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700/80 text-xs text-zinc-200 transition shadow-sm group"
+            title={activeWorkspace ? `${activeWorkspace.name} (${activeWorkspace.role})` : 'Select Workspace'}
           >
-            {workspaces.map((ws) => (
-              <option key={ws.id} value={ws.id}>
-                {ws.name} ({ws.role})
-              </option>
-            ))}
-          </select>
+            <div className="flex items-center gap-1.5 truncate">
+              <span className="font-semibold text-zinc-100 truncate">
+                {activeWorkspace?.name || 'Select Workspace'}
+              </span>
+              {activeWorkspace && (
+                <span className="text-[10px] text-zinc-500 font-mono lowercase">
+                  ({activeWorkspace.role})
+                </span>
+              )}
+            </div>
+            <ChevronDown
+              size={13}
+              className={`text-zinc-500 group-hover:text-zinc-300 transition-transform flex-shrink-0 ml-1 ${
+                isWsDropdownOpen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {/* Minimalist Modern Floating Dropdown Menu */}
+          {isWsDropdownOpen && (
+            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 font-sans">
+              <div className="px-2 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                Workspaces
+              </div>
+              <div className="max-h-52 overflow-y-auto space-y-0.5 pr-0.5">
+                {workspaces.map((ws) => {
+                  const isCurrent = ws.id === activeWorkspaceId;
+                  return (
+                    <button
+                      key={ws.id}
+                      type="button"
+                      onClick={() => {
+                        setActiveWorkspaceId(ws.id);
+                        setIsWsDropdownOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition text-left ${
+                        isCurrent
+                          ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
+                          : 'text-zinc-300 hover:text-white hover:bg-zinc-900/60 border border-transparent'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="w-5 h-5 rounded bg-zinc-850 border border-zinc-800 flex items-center justify-center text-[10px] text-zinc-400 font-mono font-medium flex-shrink-0">
+                          {ws.name?.[0]?.toUpperCase() || 'W'}
+                        </span>
+                        <span className="truncate">{ws.name}</span>
+                        <span className="text-[10px] text-zinc-500 font-mono">
+                          ({ws.role})
+                        </span>
+                      </div>
+                      {isCurrent && (
+                        <Check size={12} className="text-primary flex-shrink-0 ml-1" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="h-px bg-zinc-850 my-1" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsWsDropdownOpen(false);
+                  setWorkspaceModalOpen(true);
+                }}
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-zinc-300 hover:text-white hover:bg-zinc-900/60 transition text-left"
+              >
+                <Settings size={12} className="text-zinc-400" />
+                <span>Workspace Settings...</span>
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Setting Button directly opening Workspace Settings Modal */}
         <button
-          onClick={() => setShowAddWs(!showAddWs)}
-          className="p-1 hover:text-white rounded hover:bg-zinc-800 text-zinc-400"
-          title="Create New Workspace"
+          type="button"
+          onClick={() => setWorkspaceModalOpen(true)}
+          className="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 rounded-lg transition border border-transparent hover:border-zinc-800 flex-shrink-0"
+          title="Workspace Settings"
         >
-          <Plus size={14} />
+          <Settings size={14} />
         </button>
       </div>
-
-      {showAddWs && (
-        <div className="p-2 border-b border-zinc-800 flex gap-1 bg-zinc-900/60">
-          <input
-            type="text"
-            value={newWsName}
-            onChange={(e) => setNewWsName(e.target.value)}
-            placeholder="New workspace..."
-            className="flex-1 bg-zinc-950 border border-zinc-700/60 rounded px-2 py-0.5 text-xs text-zinc-200"
-          />
-          <button
-            onClick={() => newWsName.trim() && createWsMutation.mutate(newWsName.trim())}
-            className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded text-xs"
-          >
-            Add
-          </button>
-        </div>
-      )}
 
       {/* Searchbar in Collection (Feature 5) */}
       <div className="px-3 py-2 border-b border-zinc-800/80 bg-zinc-900/40">
@@ -221,7 +277,7 @@ export const Sidebar: React.FC = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search collections & endpoints..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded pl-7 pr-12 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-indigo-500"
+            className="w-full bg-zinc-950 border border-zinc-800 rounded pl-7 pr-12 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
           />
           {searchQuery ? (
             <button
@@ -247,7 +303,7 @@ export const Sidebar: React.FC = () => {
       {/* Collections Header (Result V3) */}
       <div className="flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider select-none">
         <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+          <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
           <span>Collections</span>
         </div>
         <div className="flex items-center gap-1 text-zinc-400">
@@ -282,7 +338,7 @@ export const Sidebar: React.FC = () => {
               newCollectionName.trim() &&
               createCollectionMutation.mutate(newCollectionName.trim())
             }
-            className="bg-indigo-600 hover:bg-indigo-500 text-white px-2 py-0.5 rounded text-xs"
+            className="bg-primary hover:bg-primary-hover text-white px-2 py-0.5 rounded text-xs"
           >
             Add
           </button>
@@ -317,7 +373,7 @@ export const Sidebar: React.FC = () => {
         <div className="flex items-center gap-1 text-zinc-400">
           <button
             onClick={() => setShortcutsHelpOpen(true)}
-            className="p-1 hover:text-indigo-400 hover:bg-zinc-900 rounded transition"
+            className="p-1 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
             title="Keyboard Shortcuts (Ctrl+/)"
           >
             <Keyboard size={13} />
@@ -342,7 +398,7 @@ export const Sidebar: React.FC = () => {
       {/* Horizontal Resizable Splitter Handle (New Feature 2) */}
       <div
         onMouseDown={startResizing}
-        className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500/80 active:bg-indigo-500 transition-colors z-40"
+        className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize hover:bg-zinc-700 active:bg-zinc-600 transition-colors z-40"
         title="Drag to resize sidebar width"
       />
     </aside>
@@ -511,7 +567,7 @@ const CollectionNode: React.FC<{
                 if (e.key === 'Escape') setIsRenaming(false);
               }}
               autoFocus
-              className="bg-zinc-950 border border-indigo-500 rounded px-1.5 py-0.5 text-xs text-zinc-100 flex-1 focus:outline-none"
+              className="bg-zinc-950 border border-zinc-700 rounded px-1.5 py-0.5 text-xs text-zinc-100 flex-1 focus:outline-none"
             />
             <button onClick={handleSaveRename} className="p-1 hover:text-emerald-400 text-zinc-400">
               <Check size={12} />
@@ -533,7 +589,7 @@ const CollectionNode: React.FC<{
             <span className="truncate font-semibold">{collection.name}</span>
             {collection.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
               <span title="Shared Auth configured">
-                <Shield size={11} className="text-indigo-400 flex-shrink-0" />
+                <Shield size={11} className="text-secondary flex-shrink-0" />
               </span>
             )}
           </button>
@@ -543,14 +599,14 @@ const CollectionNode: React.FC<{
           <button
             onClick={() => setShowSettingsModal(true)}
             title="Collection Setting"
-            className="p-1 hover:text-indigo-400 text-zinc-400"
+            className="p-1 hover:text-zinc-200 text-zinc-400"
           >
             <Settings size={12} />
           </button>
           <button
             onClick={() => setShowAddEndpoint(!showAddEndpoint)}
             title="Add Endpoint"
-            className="p-1 hover:text-indigo-400 text-zinc-400"
+            className="p-1 hover:text-zinc-200 text-zinc-400"
           >
             <Plus size={12} />
           </button>
@@ -592,7 +648,7 @@ const CollectionNode: React.FC<{
             }}
             className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
           >
-            <Settings size={12} className="text-indigo-400" />
+            <Settings size={12} className="text-zinc-400" />
             <span>Setting</span>
           </button>
           <div className="h-px bg-zinc-800 my-1" />
@@ -604,7 +660,7 @@ const CollectionNode: React.FC<{
             }}
             className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
           >
-            <Plus size={12} className="text-indigo-400" />
+            <Plus size={12} className="text-zinc-400" />
             <span>Add Endpoint</span>
           </button>
           <button
@@ -625,7 +681,7 @@ const CollectionNode: React.FC<{
             }}
             className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
           >
-            <FolderPlus size={12} className="text-purple-400" />
+            <FolderPlus size={12} className="text-secondary" />
             <span>Generate gRPC</span>
           </button>
           <button
@@ -635,7 +691,7 @@ const CollectionNode: React.FC<{
             }}
             className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
           >
-            <RefreshCw size={12} className="text-cyan-400" />
+            <RefreshCw size={12} className="text-zinc-400" />
             <span>Sync Reflection</span>
           </button>
           <div className="h-px bg-zinc-800 my-1" />
@@ -663,7 +719,7 @@ const CollectionNode: React.FC<{
           />
           <button
             onClick={() => folderName.trim() && createFolderMutation.mutate(folderName.trim())}
-            className="bg-indigo-600 px-2 rounded text-xs text-white"
+            className="bg-primary hover:bg-primary-hover px-2 rounded text-xs text-white"
           >
             +
           </button>
@@ -708,7 +764,7 @@ const CollectionNode: React.FC<{
                   });
                 }
               }}
-              className="bg-indigo-600 hover:bg-indigo-500 px-2 rounded text-xs text-white"
+              className="bg-primary hover:bg-primary-hover px-2 rounded text-xs text-white"
               title={endpointProtocol === 'grpc_reflection' ? 'Generate gRPC' : 'Add Endpoint'}
             >
               +
@@ -857,7 +913,7 @@ const FolderTreeNodeComponent: React.FC<{
           <button
             onClick={() => setShowAddSubEndpoint(!showAddSubEndpoint)}
             title="Add Endpoint in this folder"
-            className="p-0.5 hover:text-indigo-400"
+            className="p-0.5 hover:text-zinc-200"
           >
             <Plus size={11} />
           </button>
@@ -889,7 +945,7 @@ const FolderTreeNodeComponent: React.FC<{
           />
           <button
             onClick={() => subFolderName.trim() && createSubFolderMutation.mutate(subFolderName.trim())}
-            className="bg-indigo-600 px-2 rounded text-xs text-white"
+            className="bg-primary hover:bg-primary-hover px-2 rounded text-xs text-white"
           >
             +
           </button>
@@ -921,7 +977,7 @@ const FolderTreeNodeComponent: React.FC<{
                 protocol: subEndpointProtocol,
               })
             }
-            className="bg-indigo-600 px-2 rounded text-xs text-white"
+            className="bg-primary hover:bg-primary-hover px-2 rounded text-xs text-white"
           >
             +
           </button>
@@ -968,8 +1024,8 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
       }}
       className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition text-left group ${
         isActive
-          ? 'bg-indigo-950/50 text-indigo-100 font-medium border border-indigo-500/40 shadow-sm shadow-indigo-950/50'
-          : 'hover:bg-zinc-900 text-zinc-300 hover:text-white'
+          ? 'bg-zinc-900 text-zinc-100 font-medium border border-zinc-800 shadow-sm'
+          : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200'
       }`}
     >
       <div className="flex items-center gap-1.5 truncate">
@@ -977,12 +1033,12 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
           <span
             className={`text-[9px] font-bold font-mono px-1 rounded ${
               method === 'GET'
-                ? 'text-emerald-400 bg-emerald-950/50'
+                ? 'text-emerald-400 bg-emerald-950/40 border border-emerald-900/40'
                 : method === 'POST'
-                ? 'text-blue-400 bg-blue-950/50'
+                ? 'text-primary bg-primary-subtle border border-primary-border'
                 : method === 'PUT' || method === 'PATCH'
-                ? 'text-amber-400 bg-amber-950/50'
-                : 'text-red-400 bg-red-950/50'
+                ? 'text-amber-400 bg-amber-950/40 border border-amber-900/40'
+                : 'text-red-400 bg-red-950/40 border border-red-900/40'
             }`}
           >
             {method}
@@ -991,7 +1047,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
           /* gRPC Stream Bidirectional Icon (Yellow badge) */
           <span
             title="gRPC Bidirectional Stream"
-            className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/60 border border-amber-800/60 flex items-center gap-0.5"
+            className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5"
           >
             <ArrowLeftRight size={9} /> STREAM
           </span>
@@ -999,15 +1055,15 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
           /* gRPC Stream Omnidirectional Icon (Yellow badge) */
           <span
             title="gRPC Omnidirectional Stream"
-            className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/60 border border-amber-800/60 flex items-center gap-0.5"
+            className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5"
           >
             <ArrowDownUp size={9} /> STREAM
           </span>
         ) : (
-          /* gRPC Unary Icon (Indigo badge) */
+          /* gRPC Unary Icon (Subtle badge) */
           <span
             title="gRPC Unary Call"
-            className="text-[9px] font-bold font-mono px-1 rounded text-indigo-300 bg-indigo-950/70 border border-indigo-700/50 flex items-center gap-0.5"
+            className="text-[9px] font-bold font-mono px-1 rounded text-zinc-300 bg-zinc-900 border border-zinc-800 flex items-center gap-0.5"
           >
             <Radio size={9} /> gRPC
           </span>

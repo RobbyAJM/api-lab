@@ -106,7 +106,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
           <div className="flex items-center gap-2">
-            <Shield size={15} className="text-indigo-400" />
+            <Shield size={15} className="text-secondary" />
             <h2 className="text-xs font-semibold text-zinc-100">
               Collection Settings — {collection.name}
             </h2>
@@ -133,7 +133,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
             <select
               value={authType}
               onChange={(e) => setAuthType(e.target.value as any)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-mono"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono"
             >
               <option value="none">No Auth (Inherit Disabled)</option>
               <option value="bearer">Bearer Token (JWT / API Token)</option>
@@ -145,7 +145,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
           {authType === 'bearer' && (
             <div className="space-y-1">
               <label className="block text-zinc-400">Bearer Token</label>
-              <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-indigo-500 h-8">
+              <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-700 h-8">
                 <VariableInput
                   value={token}
                   onChange={setToken}
@@ -169,7 +169,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="username or {{USER}}"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
                 />
               </div>
               <div>
@@ -179,7 +179,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="password or {{PASS}}"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
                 />
               </div>
             </div>
@@ -194,12 +194,12 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
                   value={headerName}
                   onChange={(e) => setHeaderName(e.target.value)}
                   placeholder="e.g. X-API-Key or x-client-id"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
                 />
               </div>
               <div>
                 <label className="block text-zinc-400 mb-1">Header Value</label>
-                <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-indigo-500 h-8">
+                <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-700 h-8">
                   <VariableInput
                     value={headerValue}
                     onChange={setHeaderValue}
@@ -213,7 +213,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
           )}
 
           {statusMessage && (
-            <div className="p-2 bg-zinc-950 border border-zinc-800 rounded text-xs font-mono text-indigo-300 flex items-center gap-1.5">
+            <div className="p-2 bg-zinc-950 border border-zinc-800 rounded text-xs font-mono text-zinc-300 flex items-center gap-1.5">
               <Check size={12} className="text-emerald-400" />
               <span>{statusMessage}</span>
             </div>
@@ -232,7 +232,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
               type="button"
               onClick={() => updateMutation.mutate()}
               disabled={updateMutation.isPending}
-              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded text-xs font-medium flex items-center gap-1.5 shadow transition"
+              className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded text-xs font-medium flex items-center gap-1.5 shadow transition"
             >
               <Save size={12} />
               <span>{updateMutation.isPending ? 'Saving...' : 'Save Settings'}</span>

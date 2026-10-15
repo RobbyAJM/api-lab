@@ -50,7 +50,7 @@ export const EmptyWorkspaceView: React.FC = () => {
           <path d="M78 98l-18 20" />
           <path d="M122 98l20 22" />
         </svg>
-        <div className="absolute inset-0 rounded-full bg-gradient-to-b from-indigo-500/5 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 rounded-full bg-gradient-to-b from-primary/5 to-transparent pointer-events-none" />
       </div>
 
       {/* Action Shortcuts Menu */}

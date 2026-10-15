@@ -188,7 +188,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950/50">
           <div className="flex items-center gap-2">
-            <Radio size={16} className="text-purple-400" />
+            <Radio size={16} className="text-secondary" />
             <h2 className="text-xs font-semibold text-zinc-100">
               Generate gRPC
             </h2>
@@ -214,7 +214,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
               onChange={(e) => setFolderName(e.target.value)}
               placeholder="e.g. NuTrade Services or Payment API"
               disabled={loading}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-purple-500"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
             />
             <p className="text-[10px] text-zinc-500 mt-1">
               Creates folder structure: {folderName || '{folder}'} / {'{service}'} / {'{method}'}
@@ -225,7 +225,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
             <label className="block text-zinc-400 font-medium mb-1">
               gRPC Server Address
             </label>
-            <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-purple-500">
+            <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-700">
               <VariableInput
                 value={serverAddress}
                 onChange={(val) => {
@@ -251,7 +251,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
                 checked={useTls}
                 onChange={(e) => setUseTls(e.target.checked)}
                 disabled={loading}
-                className="rounded bg-zinc-950 border-zinc-700 text-purple-600 focus:ring-0"
+                className="rounded bg-zinc-950 border-zinc-700 text-primary focus:ring-0"
               />
               <span className="text-zinc-300">Use TLS (Transport Layer Security)</span>
             </label>
@@ -262,7 +262,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
                 checked={generatePayloads}
                 onChange={(e) => setGeneratePayloads(e.target.checked)}
                 disabled={loading}
-                className="rounded bg-zinc-950 border-zinc-700 text-purple-600 focus:ring-0"
+                className="rounded bg-zinc-950 border-zinc-700 text-primary focus:ring-0"
               />
               <span className="text-zinc-300">
                 Pre-generate sample JSON payloads from protobuf schemas
@@ -277,8 +277,8 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
           )}
 
           {statusText && (
-            <div className="p-2.5 bg-zinc-950 border border-zinc-800 rounded text-purple-300 text-xs font-mono flex items-center gap-2">
-              <RefreshCw size={12} className="animate-spin" />
+            <div className="p-2.5 bg-zinc-950 border border-zinc-800 rounded text-zinc-300 text-xs font-mono flex items-center gap-2">
+              <RefreshCw size={12} className="animate-spin text-primary" />
               <span>{statusText}</span>
             </div>
           )}
@@ -303,7 +303,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
             <button
               type="submit"
               disabled={loading}
-              className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded font-medium text-xs flex items-center gap-1.5 shadow transition"
+              className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded font-medium text-xs flex items-center gap-1.5 shadow transition"
             >
               {loading ? (
                 <>

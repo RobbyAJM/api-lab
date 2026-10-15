@@ -1,3 +1,5 @@
+import type { EditorHistory } from './editorHistory';
+
 /**
  * Pure functions for IDE-grade keyboard interactions in code editors:
  * - Tab & Shift+Tab indentation (single-line and multi-line selection)
@@ -286,8 +288,45 @@ export function handleEditorKeyDown(
   text: string,
   start: number,
   end: number,
-  action: EditorKeyAction
+  action: EditorKeyAction,
+  history?: EditorHistory
 ): EditorChangeResult | null {
+  const isMod = !!(action.ctrlKey || action.metaKey);
+
+  // Undo (Ctrl+Z / Cmd+Z)
+  if (isMod && !action.shiftKey && (action.key === 'z' || action.key === 'Z')) {
+    if (history) {
+      const prev = history.undo(text, start, end);
+      if (prev) {
+        return {
+          text: prev.text,
+          selectionStart: prev.selectionStart,
+          selectionEnd: prev.selectionEnd,
+        };
+      }
+      return { text, selectionStart: start, selectionEnd: end };
+    }
+  }
+
+  // Redo (Ctrl+Y / Cmd+Shift+Z / Ctrl+Shift+Z)
+  if (
+    isMod &&
+    ((action.key === 'y' || action.key === 'Y') ||
+      (action.shiftKey && (action.key === 'z' || action.key === 'Z')))
+  ) {
+    if (history) {
+      const next = history.redo();
+      if (next) {
+        return {
+          text: next.text,
+          selectionStart: next.selectionStart,
+          selectionEnd: next.selectionEnd,
+        };
+      }
+      return { text, selectionStart: start, selectionEnd: end };
+    }
+  }
+
   // Tab / Shift+Tab
   if (action.key === 'Tab') {
     return handleTabIndentation(text, start, end, Boolean(action.shiftKey));

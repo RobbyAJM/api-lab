@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { tokenizeJsonLine, type VariableSource } from '../../utils/variableHighlight';
 import { handleEditorKeyDown } from '../../utils/editorKeyboard';
+import { EditorHistory } from '../../utils/editorHistory';
 
 interface JsonEditorProps {
   value: string;
@@ -20,13 +21,19 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
+  const historyRef = useRef<EditorHistory | null>(null);
   const [formatError, setFormatError] = React.useState<string | null>(null);
+
+  if (!historyRef.current) {
+    historyRef.current = new EditorHistory(value, 0, 0);
+  }
 
   function handleBeautify() {
     setFormatError(null);
     try {
       const parsed = JSON.parse(value);
       const formatted = JSON.stringify(parsed, null, 2);
+      historyRef.current?.recordChange(formatted, 0, 0, true);
       onChange(formatted);
     } catch (err: any) {
       setFormatError(`Invalid JSON: ${err.message}`);
@@ -39,6 +46,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     try {
       const parsed = JSON.parse(value);
       const minified = JSON.stringify(parsed);
+      historyRef.current?.recordChange(minified, 0, 0, true);
       onChange(minified);
     } catch (err: any) {
       setFormatError(`Invalid JSON: ${err.message}`);
@@ -70,11 +78,17 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
         ctrlKey: e.ctrlKey,
         metaKey: e.metaKey,
         altKey: e.altKey,
-      }
+      },
+      historyRef.current || undefined
     );
 
     if (result) {
       e.preventDefault();
+      // If it wasn't an undo/redo (it's tab, enter, pair), record to history
+      const isUndoRedo = (e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y');
+      if (!isUndoRedo && historyRef.current) {
+        historyRef.current.recordChange(result.text, result.selectionStart, result.selectionEnd, true);
+      }
       onChange(result.text);
       requestAnimationFrame(() => {
         if (textareaRef.current) {
@@ -82,6 +96,17 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
         }
       });
     }
+  }
+
+  function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    const nextVal = e.target.value;
+    historyRef.current?.recordChange(
+      nextVal,
+      e.target.selectionStart,
+      e.target.selectionEnd,
+      false
+    );
+    onChange(nextVal);
   }
 
   const lineCount = Math.max(1, value.split('\n').length);
@@ -101,7 +126,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
                 ? 'text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-800/50 px-0.5 rounded'
                 : 'text-rose-300 font-bold bg-rose-950/60 border border-rose-800/50 px-0.5 rounded';
             } else if (token.type === 'key') {
-              colorClass = 'text-indigo-400 font-medium';
+              colorClass = 'text-secondary font-medium';
             } else if (token.type === 'string') {
               colorClass = 'text-emerald-300';
             } else if (token.type === 'boolean') {
@@ -150,7 +175,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
           <button
             type="button"
             onClick={handleBeautify}
-            className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-indigo-300 hover:text-white rounded font-medium transition"
+            className="px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded font-medium transition"
             title="Prettify and indent JSON"
           >
             Beautify
@@ -197,12 +222,12 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
           <textarea
             ref={textareaRef}
             value={value}
-            onChange={(e) => onChange(e.target.value)}
+            onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             onScroll={handleScroll}
             placeholder={placeholder}
             spellCheck={false}
-            className="absolute inset-0 w-full h-full m-0 py-3 px-3 font-mono text-xs leading-5 bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-indigo-600/40 whitespace-pre"
+            className="absolute inset-0 w-full h-full m-0 py-3 px-3 font-mono text-xs leading-5 bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-primary/40 whitespace-pre"
           />
         </div>
       </div>
