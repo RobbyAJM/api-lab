@@ -33,6 +33,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .connect(&db_url)
         .await?;
 
+    tracing::info!("Running database migrations...");
+    sqlx::migrate!("../../migrations").run(&pool).await?;
+
     let (tx_ws, _) = broadcast::channel(1024);
 
     let state = Arc::new(AppState {
