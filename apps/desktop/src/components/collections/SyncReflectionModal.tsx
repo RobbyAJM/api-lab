@@ -312,8 +312,14 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
       plan.methodsToUpdate.length > 0);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+    <div
+      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={() => !syncing && onClose()}
+    >
+      <div
+        className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
           <div className="flex items-center gap-2 min-w-0">
