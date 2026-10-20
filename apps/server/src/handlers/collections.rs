@@ -320,10 +320,31 @@ pub async fn delete_folder(
     let ws_id = get_workspace_id_for_collection(&state.pool, folder.collection_id).await?;
     let _ = get_workspace_role(&state.pool, ws_id, auth.user.id).await?;
 
+    let mut tx = state.pool.begin().await.map_err(ApiError::Database)?;
+
+    // Recursively delete all endpoints in this folder and its descendant subfolders
+    sqlx::query!(
+        r#"
+        WITH RECURSIVE subfolders AS (
+            SELECT id FROM collection_folders WHERE id = $1
+            UNION ALL
+            SELECT cf.id FROM collection_folders cf
+            INNER JOIN subfolders s ON cf.parent_folder_id = s.id
+        )
+        DELETE FROM endpoints WHERE folder_id IN (SELECT id FROM subfolders)
+        "#,
+        id
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(ApiError::Database)?;
+
     sqlx::query!("DELETE FROM collection_folders WHERE id = $1", id)
-        .execute(&state.pool)
+        .execute(&mut *tx)
         .await
         .map_err(ApiError::Database)?;
+
+    tx.commit().await.map_err(ApiError::Database)?;
 
     let _ = state.tx_ws.send(WsSyncEvent {
         workspace_id: ws_id,

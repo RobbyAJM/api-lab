@@ -182,3 +182,47 @@ export function filterCollectionTree(
     totalMatches,
   };
 }
+
+/**
+ * Returns a Set containing the target folder ID and all its recursive descendant folder IDs.
+ */
+export function getDescendantFolderIds(
+  folders: CollectionFolder[],
+  targetFolderId: string
+): Set<string> {
+  const result = new Set<string>([targetFolderId]);
+  let added = true;
+
+  while (added) {
+    added = false;
+    for (const folder of folders) {
+      if (folder.parent_folder_id && result.has(folder.parent_folder_id) && !result.has(folder.id)) {
+        result.add(folder.id);
+        added = true;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Simulates cascade deletion of a folder, removing the folder, its subfolders,
+ * and all endpoints contained anywhere within the deleted subtree.
+ */
+export function cascadeDeleteFolder(
+  folders: CollectionFolder[],
+  endpoints: Endpoint[],
+  targetFolderId: string
+): {
+  remainingFolders: CollectionFolder[];
+  remainingEndpoints: Endpoint[];
+} {
+  const targetIds = getDescendantFolderIds(folders, targetFolderId);
+
+  return {
+    remainingFolders: folders.filter((f) => !targetIds.has(f.id)),
+    remainingEndpoints: endpoints.filter((ep) => !ep.folder_id || !targetIds.has(ep.folder_id)),
+  };
+}
+

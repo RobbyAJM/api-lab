@@ -68,6 +68,11 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     const textarea = textareaRef.current;
     if (!textarea) return;
 
+    // Ignore Ctrl+Enter / Cmd+Enter: parent shortcut runner executes request
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      return;
+    }
+
     const result = handleEditorKeyDown(
       value,
       textarea.selectionStart,

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   buildFolderTree,
   filterCollectionTree,
+  getDescendantFolderIds,
+  cascadeDeleteFolder,
 } from './folderTree.ts';
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
 
@@ -157,3 +159,37 @@ test('filterCollectionTree: filters by protocol or method', () => {
   // Deep Nested Action has POST
   assert.ok(res.matchedFolderIds.has('f-grandchild-sub'));
 });
+
+test('getDescendantFolderIds: finds folder and all recursive subfolders', () => {
+  // f-root-1 contains f-child-auth, which contains f-grandchild-sub
+  const descendants = getDescendantFolderIds(mockFolders, 'f-root-1');
+  assert.equal(descendants.size, 3);
+  assert.ok(descendants.has('f-root-1'));
+  assert.ok(descendants.has('f-child-auth'));
+  assert.ok(descendants.has('f-grandchild-sub'));
+  assert.ok(!descendants.has('f-root-2'));
+});
+
+test('cascadeDeleteFolder: deletes folder, subfolders, and endpoints without dumping endpoints to root', () => {
+  const { remainingFolders, remainingEndpoints } = cascadeDeleteFolder(
+    mockFolders,
+    mockEndpoints,
+    'f-root-1'
+  );
+
+  // Folders inside root-1 deleted, root-2 remains
+  assert.equal(remainingFolders.length, 1);
+  assert.equal(remainingFolders[0].id, 'f-root-2');
+
+  // Endpoints: ep-login, ep-profile, ep-deep deleted. Only ep-root remains
+  assert.equal(remainingEndpoints.length, 1);
+  assert.equal(remainingEndpoints[0].id, 'ep-root');
+
+  // Verify resulting tree has no orphaned endpoints at root
+  const tree = buildFolderTree(remainingFolders, remainingEndpoints);
+  assert.equal(tree.rootEndpoints.length, 1);
+  assert.equal(tree.rootEndpoints[0].name, 'Root Health Check');
+  assert.equal(tree.rootFolders.length, 1);
+  assert.equal(tree.rootFolders[0].endpoints.length, 0);
+});
+

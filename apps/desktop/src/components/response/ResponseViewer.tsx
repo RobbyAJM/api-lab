@@ -23,11 +23,9 @@ import {
   detectResponseFormat,
   formatResponseBody,
 } from '../../utils/responseDetector';
-import {
-  getGrpcStatusLabel,
-  formatExecutionError,
-} from '../../utils/grpcSpecification';
+import { getGrpcStatusLabel, formatExecutionError } from '../../utils/grpcSpecification';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -97,11 +95,13 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   });
 
   // Delete saved response mutation
+  const [showDeleteSavedModal, setShowDeleteSavedModal] = useState(false);
   const deleteSavedMutation = useMutation({
     mutationFn: () =>
       apiRequest(`/endpoints/${endpoint.id}/saved-response`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['saved_response', endpoint.id] });
+      setShowDeleteSavedModal(false);
     },
   });
 
@@ -727,7 +727,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                       )}
                     </button>
                     <button
-                      onClick={() => deleteSavedMutation.mutate()}
+                      onClick={() => setShowDeleteSavedModal(true)}
                       className="text-red-400 hover:text-red-300 p-1"
                       title="Delete saved response"
                     >
@@ -763,6 +763,14 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           </div>
         )}
       </div>
+
+      <ConfirmDeleteModal
+        isOpen={showDeleteSavedModal}
+        type="saved_response"
+        isPending={deleteSavedMutation.isPending}
+        onConfirm={() => deleteSavedMutation.mutate()}
+        onClose={() => setShowDeleteSavedModal(false)}
+      />
     </div>
   );
 };
