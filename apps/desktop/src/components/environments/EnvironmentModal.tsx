@@ -231,17 +231,17 @@ export const EnvironmentModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-sans"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 font-sans"
       onClick={() => setEnvModalOpen(false)}
     >
       <div
-        className="w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col h-[650px] text-zinc-100 overflow-hidden"
+        className="w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl flex flex-col h-[650px] text-zinc-100 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800 bg-zinc-900/40">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-zinc-800/60 border border-zinc-700/60 text-zinc-300">
+            <div className="p-2 rounded bg-zinc-800/60 border border-zinc-700/60 text-zinc-300">
               <Database size={20} />
             </div>
             <div>
@@ -258,7 +258,7 @@ export const EnvironmentModal: React.FC = () => {
           </div>
           <button
             onClick={() => setEnvModalOpen(false)}
-            className="p-1.5 hover:bg-zinc-800 rounded-lg text-zinc-400 hover:text-zinc-200 transition"
+            className="p-1.5 hover:bg-zinc-800 rounded text-zinc-400 hover:text-zinc-200 transition"
           >
             <X size={16} />
           </button>
@@ -283,7 +283,7 @@ export const EnvironmentModal: React.FC = () => {
 
             {/* New Environment Input Form */}
             {showAddEnv && (
-              <div className="flex gap-1.5 p-2 bg-zinc-900/80 border border-zinc-700/80 rounded-lg">
+              <div className="flex gap-1.5 p-2 bg-zinc-900/80 border border-zinc-700/80 rounded-md">
                 <input
                   type="text"
                   value={newEnvName}
@@ -324,7 +324,7 @@ export const EnvironmentModal: React.FC = () => {
                     return (
                       <div
                         key={env.id}
-                        className="p-1.5 bg-zinc-900 border border-zinc-700 rounded-lg space-y-1"
+                        className="p-1.5 bg-zinc-900 border border-zinc-700 rounded-md space-y-1"
                       >
                         <div className="flex items-center gap-1">
                           <input
@@ -366,7 +366,7 @@ export const EnvironmentModal: React.FC = () => {
                       key={env.id}
                       onClick={() => setSelectedEnvId(env.id)}
                       onDoubleClick={() => startRenamingEnv(env)}
-                      className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs transition cursor-pointer group ${
+                      className={`flex items-center justify-between px-3 py-2 rounded-md text-xs transition cursor-pointer group ${
                         isSelected
                           ? 'bg-zinc-800 text-white font-medium border border-zinc-700 shadow-sm'
                           : 'hover:bg-zinc-900/80 text-zinc-300 border border-transparent'
@@ -464,7 +464,7 @@ export const EnvironmentModal: React.FC = () => {
                       value={varSearchQuery}
                       onChange={(e) => setVarSearchQuery(e.target.value)}
                       placeholder="Filter variables..."
-                      className="w-56 bg-zinc-900 border border-zinc-800 rounded-lg pl-8 pr-3 py-1 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+                      className="w-56 bg-zinc-900 border border-zinc-800 rounded-md pl-8 pr-3 py-1 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
                     />
                     {varSearchQuery && (
                       <button
@@ -478,7 +478,7 @@ export const EnvironmentModal: React.FC = () => {
                 </div>
 
                 {/* Add New Variable Form */}
-                <div className="p-3 bg-zinc-900/50 rounded-xl border border-zinc-800/80 space-y-2">
+                <div className="p-3 bg-zinc-900/50 rounded-md border border-zinc-800/80 space-y-2">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 block">
                     Add New Variable
                   </span>
@@ -488,7 +488,7 @@ export const EnvironmentModal: React.FC = () => {
                       value={newKey}
                       onChange={(e) => setNewKey(e.target.value)}
                       placeholder="VARIABLE_KEY"
-                      className="w-1/3 bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-700"
+                      className="w-1/3 bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-700"
                     />
 
                     {/* Value Input with Show/Hide toggle button when sensitive */}
@@ -498,7 +498,7 @@ export const EnvironmentModal: React.FC = () => {
                         value={newVal}
                         onChange={(e) => setNewVal(e.target.value)}
                         placeholder="Value"
-                        className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 pr-8"
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs font-mono text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 pr-8"
                       />
                       {newSensitive && (
                         <button
@@ -514,7 +514,7 @@ export const EnvironmentModal: React.FC = () => {
 
                     {/* Sensitive Toggle */}
                     <label
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-zinc-800 bg-zinc-950 text-xs text-zinc-400 cursor-pointer select-none hover:border-zinc-700 transition"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-zinc-800 bg-zinc-950 text-xs text-zinc-400 cursor-pointer select-none hover:border-zinc-700 transition"
                       title="Encrypt at rest with AES-GCM"
                     >
                       <input
@@ -535,7 +535,7 @@ export const EnvironmentModal: React.FC = () => {
                     <button
                       onClick={() => newKey.trim() && addVarMutation.mutate()}
                       disabled={!newKey.trim() || addVarMutation.isPending}
-                      className="bg-primary hover:bg-primary-hover disabled:opacity-50 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1"
+                      className="bg-primary hover:bg-primary-hover disabled:opacity-50 text-white px-3.5 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-1"
                     >
                       <Plus size={13} />
                       <span>Add</span>
@@ -558,7 +558,7 @@ export const EnvironmentModal: React.FC = () => {
                     filteredVars.map((v) => (
                       <div
                         key={v.id}
-                        className="flex items-center gap-2.5 p-2 bg-zinc-900/40 border border-zinc-800/80 rounded-xl text-xs hover:border-zinc-700 transition"
+                        className="flex items-center gap-2.5 p-2 bg-zinc-900/40 border border-zinc-800/80 rounded-md text-xs hover:border-zinc-700 transition"
                       >
                         {editingVarId === v.id ? (
                           // Edit mode with Show/Hide toggle on sensitive input
@@ -568,7 +568,7 @@ export const EnvironmentModal: React.FC = () => {
                               value={editKey}
                               onChange={(e) => setEditKey(e.target.value)}
                               placeholder="Key"
-                              className="w-1/3 bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none"
+                              className="w-1/3 bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none"
                             />
                             <div className="relative flex-1 flex items-center">
                               <input
@@ -576,7 +576,7 @@ export const EnvironmentModal: React.FC = () => {
                                 value={editVal}
                                 onChange={(e) => setEditVal(e.target.value)}
                                 placeholder="Value"
-                                className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none pr-8"
+                                className="w-full bg-zinc-950 border border-zinc-700 rounded px-2.5 py-1 text-xs font-mono text-zinc-100 focus:outline-none pr-8"
                               />
                               {editSensitive && (
                                 <button
@@ -590,7 +590,7 @@ export const EnvironmentModal: React.FC = () => {
                               )}
                             </div>
                             <label
-                              className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-zinc-800 bg-zinc-950 text-xs text-zinc-400 cursor-pointer select-none"
+                              className="flex items-center gap-1.5 px-2 py-1 rounded border border-zinc-800 bg-zinc-950 text-xs text-zinc-400 cursor-pointer select-none"
                               title="Sensitive / Encrypted"
                             >
                               <input
@@ -607,14 +607,14 @@ export const EnvironmentModal: React.FC = () => {
                             <button
                               onClick={() => handleSaveEditVar(v.id)}
                               disabled={updateVarMutation.isPending}
-                              className="p-1.5 rounded-lg bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-600/20 transition"
+                              className="p-1.5 rounded bg-emerald-600/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-600/20 transition"
                               title="Save changes"
                             >
                               <Check size={14} />
                             </button>
                             <button
                               onClick={() => setEditingVarId(null)}
-                              className="p-1.5 rounded-lg bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
+                              className="p-1.5 rounded bg-zinc-800 text-zinc-400 hover:text-zinc-200 transition"
                               title="Cancel"
                             >
                               <X size={14} />
@@ -654,14 +654,14 @@ export const EnvironmentModal: React.FC = () => {
                             )}
                             <button
                               onClick={() => startEditingVar(v)}
-                              className="text-zinc-500 hover:text-zinc-200 p-1.5 rounded-lg hover:bg-zinc-800 transition"
+                              className="text-zinc-500 hover:text-zinc-200 p-1.5 rounded hover:bg-zinc-800 transition"
                               title="Edit variable"
                             >
                               <Edit2 size={13} />
                             </button>
                             <button
                               onClick={() => deleteVarMutation.mutate(v.id)}
-                              className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-zinc-800 transition"
+                              className="text-zinc-500 hover:text-red-400 p-1.5 rounded hover:bg-zinc-800 transition"
                               title="Delete variable"
                             >
                               <Trash2 size={13} />

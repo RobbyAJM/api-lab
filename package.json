@@ -5,11 +5,12 @@
   "scripts": {
     "dev:desktop": "pnpm --filter @api-lab/desktop dev",
     "build:desktop": "pnpm --filter @api-lab/desktop build",
-    "build:desktop:exe": "pnpm --filter @api-lab/desktop exec tauri build --no-bundle --features desktop",
+    "build:desktop:exe": "pnpm --filter @api-lab/desktop run tauri build --no-bundle --features desktop",
     "server:run": "cargo run -p api-lab-server",
     "test:rust": "cargo test --workspace",
     "test:ts": "node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts",
-    "test": "cargo test --workspace && node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts"
+    "test": "cargo test --workspace && node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts",
+    "lint:design": ".opencode\\skills\\impeccable\\scripts\\impeccable.cmd detect apps/desktop/src"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
