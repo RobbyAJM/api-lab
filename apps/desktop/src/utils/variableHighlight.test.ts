@@ -84,6 +84,13 @@ test('tokenizeVariables: supports Set and Map as environment variable sources', 
   const tokens2 = tokenizeVariables('localhost:{{PORT}}', mapSource);
   assert.equal(tokens2[1].isDefined, true);
   assert.equal(tokens2[1].value, '8080');
+
+  const arraySource = [
+    { id: '1', environment_id: 'e1', key: 'ARRAY_VAR', value: 'hello_array', is_sensitive: false, created_at: '', updated_at: '' },
+  ];
+  const tokens3 = tokenizeVariables('val={{ARRAY_VAR}}', arraySource);
+  assert.equal(tokens3[1].isDefined, true);
+  assert.equal(tokens3[1].value, 'hello_array');
 });
 
 test('tokenizeJsonLine: highlights defined and undefined variables embedded in JSON strings', () => {
