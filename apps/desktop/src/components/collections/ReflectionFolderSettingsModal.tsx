@@ -116,7 +116,7 @@ export const ReflectionFolderSettingsModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-sans"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 font-sans"
       onClick={closeReflectionSettingsModal}
       onKeyDown={(e) => {
         if (e.key === 'Escape') closeReflectionSettingsModal();
@@ -127,7 +127,7 @@ export const ReflectionFolderSettingsModal: React.FC = () => {
       }}
     >
       <div
-        className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col text-zinc-100"
+        className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col text-zinc-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -188,7 +188,7 @@ export const ReflectionFolderSettingsModal: React.FC = () => {
           </div>
 
           {/* Informational banner about inheritance */}
-          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-zinc-900/80 border border-zinc-800/80 text-zinc-400 text-[11px] leading-relaxed">
+          <div className="flex items-start gap-2 p-2.5 rounded-md bg-zinc-900/80 border border-zinc-800/80 text-zinc-400 text-[11px] leading-relaxed">
             <Info size={14} className="text-primary mt-0.5 flex-shrink-0" />
             <span>
               All endpoints inside this reflection folder automatically inherit this gRPC server address.

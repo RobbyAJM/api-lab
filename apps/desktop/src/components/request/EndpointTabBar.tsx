@@ -5,6 +5,7 @@ import { apiRequest } from '../../api/client';
 import type { Endpoint, Environment } from '@api-lab/api-types';
 import { X, Radio, ArrowDownUp, AlertTriangle, Plus, Settings } from 'lucide-react';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
+import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
 
 export const EndpointTabBar: React.FC = () => {
   const {
@@ -16,8 +17,6 @@ export const EndpointTabBar: React.FC = () => {
     closeAllEndpoints,
     isEndpointDirty,
     activeWorkspaceId,
-    activeEnvironmentId,
-    setActiveEnvironmentId,
     setCommandPaletteOpen,
     setEnvModalOpen,
   } = useAppStore();
@@ -63,21 +62,7 @@ export const EndpointTabBar: React.FC = () => {
   function renderEnvironmentDropdown() {
     return (
       <div className="flex items-center gap-1.5 ml-auto pl-2 flex-shrink-0">
-        <select
-          value={activeEnvironmentId || ''}
-          onChange={(e) => setActiveEnvironmentId(e.target.value || null)}
-          className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-zinc-200 text-xs rounded-md px-2.5 py-1 font-mono focus:outline-none cursor-pointer"
-          title="Active Environment"
-        >
-          <option value="" className="bg-zinc-900 text-zinc-400">
-            No Environment
-          </option>
-          {environments.map((env) => (
-            <option key={env.id} value={env.id} className="bg-zinc-900 text-zinc-200">
-              {env.name}
-            </option>
-          ))}
-        </select>
+        <EnvironmentDropdown environments={environments} align="right" />
         <button
           type="button"
           onClick={() => setEnvModalOpen(true)}
@@ -112,16 +97,16 @@ export const EndpointTabBar: React.FC = () => {
       const method = ep.config?.method || 'GET';
       const colorCls =
         method === 'GET'
-          ? 'text-emerald-400 bg-emerald-950/40 border-emerald-900/40'
+          ? 'text-emerald-400'
           : method === 'POST'
-          ? 'text-primary bg-primary-subtle border-primary-border'
+          ? 'text-primary'
           : method === 'PUT' || method === 'PATCH'
-          ? 'text-amber-400 bg-amber-950/40 border-amber-900/40'
-          : 'text-red-400 bg-red-950/40 border-red-900/40';
+          ? 'text-amber-400'
+          : 'text-red-400';
 
       return (
         <span
-          className={`text-[9px] font-mono font-bold px-1 py-0.2 rounded border ${colorCls} select-none`}
+          className={`text-[9px] font-mono font-bold tracking-tight select-none ${colorCls}`}
         >
           {method}
         </span>
@@ -132,10 +117,10 @@ export const EndpointTabBar: React.FC = () => {
     if (streamType === 'bidi_stream' || streamType === 'omni_stream') {
       return (
         <span
-          title="gRPC Stream"
-          className="text-[9px] font-mono font-bold px-1 py-0.2 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5 select-none"
+          title={streamType === 'bidi_stream' ? 'gRPC Bidirectional Stream' : 'gRPC Stream'}
+          className="text-amber-400 flex items-center select-none"
         >
-          <ArrowDownUp size={8} /> STREAM
+          <ArrowDownUp size={11} />
         </span>
       );
     }
@@ -143,18 +128,18 @@ export const EndpointTabBar: React.FC = () => {
     return (
       <span
         title="gRPC Unary Call"
-        className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-zinc-900 text-zinc-300 border border-zinc-800 select-none flex items-center gap-0.5"
+        className="text-zinc-400 flex items-center select-none"
       >
-        <Radio size={8} /> gRPC
+        <Radio size={11} />
       </span>
     );
   }
 
   return (
     <>
-      <div className="flex items-center justify-between h-10 px-2 bg-zinc-950 border-b border-zinc-800/80 select-none flex-shrink-0">
+      <div className="flex items-center justify-between h-9 bg-zinc-950 border-b border-zinc-800 select-none flex-shrink-0">
         {/* Left: Open Tabs + Add Tab Button */}
-        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none flex-1 min-w-0 pr-2">
+        <div className="flex items-center overflow-x-auto scrollbar-none flex-1 min-w-0 h-full">
           {openEndpoints.map((ep) => {
             const isActive = ep.id === activeEndpointId;
             const dirty = isEndpointDirty(ep.id);
@@ -179,10 +164,10 @@ export const EndpointTabBar: React.FC = () => {
                     y: e.clientY,
                   });
                 }}
-                className={`group flex items-center gap-2 px-3 py-1.5 rounded-md text-xs cursor-pointer transition-all border ${
+                className={`group flex items-center gap-2 px-3 h-full text-xs cursor-pointer transition-colors border-r ${
                   isActive
-                    ? 'bg-zinc-900 border-zinc-800 text-zinc-100 font-medium shadow-sm'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border-transparent'
+                    ? 'bg-zinc-900 border-zinc-800 text-zinc-100 font-medium border-t border-t-primary'
+                    : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border-zinc-850'
                 }`}
                 title={`${ep.name} (${ep.protocol.toUpperCase()})`}
               >
@@ -192,7 +177,7 @@ export const EndpointTabBar: React.FC = () => {
                 {/* Unsaved Changes Indicator Dot */}
                 {dirty && (
                   <span
-                    className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 shadow-sm"
+                    className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0"
                     title="Unsaved changes"
                   />
                 )}
@@ -202,7 +187,7 @@ export const EndpointTabBar: React.FC = () => {
                     e.stopPropagation();
                     handleAttemptClose(ep);
                   }}
-                  className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition opacity-60 group-hover:opacity-100 ml-0.5"
+                  className="p-0.5 rounded hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition opacity-0 group-hover:opacity-100 ml-0.5"
                   title="Close tab (Middle click)"
                 >
                   <X size={12} />
@@ -214,10 +199,10 @@ export const EndpointTabBar: React.FC = () => {
           <button
             type="button"
             onClick={() => setCommandPaletteOpen(true)}
-            className="p-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 rounded-md transition flex-shrink-0"
+            className="p-1.5 mx-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 rounded transition flex-shrink-0"
             title="New Request / Search (Ctrl+K)"
           >
-            <Plus size={14} />
+            <Plus size={13} />
           </button>
         </div>
 
@@ -229,7 +214,7 @@ export const EndpointTabBar: React.FC = () => {
       {contextMenu && (
         <div
           style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          className="fixed z-50 bg-zinc-900 border border-zinc-700/80 rounded-lg shadow-2xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100 font-sans"
+          className="fixed z-50 bg-zinc-900 border border-zinc-800 rounded shadow-xl py-1 w-44 text-xs select-none font-sans"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -271,15 +256,15 @@ export const EndpointTabBar: React.FC = () => {
       {/* Unsaved Changes Confirmation Dialog */}
       {confirmEndpoint && (
         <div
-          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 font-sans"
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans"
           onClick={() => setConfirmEndpoint(null)}
         >
           <div
-            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-5 space-y-4"
+            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-5 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-amber-950/60 border border-amber-800/60 text-amber-400 flex-shrink-0">
+              <div className="p-2 rounded bg-amber-950/60 border border-amber-800/60 text-amber-400 flex-shrink-0">
                 <AlertTriangle size={18} />
               </div>
               <div className="space-y-1">

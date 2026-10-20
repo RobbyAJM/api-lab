@@ -513,44 +513,12 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
             })()}
 
             {formattedBody ? (
-              <div className="space-y-2">
-                {/* Format badge and Copy button (New Feature 1) */}
-                <div className="flex items-center justify-between pb-1 border-b border-zinc-800/80 text-[11px] text-zinc-400 select-none">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] uppercase font-mono font-bold px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300">
-                      {detectedFormat}
-                    </span>
-                    <span className="text-[10px] text-zinc-500">
-                      Formatted response
-                    </span>
-                  </div>
-                  <button
-                    onClick={handleCopyBody}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition text-[11px]"
-                    title="Copy response body to clipboard"
-                  >
-                    {copied ? (
-                      <>
-                        <Check size={11} className="text-emerald-400" />
-                        <span className="text-emerald-400 font-medium">Copied!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={11} />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {/* Response Text with syntax highlighting & select-text enabled */}
-                <div className="text-zinc-200 font-mono text-[11px] leading-relaxed select-text selection:bg-indigo-600/40 overflow-x-auto p-1">
-                  <FormattedBodyViewer
-                    content={formattedBody}
-                    format={detectedFormat}
-                    searchQuery={searchQuery}
-                  />
-                </div>
+              <div className="text-zinc-200 font-mono text-[11px] leading-relaxed select-text overflow-x-auto p-1">
+                <FormattedBodyViewer
+                  content={formattedBody}
+                  format={detectedFormat}
+                  searchQuery={searchQuery}
+                />
               </div>
             ) : (
               !activeResponse?.error && (
@@ -628,8 +596,8 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                     key={msg.id}
                     className={`p-2.5 rounded space-y-1.5 transition select-text border ${
                       isOut
-                        ? 'bg-blue-950/25 border-blue-900/50 border-l-4 border-l-blue-500 hover:border-blue-700/60'
-                        : 'bg-zinc-900/90 border-zinc-800 border-l-4 border-l-emerald-500 hover:border-zinc-700'
+                        ? 'bg-blue-950/20 border-blue-900/40 hover:border-blue-700/60'
+                        : 'bg-zinc-900/90 border-zinc-800 hover:border-zinc-700'
                     }`}
                   >
                     <div className="flex items-center justify-between text-[10px] text-zinc-500 border-b border-zinc-800/60 pb-1 select-none">

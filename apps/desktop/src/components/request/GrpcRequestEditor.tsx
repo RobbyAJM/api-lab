@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
+import { Select } from '../common/Select';
 import { resolveInheritedGrpcAddress } from '../../utils/folderTree';
 import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
@@ -807,8 +808,8 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       </div>
 
       {/* Combined Address & Service/Method Bar (Image 1) */}
-      <div className="px-4 pb-2.5 flex items-center gap-2.5 flex-shrink-0">
-        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-lg h-9 focus-within:border-primary transition relative">
+      <div className="px-4 pb-2.5 flex items-center gap-2 flex-shrink-0">
+        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded h-9 focus-within:border-primary transition relative">
           {/* Left Segment: TLS Icon + Address Input */}
           <div className="flex-1 flex items-center pl-2 min-w-0">
             <button
@@ -899,7 +900,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             {isMethodPickerOpen && (
               <div
                 ref={methodPickerRef}
-                className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl overflow-hidden text-xs select-none max-h-80 flex flex-col font-mono"
+                className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-zinc-950 border border-zinc-800 rounded shadow-xl overflow-hidden text-xs select-none max-h-80 flex flex-col font-mono"
               >
                 {/* Search Bar */}
                 <div className="p-2 border-b border-zinc-800/80 bg-zinc-900/70 flex items-center gap-2">
@@ -1003,10 +1004,10 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           type="button"
           onClick={isStreamingRpc ? (isCurrentEndpointStreaming ? handleStopStream : handleStartStream) : handleSend}
           disabled={sending || (!isCurrentEndpointStreaming && (!selectedService || !selectedMethod))}
-          className={`px-5 py-2 text-xs font-semibold rounded-lg shadow-sm transition flex items-center gap-1.5 h-9 flex-shrink-0 ${
+          className={`px-4 py-2 text-xs font-semibold rounded transition flex items-center gap-1.5 h-9 flex-shrink-0 cursor-pointer shadow-sm ${
             isStreamingRpc && isCurrentEndpointStreaming
               ? 'bg-red-600 hover:bg-red-500 text-white'
-              : 'bg-primary hover:bg-primary-hover disabled:opacity-50 text-white'
+              : 'bg-primary hover:bg-primary-hover active:bg-blue-700 disabled:opacity-50 text-white'
           }`}
           title="Invoke method (Ctrl+Enter)"
         >
@@ -1017,13 +1018,13 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       </div>
 
       {/* Tabs Bar */}
-      <div className="px-4 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
+      <div className="px-4 border-b border-zinc-800 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
         <div className="flex items-center gap-4">
           <button
             onClick={() => setActiveTab('payload')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'payload'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -1034,7 +1035,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('metadata')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'metadata'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -1045,7 +1046,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('scripts')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'scripts'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -1061,7 +1062,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('options')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'options'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -1072,7 +1073,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('specification')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'specification'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -1167,7 +1168,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         {activeTab === 'options' && (
           <div className="space-y-4 max-w-2xl text-xs">
             {/* Group 1: Connection & Security */}
-            <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-4 space-y-3">
+            <div className="bg-zinc-900/40 border border-zinc-800 rounded-md p-4 space-y-3">
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                 Connection & Security
               </h4>
@@ -1208,7 +1209,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             </div>
 
             {/* Group 2: Deadlines & Message Limits */}
-            <div className="bg-zinc-900/40 border border-zinc-800 rounded-lg p-4 space-y-3">
+            <div className="bg-zinc-900/40 border border-zinc-800 rounded-md p-4 space-y-3">
               <h4 className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                 Deadlines & Message Framing
               </h4>
@@ -1235,16 +1236,17 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   <label className="block text-zinc-400 font-medium mb-1">
                     Max Message Limit (MB)
                   </label>
-                  <select
+                  <Select
                     value={maxMsgSizeMb}
-                    onChange={(e) => setMaxMsgSizeMb(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700 cursor-pointer"
-                  >
-                    <option value="4">4 MB (Standard default)</option>
-                    <option value="16">16 MB (Medium payloads)</option>
-                    <option value="64">64 MB (Large streaming batches)</option>
-                    <option value="256">256 MB (Very large)</option>
-                  </select>
+                    onChange={setMaxMsgSizeMb}
+                    options={[
+                      { value: '4', label: '4 MB (Standard default)' },
+                      { value: '16', label: '16 MB (Medium payloads)' },
+                      { value: '64', label: '64 MB (Large streaming batches)' },
+                      { value: '256', label: '256 MB (Very large)' },
+                    ]}
+                    fontMono
+                  />
                   <span className="text-[10px] text-zinc-500 block mt-1">
                     Maximum incoming protobuf byte frame threshold.
                   </span>
@@ -1259,7 +1261,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             {currentMethodObj ? (
               <>
                 {/* Method Overview Pill */}
-                <div className="p-2.5 bg-zinc-900/60 border border-zinc-800 rounded-lg flex items-center justify-between text-xs select-none">
+                <div className="p-2.5 bg-zinc-900/60 border border-zinc-800 rounded-md flex items-center justify-between text-xs select-none">
                   <div className="flex items-center gap-2 font-mono text-xs">
                     <span className="text-secondary font-semibold">rpc</span>
                     <span className="text-white font-bold">{currentMethodObj.name}</span>
@@ -1304,7 +1306,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 {/* 2 Clean Cards: Request & Response Structs */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0">
                   {/* Card 1: Request Type */}
-                  <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 space-y-2.5">
+                  <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-md p-3 space-y-2.5">
                     <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-amber-400" />
@@ -1371,7 +1373,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   </div>
 
                   {/* Card 2: Response Type */}
-                  <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-lg p-3 space-y-2.5">
+                  <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-md p-3 space-y-2.5">
                     <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-emerald-400" />

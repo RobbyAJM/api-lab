@@ -107,10 +107,10 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
     const hasChildRanges = ranges.some((r) => r.isChild);
 
     return (
-      <div className={`flex flex-col font-mono text-[11px] leading-relaxed select-text ${className}`}>
+      <div className={`flex flex-col font-mono text-[11px] leading-relaxed select-text min-w-fit ${className}`}>
         {/* Folding Action Toolbar for JSON */}
         {hasRanges && (
-          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800/60 select-none text-[10px]">
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800/60 select-none text-[10px] sticky left-0">
             <span className="text-zinc-500 font-sans">
               {foldedLines.size > 0
                 ? `${foldedLines.size} block${foldedLines.size > 1 ? 's' : ''} collapsed`
@@ -162,7 +162,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
               >
                 {/* Gutter: Line number + Fold Chevron */}
                 <div
-                  className="flex items-center justify-end pr-2 select-none text-zinc-600 text-right flex-shrink-0"
+                  className="flex items-center justify-end pr-2 select-none text-zinc-600 text-right flex-shrink-0 sticky left-0 bg-zinc-950 z-10"
                   style={{ minWidth: '3.2rem' }}
                 >
                   <span className="mr-1 text-[10px]">{lineInfo.lineIndex + 1}</span>
@@ -180,8 +180,8 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
                   )}
                 </div>
 
-                {/* Tokens */}
-                <div className="flex-1 overflow-x-auto">
+                {/* Tokens (No per-line overflow scrollbar: scroll at viewer container level) */}
+                <div className="flex-1">
                   {tokens.length === 0 ? (
                     <span>&nbsp;</span>
                   ) : (
@@ -231,7 +231,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
   // HTML format
   if (format === 'html') {
     return (
-      <div className={`font-mono text-[11px] leading-relaxed select-text ${className}`}>
+      <div className={`font-mono text-[11px] leading-relaxed select-text min-w-fit ${className}`}>
         {lines.map((line, lIdx) => {
           const tokens = tokenizeHtmlLine(line);
           return (

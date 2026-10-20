@@ -7,6 +7,7 @@ import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collec
 import { Save, Shield, Globe } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
+import { Select } from '../common/Select';
 import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
@@ -373,8 +374,8 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       </div>
 
       {/* URL & Action Bar */}
-      <div className="px-4 pb-2.5 flex items-center gap-2.5 flex-shrink-0">
-        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded-lg h-9 focus-within:border-blue-600 transition overflow-hidden">
+      <div className="px-4 pb-2.5 flex items-center gap-2 flex-shrink-0">
+        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded h-9 focus-within:border-primary transition overflow-hidden">
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
@@ -413,7 +414,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         <button
           onClick={handleSend}
           disabled={sending}
-          className="px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold rounded-lg text-xs flex items-center gap-1.5 shadow-sm transition h-9 flex-shrink-0"
+          className="px-4 py-2 bg-primary hover:bg-primary-hover active:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded text-xs flex items-center gap-1.5 transition h-9 flex-shrink-0 cursor-pointer shadow-sm"
           title="Send request (Ctrl+Enter)"
         >
           <span>{sending ? 'Sending...' : 'Send'}</span>
@@ -421,13 +422,13 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       </div>
 
       {/* Tabs */}
-      <div className="px-4 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
+      <div className="px-4 border-b border-zinc-800 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
         <div className="flex items-center gap-4">
           <button
             onClick={() => setActiveTab('params')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'params'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -437,7 +438,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('headers')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'headers'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -447,7 +448,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('body')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'body'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -457,7 +458,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('auth')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'auth'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -470,7 +471,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onClick={() => setActiveTab('scripts')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'scripts'
-                ? 'border-zinc-200 text-zinc-100'
+                ? 'border-primary text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
@@ -579,19 +580,20 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           <div className="space-y-4 max-w-md">
             <div>
               <label className="block text-zinc-400 mb-1">Authentication Type</label>
-              <select
+              <Select
                 value={auth.auth_type}
-                onChange={(e) =>
-                  setAuth({ ...auth, auth_type: e.target.value as any })
+                onChange={(val) =>
+                  setAuth({ ...auth, auth_type: val as any })
                 }
-                className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:border-zinc-700 font-mono"
-              >
-                <option value="inherit">Inherit auth from collection</option>
-                <option value="none">No Auth</option>
-                <option value="bearer">Bearer Token</option>
-                <option value="basic">Basic Auth</option>
-                <option value="custom">Custom Header</option>
-              </select>
+                options={[
+                  { value: 'inherit', label: 'Inherit auth from collection' },
+                  { value: 'none', label: 'No Auth' },
+                  { value: 'bearer', label: 'Bearer Token' },
+                  { value: 'basic', label: 'Basic Auth' },
+                  { value: 'custom', label: 'Custom Header' },
+                ]}
+                fontMono
+              />
             </div>
 
             {auth.auth_type === 'inherit' && (

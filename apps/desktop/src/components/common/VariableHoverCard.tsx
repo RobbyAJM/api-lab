@@ -93,7 +93,7 @@ export const VariableHoverCard: React.FC<VariableHoverCardProps> = ({
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="z-50 bg-zinc-950 border border-zinc-800 rounded-lg shadow-2xl overflow-hidden font-sans text-xs text-zinc-100 animate-in fade-in zoom-in-95 duration-100 select-none"
+      className="z-50 bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden font-sans text-xs text-zinc-100 animate-in fade-in zoom-in-95 duration-100 select-none"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 text-[11px]">

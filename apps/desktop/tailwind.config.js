@@ -12,10 +12,10 @@ export default {
         background: 'hsl(var(--background))',
         foreground: 'hsl(var(--foreground))',
         primary: {
-          DEFAULT: '#2563eb',
-          hover: '#1d4ed8',
-          subtle: 'rgba(37, 99, 235, 0.12)',
-          border: 'rgba(37, 99, 235, 0.35)',
+          DEFAULT: '#4f46e5',
+          hover: '#4338ca',
+          subtle: 'rgba(79, 70, 229, 0.12)',
+          border: 'rgba(79, 70, 229, 0.35)',
           foreground: '#ffffff',
         },
         secondary: {
@@ -25,8 +25,14 @@ export default {
           border: 'rgba(99, 102, 241, 0.35)',
           foreground: '#ffffff',
         },
+        // Anti-slop mineral dark palette: warm graphite/slate undertone, not dead gray
         zinc: {
-          850: '#151518',
+          950: '#0b0c0e',
+          900: '#111317',
+          850: '#16191f',
+          800: '#20242c',
+          750: '#292e39',
+          700: '#353c4a',
         },
       },
     },

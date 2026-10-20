@@ -201,7 +201,7 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
 
   return (
     <div
-      className={`relative flex flex-col h-full bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden ${className}`}
+      className={`relative flex flex-col h-full bg-zinc-950 border border-zinc-800 rounded-md overflow-hidden ${className}`}
     >
       {/* Editor Toolbar */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 select-none text-[11px]">
