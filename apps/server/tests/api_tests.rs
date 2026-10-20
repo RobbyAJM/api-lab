@@ -21,17 +21,10 @@ async fn setup_app() -> axum::Router {
         .await
         .expect("failed to connect to test postgres");
 
-    let _ = sqlx::query(
-        r#"
-        ALTER TABLE endpoints
-        DROP CONSTRAINT IF EXISTS endpoints_folder_id_fkey;
-        ALTER TABLE endpoints
-        ADD CONSTRAINT endpoints_folder_id_fkey
-        FOREIGN KEY (folder_id) REFERENCES collection_folders(id) ON DELETE CASCADE;
-        "#,
-    )
-    .execute(&pool)
-    .await;
+    sqlx::migrate!("../../migrations")
+        .run(&pool)
+        .await
+        .expect("failed to run migrations in test setup");
 
     let encryption_key =
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
