@@ -12,7 +12,8 @@ import {
 } from '../../utils/grpcReflectionSync';
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
 import { VariableInput } from '../common/VariableInput';
-import type { Collection, CollectionFolder, Endpoint } from '@api-lab/api-types';
+import { useAppStore } from '../../store/useAppStore';
+import type { Collection, CollectionFolder, Endpoint, VariableResponse } from '@api-lab/api-types';
 import {
   X,
   RefreshCw,
@@ -31,6 +32,7 @@ interface SyncReflectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   activeVariables?: Record<string, string>;
+  initialFolderId?: string;
 }
 
 export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
@@ -40,8 +42,48 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
   isOpen,
   onClose,
   activeVariables,
+  initialFolderId,
 }) => {
   const queryClient = useQueryClient();
+  const { activeEnvironmentId } = useAppStore();
+  const [resolvedVariables, setResolvedVariables] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    resolveVariables().then(setResolvedVariables);
+  }, [isOpen, activeEnvironmentId]);
+
+  async function resolveVariables(): Promise<Record<string, string>> {
+    const vars: Record<string, string> = {};
+    if (activeEnvironmentId) {
+      const envVars = queryClient.getQueryData<VariableResponse[]>([
+        'variables',
+        activeEnvironmentId,
+      ]);
+      if (envVars) {
+        for (const v of envVars) {
+          vars[v.key] = v.value;
+        }
+      } else {
+        try {
+          const fetched = await apiRequest<VariableResponse[]>(
+            `/environments/${activeEnvironmentId}/variables`
+          );
+          for (const v of fetched) {
+            vars[v.key] = v.value;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return vars;
+  }
+
+  const effectiveVariables =
+    activeVariables && Object.keys(activeVariables).length > 0
+      ? activeVariables
+      : resolvedVariables;
 
   // Find root folders in this collection
   const rootFolders = folders.filter((f) => !f.parent_folder_id);
@@ -61,17 +103,30 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
 
-  // Auto-detect server_address when selected root folder changes
+  // Auto-detect or sync selected root folder
   useEffect(() => {
-    if (!selectedRootFolderId && rootFolders.length > 0) {
+    if (initialFolderId) {
+      setSelectedRootFolderId(initialFolderId);
+    } else if (!selectedRootFolderId && rootFolders.length > 0) {
       setSelectedRootFolderId(rootFolders[0].id);
     }
-  }, [rootFolders, selectedRootFolderId]);
+  }, [initialFolderId, rootFolders, selectedRootFolderId]);
 
   useEffect(() => {
     if (!selectedRootFolderId) return;
 
-    // Check collection.settings.grpc_sources first
+    // Check root folder grpc_url first
+    const rootFolder = folders.find((f) => f.id === selectedRootFolderId);
+    if (rootFolder?.grpc_url) {
+      setServerAddress(rootFolder.grpc_url);
+      const sources = (collection.settings as any)?.grpc_sources || {};
+      if (sources[selectedRootFolderId]?.use_tls !== undefined) {
+        setUseTls(Boolean(sources[selectedRootFolderId].use_tls));
+      }
+      return;
+    }
+
+    // Check collection.settings.grpc_sources next
     const sources = (collection.settings as any)?.grpc_sources || {};
     if (sources[selectedRootFolderId]?.server_address) {
       setServerAddress(sources[selectedRootFolderId].server_address);
@@ -110,12 +165,12 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
     setStatusMessage('Querying fresh gRPC reflection...');
     setPlan(null);
 
-    const effectiveTls = useTls || shouldAutoDetectTls(serverAddress, activeVariables);
+    const effectiveTls = useTls || shouldAutoDetectTls(serverAddress, effectiveVariables);
 
     try {
       const res = await discoverNativeGrpcServices(
         { server_address: serverAddress.trim(), use_tls: effectiveTls },
-        activeVariables || {}
+        effectiveVariables
       );
 
       if (res.error) {
@@ -139,7 +194,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
                 method: m.name,
                 use_tls: effectiveTls,
               },
-              activeVariables || {}
+              effectiveVariables
             );
             if (pRes.payload) {
               payloads[`${s.name}/${m.name}`] = pRes.payload;
@@ -196,7 +251,16 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         apiCaller
       );
 
-      // Save/update root folder gRPC server address in collection.settings
+      // Save/update root folder gRPC server address in folder and collection.settings
+      try {
+        await apiRequest(`/folders/${selectedRootFolderId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ grpc_url: serverAddress.trim() }),
+        });
+      } catch {
+        // ignore
+      }
+
       const currentSources = (collection.settings as any)?.grpc_sources || {};
       currentSources[selectedRootFolderId] = {
         server_address: serverAddress.trim(),
@@ -280,11 +344,11 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
                 value={serverAddress}
                 onChange={(val) => {
                   setServerAddress(val);
-                  if (shouldAutoDetectTls(val, activeVariables)) {
+                  if (shouldAutoDetectTls(val, effectiveVariables)) {
                     setUseTls(true);
                   }
                 }}
-                variables={activeVariables}
+                variables={effectiveVariables}
                 placeholder="localhost:9091, nu-trade.dev.dxtr.asia, or {{GRPC_HOST}}"
                 className="w-full h-full"
               />
