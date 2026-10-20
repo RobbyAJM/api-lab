@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import appLogo from '../../assets/api-lab-logo.png';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
@@ -174,6 +175,17 @@ export const Sidebar: React.FC = () => {
       style={{ width: `${sidebarWidth}px` }}
       className="relative bg-zinc-950 border-r border-zinc-800/80 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
     >
+      {/* Brand Header */}
+      <div className="px-3 py-2 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-950">
+        <div className="flex items-center gap-2">
+          <img src={appLogo} alt="API Lab" className="w-5 h-5 rounded object-contain" />
+          <span className="font-semibold text-xs text-zinc-100 tracking-tight">API Lab</span>
+        </div>
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+          v0.1.0
+        </span>
+      </div>
+
       {/* Workspace Switcher */}
       <div className="p-2.5 border-b border-zinc-800/80 flex items-center gap-2 relative select-none">
         {/* Workspace Emblem */}
