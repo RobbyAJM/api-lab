@@ -75,6 +75,19 @@ mod tests {
         };
         let res_true = client::discover_services(req_true).await;
         assert!(!res_true.services.is_empty(), "True TLS should succeed: {:?}", res_true.error);
+
+        // Test 4: execute_unary with use_tls: Some(false) recovers via fallback
+        let exec_false = rust_core::dto::GrpcExecutionRequest {
+            server_address: "nu-trade.dev.dxtr.asia".into(),
+            service: "nutrade.HealthCheckAPI".into(),
+            method: "Health".into(),
+            metadata: std::collections::HashMap::new(),
+            payload: serde_json::json!({}),
+            timeout_ms: Some(5000),
+            use_tls: Some(false),
+        };
+        let exec_res = client::execute_unary(exec_false).await;
+        assert!(exec_res.error.is_none(), "execute_unary with use_tls: Some(false) should recover via TLS fallback: {:?}", exec_res.error);
     }
 }
 
