@@ -68,6 +68,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: apps/desktop
+          tauriScript: pnpm tauri
           tagName: ${{ inputs.tag_name || 'v__VERSION__' }}
           releaseName: "API Lab ${{ inputs.tag_name || 'v__VERSION__' }}"
           releaseBody: "Release build of API Lab desktop client for Windows and macOS."
