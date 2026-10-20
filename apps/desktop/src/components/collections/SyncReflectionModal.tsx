@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import {
   discoverNativeGrpcServices,
@@ -11,9 +11,10 @@ import {
   type SyncPlan,
 } from '../../utils/grpcReflectionSync';
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
+import { resolveRootFolderId } from '../../utils/folderTree';
 import { VariableInput } from '../common/VariableInput';
 import { useAppStore } from '../../store/useAppStore';
-import type { Collection, CollectionFolder, Endpoint, VariableResponse } from '@api-lab/api-types';
+import type { Collection, CollectionFolder, Endpoint, Environment, VariableResponse } from '@api-lab/api-types';
 import {
   X,
   RefreshCw,
@@ -45,48 +46,48 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
   initialFolderId,
 }) => {
   const queryClient = useQueryClient();
-  const { activeEnvironmentId } = useAppStore();
-  const [resolvedVariables, setResolvedVariables] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (!isOpen) return;
-    resolveVariables().then(setResolvedVariables);
-  }, [isOpen, activeEnvironmentId]);
-
-  async function resolveVariables(): Promise<Record<string, string>> {
-    const vars: Record<string, string> = {};
-    if (activeEnvironmentId) {
-      const envVars = queryClient.getQueryData<VariableResponse[]>([
-        'variables',
-        activeEnvironmentId,
-      ]);
-      if (envVars) {
-        for (const v of envVars) {
-          vars[v.key] = v.value;
-        }
-      } else {
-        try {
-          const fetched = await apiRequest<VariableResponse[]>(
-            `/environments/${activeEnvironmentId}/variables`
-          );
-          for (const v of fetched) {
-            vars[v.key] = v.value;
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-    return vars;
-  }
-
-  const effectiveVariables =
-    activeVariables && Object.keys(activeVariables).length > 0
-      ? activeVariables
-      : resolvedVariables;
+  const { activeWorkspaceId, activeEnvironmentId, setActiveEnvironmentId } = useAppStore();
 
   // Find root folders in this collection
-  const rootFolders = folders.filter((f) => !f.parent_folder_id);
+  const rootFolders = useMemo(() => folders.filter((f) => !f.parent_folder_id), [folders]);
+
+  // Query workspace environments to know available environments
+  const { data: environments = [] } = useQuery<Environment[]>({
+    queryKey: ['environments', activeWorkspaceId],
+    queryFn: () =>
+      activeWorkspaceId
+        ? apiRequest<Environment[]>(`/workspaces/${activeWorkspaceId}/environments`)
+        : Promise.resolve([]),
+    enabled: !!activeWorkspaceId && isOpen,
+  });
+
+  // Effective environment ID: stored, or default, or first
+  const effectiveEnvId = useMemo(() => {
+    if (activeEnvironmentId) return activeEnvironmentId;
+    const def = environments.find((e) => e.is_default) || environments[0];
+    return def ? def.id : null;
+  }, [activeEnvironmentId, environments]);
+
+  // Query environment variables for the effective environment
+  const { data: envVars = [] } = useQuery<VariableResponse[]>({
+    queryKey: ['variables', effectiveEnvId],
+    queryFn: () =>
+      effectiveEnvId
+        ? apiRequest<VariableResponse[]>(`/environments/${effectiveEnvId}/variables`)
+        : Promise.resolve([]),
+    enabled: !!effectiveEnvId && isOpen,
+  });
+
+  const effectiveVariables = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of envVars) {
+      map[v.key] = v.value;
+    }
+    if (activeVariables) {
+      Object.assign(map, activeVariables);
+    }
+    return map;
+  }, [envVars, activeVariables]);
 
   // Pick default root folder and resolve server address
   const [selectedRootFolderId, setSelectedRootFolderId] = useState<string>(
@@ -103,14 +104,20 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
 
-  // Auto-detect or sync selected root folder
+  // Auto-detect or sync selected root folder using ancestor resolver
   useEffect(() => {
+    if (!isOpen) return;
     if (initialFolderId) {
-      setSelectedRootFolderId(initialFolderId);
-    } else if (!selectedRootFolderId && rootFolders.length > 0) {
+      const rootId = resolveRootFolderId(folders, initialFolderId);
+      if (rootId) {
+        setSelectedRootFolderId(rootId);
+        return;
+      }
+    }
+    if (rootFolders.length > 0 && (!selectedRootFolderId || !rootFolders.some((rf) => rf.id === selectedRootFolderId))) {
       setSelectedRootFolderId(rootFolders[0].id);
     }
-  }, [initialFolderId, rootFolders, selectedRootFolderId]);
+  }, [isOpen, initialFolderId, folders, rootFolders, selectedRootFolderId]);
 
   useEffect(() => {
     if (!selectedRootFolderId) return;
@@ -309,15 +316,32 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-950/60">
-          <div className="flex items-center gap-2">
-            <RefreshCw size={15} className="text-secondary" />
-            <h2 className="text-xs font-semibold text-zinc-100">
+          <div className="flex items-center gap-2 min-w-0">
+            <RefreshCw size={15} className="text-secondary flex-shrink-0" />
+            <h2 className="text-xs font-semibold text-zinc-100 truncate">
               Sync Reflection — {collection.name}
             </h2>
           </div>
-          <button onClick={onClose} disabled={syncing} className="text-zinc-400 hover:text-zinc-200 p-1">
-            <X size={14} />
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {environments.length > 0 && (
+              <select
+                value={effectiveEnvId || ''}
+                onChange={(e) => setActiveEnvironmentId(e.target.value || null)}
+                className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] rounded px-2 py-0.5 font-mono focus:outline-none cursor-pointer"
+                title="Active Environment for Variable Substitution"
+              >
+                <option value="">No Environment</option>
+                {environments.map((env) => (
+                  <option key={env.id} value={env.id}>
+                    {env.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button onClick={onClose} disabled={syncing} className="text-zinc-400 hover:text-zinc-200 p-1">
+              <X size={14} />
+            </button>
+          </div>
         </div>
 
         {/* Content */}

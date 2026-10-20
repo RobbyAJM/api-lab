@@ -287,4 +287,26 @@ export function getSidebarItemType(
   return 'folder';
 }
 
+/**
+ * Resolves the top-level root folder ID from an arbitrary folder ID
+ * by traversing up the parent_folder_id ancestor chain.
+ */
+export function resolveRootFolderId(
+  folders: CollectionFolder[],
+  targetFolderId?: string | null
+): string | null {
+  if (!targetFolderId) return null;
+  let current = folders.find((f) => f.id === targetFolderId);
+  if (!current) return null;
+
+  while (current.parent_folder_id) {
+    const parent = folders.find((f) => f.id === current!.parent_folder_id);
+    if (!parent) break;
+    current = parent;
+  }
+
+  return current.id;
+}
+
+
 
