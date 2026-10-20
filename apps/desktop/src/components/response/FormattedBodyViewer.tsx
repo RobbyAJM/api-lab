@@ -110,7 +110,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
       <div className={`flex flex-col font-mono text-[11px] leading-relaxed select-text min-w-fit ${className}`}>
         {/* Folding Action Toolbar for JSON */}
         {hasRanges && (
-          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800/60 select-none text-[10px] sticky left-0">
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-zinc-800/60 select-none text-[10px] sticky left-0 bg-zinc-950 z-10 px-1">
             <span className="text-zinc-500 font-sans">
               {foldedLines.size > 0
                 ? `${foldedLines.size} block${foldedLines.size > 1 ? 's' : ''} collapsed`
@@ -162,7 +162,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
               >
                 {/* Gutter: Line number + Fold Chevron */}
                 <div
-                  className="flex items-center justify-end pr-2 select-none text-zinc-600 text-right flex-shrink-0 sticky left-0 bg-zinc-950 z-10"
+                  className="flex items-center justify-end pl-2 pr-1.5 select-none text-zinc-600 text-right flex-shrink-0 sticky left-0 bg-zinc-950 z-10 border-r border-zinc-850/80"
                   style={{ minWidth: '3.2rem' }}
                 >
                   <span className="mr-1 text-[10px]">{lineInfo.originalLineIndex + 1}</span>
@@ -181,7 +181,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
                 </div>
 
                 {/* Tokens */}
-                <div className="flex-1">
+                <div className="flex-1 pl-2">
                   {tokens.length === 0 ? (
                     <span>&nbsp;</span>
                   ) : (
