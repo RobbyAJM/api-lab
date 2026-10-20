@@ -39,7 +39,7 @@ import { resolveInheritedGrpcAddress } from '../../utils/folderTree';
 import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
-import { applyInheritedGrpcAuth } from '../../utils/authInheritance';
+import { applyCollectionSettingsToGrpc } from '../../utils/collectionSettings';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
 import {
@@ -592,7 +592,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         }
       }
 
-      const finalReq = applyInheritedGrpcAuth(
+      const finalReq = applyCollectionSettingsToGrpc(
         beforeResult.request,
         currentColl?.settings,
         beforeResult.variables
@@ -706,7 +706,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         }
       }
 
-      const finalReq = applyInheritedGrpcAuth(
+      const finalReq = applyCollectionSettingsToGrpc(
         beforeResult.request,
         currentColl?.settings,
         beforeResult.variables
