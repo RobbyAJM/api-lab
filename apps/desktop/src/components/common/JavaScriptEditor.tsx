@@ -4,9 +4,9 @@ import { handleEditorKeyDown } from '../../utils/editorKeyboard';
 import { EditorHistory } from '../../utils/editorHistory';
 import {
   findFoldableRanges,
-  foldText,
-  unfoldText,
-  toggleFoldRange,
+  collapseDocument,
+  reconstructFullText,
+  getChildFoldLines,
 } from '../../utils/codeFolding';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
@@ -28,58 +28,48 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<EditorHistory | null>(null);
 
-  // Code folding state
-  const [foldMap, setFoldMap] = useState<Record<string, string>>({});
-  const [displayValue, setDisplayValue] = useState<string>(value);
+  // Set of folded original startLine indices
+  const [foldedStartLines, setFoldedStartLines] = useState<Set<number>>(new Set());
 
   if (!historyRef.current) {
     historyRef.current = new EditorHistory(value, 0, 0);
   }
 
-  // Sync external value updates (e.g. Snippet insertion) into history and display
+  // Sync external value updates (e.g. Snippet insertion) into history
   useEffect(() => {
     if (historyRef.current) {
       historyRef.current.recordExternalChange(value);
     }
-    const currentFull = unfoldText(displayValue, foldMap);
-    if (value !== currentFull) {
-      setFoldMap({});
-      setDisplayValue(value);
-    }
   }, [value]);
 
-  const ranges = useMemo(() => findFoldableRanges(displayValue), [displayValue]);
-  const hasChildRanges = useMemo(() => {
-    const full = unfoldText(displayValue, foldMap);
-    return findFoldableRanges(full).some((r) => r.isChild);
-  }, [displayValue, foldMap]);
-  const isAnyFolded = Object.keys(foldMap).length > 0;
+  const ranges = useMemo(() => findFoldableRanges(value), [value]);
+  const hasChildRanges = useMemo(() => ranges.some((r) => r.isChild), [ranges]);
+  const isAnyFolded = foldedStartLines.size > 0;
+
+  // Project visible lines and gutter numbers without mutating full document
+  const { displayText, lines: displayLines } = useMemo(
+    () => collapseDocument(value, foldedStartLines, ranges),
+    [value, foldedStartLines, ranges]
+  );
+
+  function toggleFold(startLine: number) {
+    setFoldedStartLines((prev) => {
+      const next = new Set(prev);
+      if (next.has(startLine)) {
+        next.delete(startLine);
+      } else {
+        next.add(startLine);
+      }
+      return next;
+    });
+  }
 
   function handleCollapseChildren() {
-    const full = unfoldText(displayValue, foldMap);
-    const fullRanges = findFoldableRanges(full);
-    const children = fullRanges.filter((r) => r.isChild);
-    if (children.length === 0) return;
-
-    const { foldedText, foldMap: newMap } = foldText(full, children);
-    setFoldMap(newMap);
-    setDisplayValue(foldedText);
+    setFoldedStartLines(getChildFoldLines(ranges));
   }
 
   function handleExpandAll() {
-    if (!isAnyFolded) return;
-    const full = unfoldText(displayValue, foldMap);
-    setFoldMap({});
-    setDisplayValue(full);
-    onChange(full);
-  }
-
-  function handleToggleLineFold(lineIdx: number) {
-    const res = toggleFoldRange(displayValue, lineIdx, ranges, foldMap);
-    setDisplayValue(res.text);
-    setFoldMap(res.foldMap);
-    const full = unfoldText(res.text, res.foldMap);
-    onChange(full);
+    setFoldedStartLines(new Set());
   }
 
   function handleScroll(e: React.UIEvent<HTMLTextAreaElement>) {
@@ -102,7 +92,7 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
     }
 
     const result = handleEditorKeyDown(
-      displayValue,
+      displayText,
       textarea.selectionStart,
       textarea.selectionEnd,
       {
@@ -122,14 +112,18 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
         (e.key === 'z' || e.key === 'Z' || e.key === 'y' || e.key === 'Y');
 
       if (isUndoRedo) {
-        setFoldMap({});
-        setDisplayValue(result.text);
+        setFoldedStartLines(new Set());
         onChange(result.text);
       } else {
-        setDisplayValue(result.text);
-        const full = unfoldText(result.text, foldMap);
-        historyRef.current?.recordChange(full, result.selectionStart, result.selectionEnd, true);
-        onChange(full);
+        const { fullText, activeFoldedLines } = reconstructFullText(
+          result.text,
+          value,
+          foldedStartLines,
+          ranges
+        );
+        setFoldedStartLines(activeFoldedLines);
+        historyRef.current?.recordChange(fullText, result.selectionStart, result.selectionEnd, true);
+        onChange(fullText);
       }
 
       requestAnimationFrame(() => {
@@ -142,25 +136,28 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
 
   function handleTextareaChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
     const nextVal = e.target.value;
-    setDisplayValue(nextVal);
-    const full = unfoldText(nextVal, foldMap);
+    const { fullText, activeFoldedLines } = reconstructFullText(
+      nextVal,
+      value,
+      foldedStartLines,
+      ranges
+    );
+    setFoldedStartLines(activeFoldedLines);
     historyRef.current?.recordChange(
-      full,
+      fullText,
       e.target.selectionStart,
       e.target.selectionEnd,
       false
     );
-    onChange(full);
+    onChange(fullText);
   }
-
-  const lines = displayValue.split('\n');
-  const lineCount = Math.max(1, lines.length);
-  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
 
   function highlightJs(raw: string): React.ReactNode[] {
     const rawLines = raw.split('\n');
     return rawLines.map((line, lIdx) => {
       const tokens = tokenizeJsLine(line);
+      const lineInfo = displayLines[lIdx];
+
       return (
         <React.Fragment key={lIdx}>
           {tokens.map((token, tIdx) => {
@@ -183,8 +180,18 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
               colorClass = 'text-zinc-400 font-bold';
             }
 
-            if (token.text.includes('/* ... #')) {
-              colorClass = 'text-amber-300 font-mono text-[10px] bg-zinc-800 border border-zinc-700 px-1 py-0.2 rounded cursor-pointer';
+            // Render clean fold badge pill when line contains the folded indicator
+            if (token.text.trim() === '...' && lineInfo?.isFolded) {
+              return (
+                <span
+                  key={`${lIdx}-${tIdx}`}
+                  onClick={() => lineInfo.range && toggleFold(lineInfo.range.startLine)}
+                  className="inline-flex items-center px-1.5 py-0.2 mx-0.5 text-[10px] font-mono text-zinc-400 hover:text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/80 rounded cursor-pointer select-none transition pointer-events-auto"
+                  title="Click to expand block"
+                >
+                  ...
+                </span>
+              );
             }
 
             return (
@@ -231,41 +238,28 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
       </div>
 
       <div className="relative flex-1 flex font-mono text-xs overflow-hidden bg-zinc-950">
-        {/* Line Numbers Gutter */}
+        {/* Line Numbers Gutter: preserves true original line numbers */}
         <div
           ref={lineNumbersRef}
           aria-hidden="true"
           className="py-3 pl-2 pr-1.5 select-none text-zinc-600 font-mono text-xs text-right border-r border-zinc-850 bg-zinc-950/80 overflow-hidden flex-shrink-0"
           style={{ minWidth: '3.2rem' }}
         >
-          {lineNumbers.map((num, idx) => {
-            const range = ranges.find((r) => r.startLine === idx);
-            const lineText = lines[idx] || '';
-            const hasFoldToken = Object.keys(foldMap).some((token) => lineText.includes(token));
-            const canFold = Boolean(range && range.startLine < range.endLine);
+          {displayLines.map((lineInfo) => {
+            const num = lineInfo.originalLineIndex + 1;
 
             return (
-              <div key={num} className="leading-5 h-5 flex items-center justify-end gap-1">
+              <div key={lineInfo.displayLineIndex} className="leading-5 h-5 flex items-center justify-end gap-1">
                 <span className="text-[11px] text-zinc-600">{num}</span>
-                {hasFoldToken ? (
+                {lineInfo.canFold ? (
                   <button
                     type="button"
                     tabIndex={-1}
-                    onClick={() => handleToggleLineFold(idx)}
-                    className="p-0.5 text-zinc-400 hover:text-zinc-200 pointer-events-auto"
-                    title="Expand block"
+                    onClick={() => lineInfo.range && toggleFold(lineInfo.range.startLine)}
+                    className="p-0.5 text-zinc-500 hover:text-zinc-200 pointer-events-auto transition rounded hover:bg-zinc-800"
+                    title={lineInfo.isFolded ? 'Expand block' : 'Collapse block'}
                   >
-                    <ChevronRight size={11} />
-                  </button>
-                ) : canFold ? (
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => handleToggleLineFold(idx)}
-                    className="p-0.5 text-zinc-500 hover:text-zinc-300 pointer-events-auto"
-                    title="Collapse block"
-                  >
-                    <ChevronDown size={11} />
+                    {lineInfo.isFolded ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
                   </button>
                 ) : (
                   <span className="w-3" />
@@ -283,13 +277,13 @@ export const JavaScriptEditor: React.FC<JavaScriptEditorProps> = ({
             aria-hidden="true"
             className="absolute inset-0 m-0 py-3 px-3 pointer-events-none whitespace-pre overflow-hidden text-zinc-200 font-mono text-xs leading-5 select-none"
           >
-            {highlightJs(displayValue)}
+            {highlightJs(displayText)}
           </pre>
 
           {/* Text Input */}
           <textarea
             ref={textareaRef}
-            value={displayValue}
+            value={displayText}
             onChange={handleTextareaChange}
             onKeyDown={handleKeyDown}
             onScroll={handleScroll}

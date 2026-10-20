@@ -6,14 +6,19 @@ export interface FoldableRange {
   type: 'object' | 'array';
 }
 
-export interface FoldedLineInfo {
-  lineIndex: number; // 0-based original line index
+export interface CollapsedLine {
+  displayLineIndex: number; // 0-based index in display lines
+  originalLineIndex: number; // 0-based index in full text (gutter shows originalLineIndex + 1)
   text: string;
   isFolded: boolean;
-  endLine?: number;
-  hiddenCount?: number;
-  previewSuffix?: string;
+  canFold: boolean;
   range?: FoldableRange;
+  hiddenCount?: number;
+}
+
+export interface CollapsedDocResult {
+  displayText: string;
+  lines: CollapsedLine[];
 }
 
 /**
@@ -170,183 +175,141 @@ export function autoExpandForMatches(
 }
 
 /**
- * Given document text and ranges to fold, replaces the interior lines
- * with an inline fold token `/* ... #N *\/`.
- * Returns the folded text and a map of token -> original interior content.
+ * Builds the single-line folded preview string for a range.
+ * E.g.
+ * `{` + `}` -> `{ ... }`
+ * `  "address": {` + `  },` -> `  "address": { ... },`
+ * `pm.test("title", () => {` + `});` -> `pm.test("title", () => { ... });`
  */
-export function foldText(
-  text: string,
-  rangesToFold: FoldableRange[]
-): { foldedText: string; foldMap: Record<string, string> } {
-  if (!text || rangesToFold.length === 0) {
-    return { foldedText: text, foldMap: {} };
-  }
-
-  // Sort ranges from bottom to top (highest startLine first)
-  const sorted = [...rangesToFold].sort((a, b) => b.startLine - a.startLine);
-  const lines = text.split('\n');
-  const foldMap: Record<string, string> = {};
-
-  let foldCounter = 0;
-  for (const r of sorted) {
-    if (r.startLine >= lines.length || r.endLine >= lines.length || r.startLine >= r.endLine) {
-      continue;
-    }
-
-    foldCounter++;
-    const token = `/* ... #${foldCounter} */`;
-    const startLineText = lines[r.startLine];
-    const endLineText = lines[r.endLine];
-
-    // Find closing bracket in endLineText
-    const closeChar = r.type === 'object' ? '}' : ']';
-    const closeIdx = endLineText.indexOf(closeChar);
-    const closingTail = closeIdx !== -1 ? endLineText.substring(closeIdx).trim() : closeChar;
-
-    // Interior lines: from startLine+1 to endLine-1, plus whatever came before closingTail on endLine
-    const interior = lines.slice(r.startLine + 1, r.endLine + 1).join('\n');
-    foldMap[token] = interior;
-
-    // Combined line
-    const combinedLine = `${startLineText} ${token} ${closingTail}`;
-    lines.splice(r.startLine, r.endLine - r.startLine + 1, combinedLine);
-  }
-
-  return {
-    foldedText: lines.join('\n'),
-    foldMap,
-  };
+export function getFoldedLinePreview(startLineText: string, endLineText: string, type: 'object' | 'array'): string {
+  const closeChar = type === 'object' ? '}' : ']';
+  const closeIdx = endLineText.lastIndexOf(closeChar);
+  const closingTail = closeIdx !== -1 ? endLineText.substring(closeIdx).trim() : closeChar;
+  return `${startLineText.trimEnd()} ... ${closingTail}`;
 }
 
 /**
- * Toggles fold state at a specific line.
- * If the line contains a folded token, unfolds it.
- * If the line starts an unfolded range, folds it.
+ * Collapses the full document lines based on the folded start lines.
+ * Retains exact original line indices so gutters show true line numbers without renumbering.
  */
-export function toggleFoldRange(
-  text: string,
-  lineIndex: number,
-  ranges: FoldableRange[],
-  currentFoldMap: Record<string, string>
-): { text: string; foldMap: Record<string, string> } {
-  const lines = text.split('\n');
-  if (lineIndex < 0 || lineIndex >= lines.length) {
-    return { text, foldMap: currentFoldMap };
-  }
-
-  const lineText = lines[lineIndex];
-
-  // 1. Check if line contains an active folded token -> Unfold it
-  for (const token of Object.keys(currentFoldMap)) {
-    if (lineText.includes(token)) {
-      const interior = currentFoldMap[token];
-      const tokenIdx = lineText.indexOf(token);
-      const prefix = lineText.substring(0, tokenIdx).trimEnd();
-      const interiorLines = interior.split('\n');
-      lines.splice(lineIndex, 1, prefix, ...interiorLines);
-
-      const nextMap = { ...currentFoldMap };
-      delete nextMap[token];
-
-      return {
-        text: lines.join('\n'),
-        foldMap: nextMap,
-      };
-    }
-  }
-
-  // 2. Check if line starts an unfolded range -> Fold it
-  const range = ranges.find((r) => r.startLine === lineIndex);
-  if (range && range.startLine < range.endLine) {
-    const { foldedText, foldMap } = foldText(text, [range]);
-    return {
-      text: foldedText,
-      foldMap: { ...currentFoldMap, ...foldMap },
-    };
-  }
-
-  return { text, foldMap: currentFoldMap };
-}
-
-/**
- * Replaces any fold tokens `/* ... #N *\/` back with their original hidden lines.
- */
-export function unfoldText(
-  foldedText: string,
-  foldMap: Record<string, string>
-): string {
-  if (!foldedText || !foldMap || Object.keys(foldMap).length === 0) {
-    return foldedText;
-  }
-
-  let result = foldedText;
-  for (const [token, interior] of Object.entries(foldMap)) {
-    if (result.includes(token)) {
-      // Find the line containing the token
-      const lines = result.split('\n');
-      const lineIdx = lines.findIndex((l) => l.includes(token));
-      if (lineIdx !== -1) {
-        const line = lines[lineIdx];
-        const tokenIdx = line.indexOf(token);
-        const prefix = line.substring(0, tokenIdx).trimEnd();
-        const interiorLines = interior.split('\n');
-        lines.splice(lineIdx, 1, prefix, ...interiorLines);
-        result = lines.join('\n');
-      }
-    }
-  }
-
-  return result;
-}
-
-export function computeFoldedDisplayLines(
-  lines: string[],
-  foldedLines: Set<number>,
+export function collapseDocument(
+  fullText: string,
+  foldedStartLines: Set<number>,
   ranges: FoldableRange[]
-): FoldedLineInfo[] {
+): CollapsedDocResult {
+  if (!fullText) {
+    return { displayText: '', lines: [] };
+  }
+
+  const origLines = fullText.split('\n');
   const rangeMap = new Map<number, FoldableRange>();
   for (const r of ranges) {
-    // Keep outer-most range if multiple start on same line
-    if (!rangeMap.has(r.startLine) || (rangeMap.get(r.startLine)!.endLine < r.endLine)) {
+    // Retain outermost range if multiple start on same line
+    if (!rangeMap.has(r.startLine) || rangeMap.get(r.startLine)!.endLine < r.endLine) {
       rangeMap.set(r.startLine, r);
     }
   }
 
-  const result: FoldedLineInfo[] = [];
+  const collapsedLines: CollapsedLine[] = [];
   let i = 0;
 
-  while (i < lines.length) {
+  while (i < origLines.length) {
     const range = rangeMap.get(i);
-    if (range && foldedLines.has(i)) {
-      const hiddenCount = Math.max(0, range.endLine - range.startLine);
-      const closeLine = lines[range.endLine] || '';
-      const closeChar = range.type === 'object' ? '}' : ']';
-      const suffixIdx = closeLine.indexOf(closeChar);
-      const closingTail = suffixIdx !== -1 ? closeLine.substring(suffixIdx) : closeChar;
-      const placeholder = ` ... ${closingTail.trim()}`;
+    const shouldFold = Boolean(range && foldedStartLines.has(i) && range.startLine < range.endLine);
 
-      result.push({
-        lineIndex: i,
-        text: lines[i],
+    if (range && shouldFold) {
+      const startLineText = origLines[range.startLine];
+      const endLineText = origLines[range.endLine] || '';
+      const previewText = getFoldedLinePreview(startLineText, endLineText, range.type);
+      const hiddenCount = range.endLine - range.startLine;
+
+      collapsedLines.push({
+        displayLineIndex: collapsedLines.length,
+        originalLineIndex: i,
+        text: previewText,
         isFolded: true,
-        endLine: range.endLine,
-        hiddenCount,
-        previewSuffix: placeholder,
+        canFold: true,
         range,
+        hiddenCount,
       });
 
-      // Skip to the line after endLine
+      // Advance index past the folded range
       i = range.endLine + 1;
     } else {
-      result.push({
-        lineIndex: i,
-        text: lines[i],
+      collapsedLines.push({
+        displayLineIndex: collapsedLines.length,
+        originalLineIndex: i,
+        text: origLines[i],
         isFolded: false,
+        canFold: Boolean(range && range.startLine < range.endLine),
         range,
       });
       i++;
     }
   }
 
-  return result;
+  return {
+    displayText: collapsedLines.map((l) => l.text).join('\n'),
+    lines: collapsedLines,
+  };
+}
+
+/**
+ * Reconstructs the full document text when display text changes.
+ * Preserves hidden interior lines for unchanged folded blocks.
+ * If a folded block was edited or deleted, its startLine is dropped from activeFoldedLines.
+ */
+export function reconstructFullText(
+  currentDisplayText: string,
+  originalFullText: string,
+  foldedStartLines: Set<number>,
+  ranges: FoldableRange[]
+): { fullText: string; activeFoldedLines: Set<number> } {
+  if (foldedStartLines.size === 0 || !originalFullText) {
+    return { fullText: currentDisplayText, activeFoldedLines: new Set() };
+  }
+
+  const origLines = originalFullText.split('\n');
+  const rangeMap = new Map<number, FoldableRange>();
+  for (const r of ranges) {
+    if (!rangeMap.has(r.startLine) || rangeMap.get(r.startLine)!.endLine < r.endLine) {
+      rangeMap.set(r.startLine, r);
+    }
+  }
+
+  const displayLines = currentDisplayText.split('\n');
+  const activeFoldedLines = new Set<number>();
+  const reconstructedLines: string[] = [];
+
+  for (let d = 0; d < displayLines.length; d++) {
+    const lineText = displayLines[d];
+
+    // Check if this line is an unchanged folded preview
+    let matchedRange: FoldableRange | null = null;
+    for (const startLine of foldedStartLines) {
+      const r = rangeMap.get(startLine);
+      if (r && r.startLine < origLines.length && r.endLine < origLines.length) {
+        const expectedPreview = getFoldedLinePreview(origLines[r.startLine], origLines[r.endLine], r.type);
+        if (lineText === expectedPreview) {
+          matchedRange = r;
+          break;
+        }
+      }
+    }
+
+    if (matchedRange) {
+      // Restore original lines from startLine to endLine
+      activeFoldedLines.add(matchedRange.startLine);
+      for (let k = matchedRange.startLine; k <= matchedRange.endLine; k++) {
+        reconstructedLines.push(origLines[k]);
+      }
+    } else {
+      reconstructedLines.push(lineText);
+    }
+  }
+
+  return {
+    fullText: reconstructedLines.join('\n'),
+    activeFoldedLines,
+  };
 }
