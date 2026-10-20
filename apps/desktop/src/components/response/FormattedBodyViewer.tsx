@@ -5,7 +5,7 @@ import {
   findFoldableRanges,
   getChildFoldLines,
   getAllFoldLines,
-  computeFoldedDisplayLines,
+  collapseDocument,
   autoExpandForMatches,
 } from '../../utils/codeFolding';
 import { ChevronDown, ChevronRight } from 'lucide-react';
@@ -102,7 +102,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
 
   // JSON format with gutter & folding
   if (format === 'json') {
-    const displayLines = computeFoldedDisplayLines(lines, foldedLines, ranges);
+    const { lines: displayLines } = collapseDocument(content, foldedLines, ranges);
     const hasRanges = ranges.length > 0;
     const hasChildRanges = ranges.some((r) => r.isChild);
 
@@ -152,12 +152,12 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
         <div className="divide-y divide-transparent">
           {displayLines.map((lineInfo) => {
             const tokens = tokenizeJsonLine(lineInfo.text);
-            const isFoldable = Boolean(lineInfo.range);
             const isFolded = lineInfo.isFolded;
+            const canFold = lineInfo.canFold;
 
             return (
               <div
-                key={lineInfo.lineIndex}
+                key={lineInfo.displayLineIndex}
                 className="flex items-start font-mono whitespace-pre min-h-[1.35em] group hover:bg-zinc-900/30"
               >
                 {/* Gutter: Line number + Fold Chevron */}
@@ -165,11 +165,11 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
                   className="flex items-center justify-end pr-2 select-none text-zinc-600 text-right flex-shrink-0 sticky left-0 bg-zinc-950 z-10"
                   style={{ minWidth: '3.2rem' }}
                 >
-                  <span className="mr-1 text-[10px]">{lineInfo.lineIndex + 1}</span>
-                  {isFoldable ? (
+                  <span className="mr-1 text-[10px]">{lineInfo.originalLineIndex + 1}</span>
+                  {canFold ? (
                     <button
                       type="button"
-                      onClick={() => toggleFold(lineInfo.lineIndex)}
+                      onClick={() => lineInfo.range && toggleFold(lineInfo.range.startLine)}
                       className="p-0.5 text-zinc-500 hover:text-zinc-200 rounded transition hover:bg-zinc-800"
                       title={isFolded ? 'Expand block' : 'Collapse block'}
                     >
@@ -180,7 +180,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
                   )}
                 </div>
 
-                {/* Tokens (No per-line overflow scrollbar: scroll at viewer container level) */}
+                {/* Tokens */}
                 <div className="flex-1">
                   {tokens.length === 0 ? (
                     <span>&nbsp;</span>
@@ -195,29 +195,30 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
                       else if (token.type === 'delimiter') colorClass = 'text-zinc-500 font-bold';
                       else if (token.type === 'variable') colorClass = 'text-amber-400 font-semibold';
 
+                      if (token.text.trim() === '...' && isFolded) {
+                        return (
+                          <span
+                            key={tIdx}
+                            onClick={() => lineInfo.range && toggleFold(lineInfo.range.startLine)}
+                            className="inline-flex items-center px-1.5 py-0.2 mx-0.5 text-[10px] font-mono text-zinc-400 hover:text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/80 rounded cursor-pointer select-none transition pointer-events-auto"
+                            title="Click to expand block"
+                          >
+                            ...
+                            {lineInfo.hiddenCount && (
+                              <span className="ml-1 text-[9px] text-zinc-500 font-sans">
+                                +{lineInfo.hiddenCount}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      }
+
                       return (
                         <span key={tIdx} className={colorClass}>
                           {renderHighlightedText(token.text, q)}
                         </span>
                       );
                     })
-                  )}
-
-                  {/* Folded Badge Placeholder */}
-                  {isFolded && (
-                    <button
-                      type="button"
-                      onClick={() => toggleFold(lineInfo.lineIndex)}
-                      className="ml-1.5 px-1.5 py-0.2 bg-zinc-800/90 hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200 rounded text-[10px] font-mono border border-zinc-700/80 select-none shadow-sm transition inline-flex items-center gap-1"
-                      title="Click to expand folded block"
-                    >
-                      <span>{lineInfo.previewSuffix || '{ ... }'}</span>
-                      {lineInfo.hiddenCount && (
-                        <span className="text-[9px] text-zinc-500 font-sans">
-                          +{lineInfo.hiddenCount} lines
-                        </span>
-                      )}
-                    </button>
                   )}
                 </div>
               </div>
@@ -231,7 +232,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
   // HTML format
   if (format === 'html') {
     return (
-      <div className={`font-mono text-[11px] leading-relaxed select-text min-w-fit ${className}`}>
+      <div className={`font-mono text-[11px] leading-relaxed select-text ${className}`}>
         {lines.map((line, lIdx) => {
           const tokens = tokenizeHtmlLine(line);
           return (

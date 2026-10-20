@@ -4,11 +4,10 @@ import {
   findFoldableRanges,
   getChildFoldLines,
   getAllFoldLines,
-  computeFoldedDisplayLines,
   autoExpandForMatches,
-  foldText,
-  unfoldText,
-  toggleFoldRange,
+  getFoldedLinePreview,
+  collapseDocument,
+  reconstructFullText,
 } from './codeFolding.ts';
 
 test('findFoldableRanges: finds multi-line objects and arrays with correct depth', () => {
@@ -24,7 +23,6 @@ test('findFoldableRanges: finds multi-line objects and arrays with correct depth
 }`;
 
   const ranges = findFoldableRanges(json);
-  // Expect 3 ranges: root { (0..10, depth 0), child { (2..4, depth 1), items [ (5..8, depth 1)
   assert.equal(ranges.length, 3);
 
   // Root
@@ -60,7 +58,7 @@ test('findFoldableRanges: ignores braces in strings and comments', () => {
 }`;
 
   const ranges = findFoldableRanges(code);
-  assert.equal(ranges.length, 2); // root and realChild
+  assert.equal(ranges.length, 2);
   assert.equal(ranges[0].startLine, 0);
   assert.equal(ranges[1].startLine, 5);
   assert.equal(ranges[1].endLine, 7);
@@ -73,7 +71,7 @@ test('findFoldableRanges: ignores single-line blocks', () => {
 }`;
 
   const ranges = findFoldableRanges(json);
-  assert.equal(ranges.length, 1); // Only root
+  assert.equal(ranges.length, 1);
   assert.equal(ranges[0].startLine, 0);
   assert.equal(ranges[0].endLine, 3);
 });
@@ -91,42 +89,101 @@ test('getChildFoldLines and getAllFoldLines: filters lines appropriately', () =>
   const allLines = getAllFoldLines(ranges);
 
   assert.equal(childLines.has(0), false);
-  assert.equal(childLines.has(1), true); // data
-  assert.equal(childLines.has(2), true); // list
+  assert.equal(childLines.has(1), true);
+  assert.equal(childLines.has(2), true);
   assert.equal(allLines.has(0), true);
   assert.equal(allLines.size, 3);
 });
 
-test('computeFoldedDisplayLines: collapses lines and adds placeholder suffix', () => {
-  const lines = [
-    '{',
-    '  "name": "Jane",',
-    '  "address": {',
-    '    "city": "Jakarta",',
-    '    "country": "ID"',
-    '  }',
-    '}'
-  ];
-  const text = lines.join('\n');
-  const ranges = findFoldableRanges(text);
-  const folded = new Set([2]); // fold "address"
+test('getFoldedLinePreview: formats clean preview with ... without comments or numbers', () => {
+  // Root JSON
+  assert.equal(getFoldedLinePreview('{', '}', 'object'), '{ ... }');
+  // Child JSON with comma
+  assert.equal(getFoldedLinePreview('  "address": {', '  },', 'object'), '  "address": { ... },');
+  // Array
+  assert.equal(getFoldedLinePreview('  "items": [', '  ]', 'array'), '  "items": [ ... ]');
+  // JS function callback
+  assert.equal(
+    getFoldedLinePreview('pm.test("Status code is 0 (OK)", () => {', '});', 'object'),
+    'pm.test("Status code is 0 (OK)", () => { ... });'
+  );
+});
 
-  const display = computeFoldedDisplayLines(lines, folded, ranges);
+test('collapseDocument: retains true original line numbers and clean ... placeholder', () => {
+  const js = `pm.test("test 1", () => {
+  pm.expect(1).to.equal(1);
+});
 
-  // Visible lines:
-  // 0: {
-  // 1:   "name": "Jane",
-  // 2:   "address": { ... }
-  // 3: }
-  assert.equal(display.length, 4);
-  assert.equal(display[0].lineIndex, 0);
-  assert.equal(display[1].lineIndex, 1);
-  assert.equal(display[2].lineIndex, 2);
-  assert.equal(display[2].isFolded, true);
-  assert.equal(display[2].hiddenCount, 3);
-  assert.ok(display[2].previewSuffix?.includes('}'));
-  assert.equal(display[3].lineIndex, 6);
-  assert.equal(display[3].isFolded, false);
+pm.test("test 2", () => {
+  pm.expect(2).to.equal(2);
+});`;
+
+  const ranges = findFoldableRanges(js);
+  const folded = new Set([0]); // fold test 1
+
+  const res = collapseDocument(js, folded, ranges);
+  assert.equal(res.lines.length, 5);
+
+  // Line 0 (collapsed test 1): original line 0 (gutter 1)
+  assert.equal(res.lines[0].displayLineIndex, 0);
+  assert.equal(res.lines[0].originalLineIndex, 0);
+  assert.equal(res.lines[0].text, 'pm.test("test 1", () => { ... });');
+  assert.equal(res.lines[0].isFolded, true);
+  assert.equal(res.lines[0].hiddenCount, 2);
+
+  // Line 1: empty line (original line 3, gutter 4)
+  assert.equal(res.lines[1].originalLineIndex, 3);
+  assert.equal(res.lines[1].text, '');
+  assert.equal(res.lines[1].isFolded, false);
+
+  // Line 2: test 2 (original line 4, gutter 5)
+  assert.equal(res.lines[2].originalLineIndex, 4);
+  assert.equal(res.lines[2].text, 'pm.test("test 2", () => {');
+  assert.equal(res.lines[2].isFolded, false);
+  assert.equal(res.lines[2].canFold, true);
+});
+
+test('reconstructFullText: restores original full document when editing around folded blocks', () => {
+  const json = `{
+  "user": {
+    "name": "Jane",
+    "age": 25
+  },
+  "score": 100
+}`;
+
+  const ranges = findFoldableRanges(json);
+  const folded = new Set([1]); // Fold "user"
+
+  const collapsed = collapseDocument(json, folded, ranges);
+  assert.equal(collapsed.displayText, `{\n  "user": { ... },\n  "score": 100\n}`);
+
+  // User edits score from 100 to 200 in the display text
+  const userEditedDisplay = `{\n  "user": { ... },\n  "score": 200\n}`;
+  const reconstructed = reconstructFullText(userEditedDisplay, json, folded, ranges);
+
+  assert.equal(reconstructed.activeFoldedLines.has(1), true);
+  assert.equal(
+    reconstructed.fullText,
+    `{\n  "user": {\n    "name": "Jane",\n    "age": 25\n  },\n  "score": 200\n}`
+  );
+});
+
+test('reconstructFullText: unfolds block if user edited the folded placeholder line', () => {
+  const json = `{
+  "user": {
+    "name": "Jane"
+  }
+}`;
+  const ranges = findFoldableRanges(json);
+  const folded = new Set([1]);
+
+  // User deletes user line completely
+  const userEditedDisplay = `{\n}`;
+  const reconstructed = reconstructFullText(userEditedDisplay, json, folded, ranges);
+
+  assert.equal(reconstructed.activeFoldedLines.size, 0); // No longer folded
+  assert.equal(reconstructed.fullText, `{\n}`);
 });
 
 test('autoExpandForMatches: expands folded parent ranges when hidden lines match query', () => {
@@ -140,49 +197,5 @@ test('autoExpandForMatches: expands folded parent ranges when hidden lines match
   const matchedLines = [2]; // line 2 contains secret
 
   const updated = autoExpandForMatches(ranges, folded, matchedLines);
-  assert.equal(updated.has(1), false); // expanded!
+  assert.equal(updated.has(1), false);
 });
-
-test('foldText and unfoldText: folds child ranges and recovers original text', () => {
-  const json = `{
-  "name": "Jane",
-  "address": {
-    "city": "Jakarta",
-    "country": "ID"
-  },
-  "active": true
-}`;
-
-  const ranges = findFoldableRanges(json);
-  const childRanges = ranges.filter((r) => r.isChild);
-  assert.equal(childRanges.length, 1);
-
-  const { foldedText, foldMap } = foldText(json, childRanges);
-  assert.ok(foldedText.includes('/* ... #1 */'));
-  assert.equal(foldedText.split('\n').length, 5); // reduced line count
-
-  // Unfold recovers exact original
-  const recovered = unfoldText(foldedText, foldMap);
-  assert.equal(recovered, json);
-});
-
-test('toggleFoldRange: toggles fold on and off cleanly at specific line', () => {
-  const json = `{
-  "name": "Jane",
-  "address": {
-    "city": "Jakarta"
-  }
-}`;
-  const ranges = findFoldableRanges(json);
-
-  // Fold line 2
-  const step1 = toggleFoldRange(json, 2, ranges, {});
-  assert.ok(step1.text.includes('/* ... #1 */'));
-  assert.equal(Object.keys(step1.foldMap).length, 1);
-
-  // Unfold line 2
-  const step2 = toggleFoldRange(step1.text, 2, ranges, step1.foldMap);
-  assert.equal(step2.text, json);
-  assert.equal(Object.keys(step2.foldMap).length, 0);
-});
-
