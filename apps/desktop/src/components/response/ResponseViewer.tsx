@@ -513,7 +513,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
             })()}
 
             {formattedBody ? (
-              <div className="text-zinc-200 font-mono text-[11px] leading-relaxed select-text overflow-x-auto p-1">
+              <div className="text-zinc-200 font-mono text-[11px] leading-relaxed select-text overflow-x-auto py-1">
                 <FormattedBodyViewer
                   content={formattedBody}
                   format={detectedFormat}
@@ -639,7 +639,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                         </button>
                       </div>
                     </div>
-                    <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800/50 overflow-x-auto">
+                    <div className="bg-zinc-950/80 py-2 rounded border border-zinc-800/50 overflow-x-auto">
                       <FormattedBodyViewer
                         content={formattedMsg}
                         format={msgFormat}
@@ -727,7 +727,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                     {savedFormat}
                   </span>
                 </div>
-                <div className="bg-zinc-950/70 p-2.5 rounded border border-zinc-800/60 overflow-x-auto">
+                <div className="bg-zinc-950/70 py-2.5 rounded border border-zinc-800/60 overflow-x-auto">
                   <FormattedBodyViewer
                     content={formattedSavedBody}
                     format={savedFormat}
