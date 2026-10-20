@@ -72,6 +72,15 @@ interface AppState {
   workspaceModalOpen: boolean;
   commandPaletteOpen: boolean;
   shortcutsHelpOpen: boolean;
+  editVariableModal: {
+    isOpen: boolean;
+    key: string;
+    value?: string;
+    isSensitive?: boolean;
+    variableId?: string;
+    environmentId?: string;
+    environmentName?: string;
+  } | null;
 
   setAuth: (token: string, user: UserSummary, workspace?: WorkspaceSummary) => void;
   logout: () => void;
@@ -89,6 +98,15 @@ interface AppState {
   setWorkspaceModalOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setShortcutsHelpOpen: (open: boolean) => void;
+  openEditVariableModal: (params: {
+    key: string;
+    value?: string;
+    isSensitive?: boolean;
+    variableId?: string;
+    environmentId?: string;
+    environmentName?: string;
+  }) => void;
+  closeEditVariableModal: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -396,4 +414,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   shortcutsHelpOpen: false,
   setShortcutsHelpOpen: (open) => set({ shortcutsHelpOpen: open }),
+  editVariableModal: null,
+  openEditVariableModal: (params) =>
+    set({
+      editVariableModal: {
+        isOpen: true,
+        ...params,
+      },
+    }),
+  closeEditVariableModal: () => set({ editVariableModal: null }),
 }));
