@@ -12,42 +12,6 @@ function substitute(val: string, vars?: Record<string, string>): string {
 }
 
 /**
- * Combines an endpoint's relative URL with a collection's base URL.
- * If endpoint URL is already absolute (http://, https://, etc.) or baseUrl is blank, returns original url.
- */
-export function resolveEndpointUrl(
-  url: string,
-  baseUrl?: string,
-  variables?: Record<string, string>
-): string {
-  const trimmedUrl = (url || '').trim();
-  const trimmedBase = (baseUrl || '').trim();
-
-  if (!trimmedBase) {
-    return trimmedUrl;
-  }
-
-  const subBase = substitute(trimmedBase, variables).trim();
-  const subUrl = substitute(trimmedUrl, variables).trim();
-
-  // If endpoint URL is already absolute, do not prepend baseUrl
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//i.test(subUrl)) {
-    return subUrl;
-  }
-
-  const baseHasSlash = subBase.endsWith('/');
-  const urlHasSlash = subUrl.startsWith('/');
-
-  if (baseHasSlash && urlHasSlash) {
-    return `${subBase}${subUrl.slice(1)}`;
-  }
-  if (!baseHasSlash && !urlHasSlash) {
-    return `${subBase}/${subUrl}`;
-  }
-  return `${subBase}${subUrl}`;
-}
-
-/**
  * Injects enabled collection-level headers into the request header dictionary
  * only if the request does not already define that header (case-insensitive check).
  */
@@ -83,10 +47,9 @@ export function applyInheritedHeaders(
 
 /**
  * Resolves all collection settings for HTTP:
- * 1. Base URL prefixing for relative paths
- * 2. Shared collection headers
- * 3. Shared authorization
- * 4. Default timeout
+ * 1. Shared collection headers
+ * 2. Shared authorization
+ * 3. Default timeout
  */
 export function applyCollectionSettingsToHttp(
   req: HttpExecutionRequest,
@@ -95,32 +58,24 @@ export function applyCollectionSettingsToHttp(
 ): HttpExecutionRequest {
   if (!settings) return req;
 
-  // 1. Resolve URL
-  let resolvedUrl = req.url;
-  if (settings.base_url) {
-    resolvedUrl = resolveEndpointUrl(req.url, settings.base_url, variables);
-  }
-
-  // 2. Resolve Headers
+  // 1. Resolve Headers
   const resolvedHeaders = applyInheritedHeaders(req.headers, settings.headers, variables);
 
-  const reqWithUrlAndHeaders: HttpExecutionRequest = {
+  const reqWithHeaders: HttpExecutionRequest = {
     ...req,
-    url: resolvedUrl,
     headers: resolvedHeaders,
     timeout_ms: req.timeout_ms || (settings.timeout_ms && settings.timeout_ms > 0 ? settings.timeout_ms : undefined),
   };
 
-  // 3. Resolve Auth
-  return applyInheritedHttpAuth(reqWithUrlAndHeaders, settings, variables);
+  // 2. Resolve Auth
+  return applyInheritedHttpAuth(reqWithHeaders, settings, variables);
 }
 
 /**
  * Resolves all collection settings for gRPC:
- * 1. Default server address
- * 2. Shared collection metadata headers
- * 3. Shared authorization
- * 4. Default timeout
+ * 1. Shared collection metadata headers
+ * 2. Shared authorization
+ * 3. Default timeout
  */
 export function applyCollectionSettingsToGrpc(
   req: GrpcExecutionRequest,
@@ -129,22 +84,15 @@ export function applyCollectionSettingsToGrpc(
 ): GrpcExecutionRequest {
   if (!settings) return req;
 
-  // 1. Fallback Server Address if empty
-  let resolvedAddress = req.server_address;
-  if (!resolvedAddress?.trim() && settings.base_url) {
-    resolvedAddress = substitute(settings.base_url.trim(), variables).trim();
-  }
-
-  // 2. Resolve Metadata / Headers
+  // 1. Resolve Metadata / Headers
   const resolvedMetadata = applyInheritedHeaders(req.metadata, settings.headers, variables);
 
   const reqWithMeta: GrpcExecutionRequest = {
     ...req,
-    server_address: resolvedAddress,
     metadata: resolvedMetadata,
     timeout_ms: req.timeout_ms || (settings.timeout_ms && settings.timeout_ms > 0 ? settings.timeout_ms : undefined),
   };
 
-  // 3. Resolve Auth
+  // 2. Resolve Auth
   return applyInheritedGrpcAuth(reqWithMeta, settings, variables);
 }
