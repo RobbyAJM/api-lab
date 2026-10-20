@@ -545,7 +545,11 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
 
                 {/* Response Text with syntax highlighting & select-text enabled */}
                 <div className="text-zinc-200 font-mono text-[11px] leading-relaxed select-text selection:bg-indigo-600/40 overflow-x-auto p-1">
-                  <FormattedBodyViewer content={formattedBody} format={detectedFormat} />
+                  <FormattedBodyViewer
+                    content={formattedBody}
+                    format={detectedFormat}
+                    searchQuery={searchQuery}
+                  />
                 </div>
               </div>
             ) : (
@@ -668,7 +672,11 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                       </div>
                     </div>
                     <div className="bg-zinc-950/80 p-2 rounded border border-zinc-800/50 overflow-x-auto">
-                      <FormattedBodyViewer content={formattedMsg} format={msgFormat} />
+                      <FormattedBodyViewer
+                        content={formattedMsg}
+                        format={msgFormat}
+                        searchQuery={searchQuery}
+                      />
                     </div>
                   </div>
                 );
@@ -752,7 +760,11 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                   </span>
                 </div>
                 <div className="bg-zinc-950/70 p-2.5 rounded border border-zinc-800/60 overflow-x-auto">
-                  <FormattedBodyViewer content={formattedSavedBody} format={savedFormat} />
+                  <FormattedBodyViewer
+                    content={formattedSavedBody}
+                    format={savedFormat}
+                    searchQuery={searchQuery}
+                  />
                 </div>
               </div>
             ) : (
