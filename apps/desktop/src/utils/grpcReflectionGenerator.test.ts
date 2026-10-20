@@ -101,9 +101,13 @@ test('executeGrpcHierarchyCreation: creates root folder, service subfolders, and
   assert.equal(res.createdServiceFoldersCount, 2);
   assert.equal(res.createdEndpointsCount, 3);
 
-  // Check call 1: Root folder created
+  // Check call 1: Root folder created with grpc_url
   assert.equal(calls[0].path, '/collections/coll-123/folders');
-  assert.deepEqual(calls[0].body, { name: 'TestFolder', parent_folder_id: null });
+  assert.deepEqual(calls[0].body, {
+    name: 'TestFolder',
+    parent_folder_id: null,
+    grpc_url: 'localhost:9091',
+  });
 
   // Check call 2: First service folder created with parent_folder_id = folder-1
   assert.equal(calls[1].path, '/collections/coll-123/folders');
