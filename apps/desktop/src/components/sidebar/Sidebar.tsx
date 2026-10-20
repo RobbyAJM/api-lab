@@ -882,6 +882,7 @@ const FolderTreeNodeComponent: React.FC<{
   onSyncReflection,
 }) => {
   const queryClient = useQueryClient();
+  const { openReflectionSettingsModal } = useAppStore();
   const [isOpen, setIsOpen] = useState(true);
   const [showAddSubFolder, setShowAddSubFolder] = useState(false);
   const [showAddSubEndpoint, setShowAddSubEndpoint] = useState(false);
@@ -1025,17 +1026,29 @@ const FolderTreeNodeComponent: React.FC<{
           className="fixed z-50 bg-zinc-900 border border-zinc-700/80 rounded-lg shadow-2xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
-          {isReflection && onSyncReflection && (
+          {isReflection && (
             <>
+              {onSyncReflection && (
+                <button
+                  onClick={() => {
+                    setFolderContextMenuPos(null);
+                    onSyncReflection(node.folder.id);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+                >
+                  <RefreshCw size={12} className="text-secondary" />
+                  <span>Sync Reflection</span>
+                </button>
+              )}
               <button
                 onClick={() => {
                   setFolderContextMenuPos(null);
-                  onSyncReflection(node.folder.id);
+                  openReflectionSettingsModal(node.folder.id, collectionId);
                 }}
                 className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
               >
-                <RefreshCw size={12} className="text-secondary" />
-                <span>Sync Reflection</span>
+                <Settings size={12} className="text-zinc-400" />
+                <span>Settings</span>
               </button>
               <div className="h-px bg-zinc-800 my-1" />
             </>
