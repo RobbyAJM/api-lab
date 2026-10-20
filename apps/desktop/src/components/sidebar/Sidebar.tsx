@@ -35,6 +35,7 @@ import { GenerateGrpcModal } from './GenerateGrpcModal';
 import { CollectionSettingsModal } from '../collections/CollectionSettingsModal';
 import { SyncReflectionModal } from '../collections/SyncReflectionModal';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
+import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 import {
   buildFolderTree,
   filterCollectionTree,
@@ -459,11 +460,17 @@ const CollectionNode: React.FC<{
   const [endpointProtocol, setEndpointProtocol] = useState<'http' | 'grpc' | 'grpc_reflection'>('http');
   const { activeEnvironmentId } = useAppStore();
 
-  // Close context menu on outside click
+  // Close context menu on outside click or global close event
   useEffect(() => {
     const handleClose = () => setContextMenuPos(null);
     window.addEventListener('click', handleClose);
-    return () => window.removeEventListener('click', handleClose);
+    window.addEventListener('contextmenu', handleClose);
+    window.addEventListener(CONTEXT_MENU_CLOSE_EVENT, handleClose);
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('contextmenu', handleClose);
+      window.removeEventListener(CONTEXT_MENU_CLOSE_EVENT, handleClose);
+    };
   }, []);
 
   // Fetch Folders
@@ -572,6 +579,7 @@ const CollectionNode: React.FC<{
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        closeAllContextMenus();
         setContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
     >
@@ -886,12 +894,18 @@ const FolderTreeNodeComponent: React.FC<{
   const isReflection = isReflectionFolder(node.folder, collectionSettings);
   const grpcUrl = getFolderGrpcUrl(node.folder, collectionSettings);
 
-  // Close context menu on outside click
+  // Close context menu on outside click or global close event
   useEffect(() => {
     if (!folderContextMenuPos) return;
-    const handleClick = () => setFolderContextMenuPos(null);
-    window.addEventListener('click', handleClick);
-    return () => window.removeEventListener('click', handleClick);
+    const handleClose = () => setFolderContextMenuPos(null);
+    window.addEventListener('click', handleClose);
+    window.addEventListener('contextmenu', handleClose);
+    window.addEventListener(CONTEXT_MENU_CLOSE_EVENT, handleClose);
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('contextmenu', handleClose);
+      window.removeEventListener(CONTEXT_MENU_CLOSE_EVENT, handleClose);
+    };
   }, [folderContextMenuPos]);
 
   // Collapse Collections/Folders button trigger (Feature 1)
@@ -956,6 +970,7 @@ const FolderTreeNodeComponent: React.FC<{
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        closeAllContextMenus();
         setFolderContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
     >
@@ -1155,11 +1170,18 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
 
+  // Close context menu on outside click or global close event
   useEffect(() => {
     if (!contextMenuPos) return;
-    const handleClick = () => setContextMenuPos(null);
-    window.addEventListener('click', handleClick);
-    return () => window.removeEventListener('click', handleClick);
+    const handleClose = () => setContextMenuPos(null);
+    window.addEventListener('click', handleClose);
+    window.addEventListener('contextmenu', handleClose);
+    window.addEventListener(CONTEXT_MENU_CLOSE_EVENT, handleClose);
+    return () => {
+      window.removeEventListener('click', handleClose);
+      window.removeEventListener('contextmenu', handleClose);
+      window.removeEventListener(CONTEXT_MENU_CLOSE_EVENT, handleClose);
+    };
   }, [contextMenuPos]);
 
   const deleteEndpointMutation = useMutation({
@@ -1180,6 +1202,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        closeAllContextMenus();
         setContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
       className="relative group"
