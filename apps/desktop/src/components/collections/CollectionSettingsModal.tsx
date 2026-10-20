@@ -9,7 +9,7 @@ import type {
   VariableResponse,
 } from '@api-lab/api-types';
 import { VariableInput } from '../common/VariableInput';
-import { X, Shield, Globe, Sliders, Plus, Trash2, Save, Check } from 'lucide-react';
+import { X, Shield, Settings, Sliders, Plus, Trash2, Save, Check } from 'lucide-react';
 
 interface CollectionSettingsModalProps {
   collection: Collection;
@@ -18,7 +18,7 @@ interface CollectionSettingsModalProps {
   activeVariables?: Record<string, string>;
 }
 
-type SettingsTab = 'auth' | 'general' | 'headers';
+type SettingsTab = 'general' | 'auth' | 'headers';
 
 export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = ({
   collection,
@@ -28,7 +28,10 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
 }) => {
   const queryClient = useQueryClient();
   const { activeEnvironmentId } = useAppStore();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('auth');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+
+  // Name state
+  const [name, setName] = useState(collection.name || '');
 
   // Fetch active environment variables so syntax highlighting is always accurate
   const { data: envVars = [] } = useQuery<VariableResponse[]>({
@@ -62,8 +65,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
     collection.settings?.auth?.header_value || ''
   );
 
-  // General & Base URL state
-  const [baseUrl, setBaseUrl] = useState(collection.settings?.base_url || '');
+  // General settings state
   const [timeoutMs, setTimeoutMs] = useState<string>(
     collection.settings?.timeout_ms ? String(collection.settings.timeout_ms) : ''
   );
@@ -80,13 +82,13 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
 
   // Synchronize state when collection changes
   useEffect(() => {
+    setName(collection.name || '');
     setAuthType(collection.settings?.auth?.auth_type || 'none');
     setToken(collection.settings?.auth?.token || '');
     setUsername(collection.settings?.auth?.username || '');
     setPassword(collection.settings?.auth?.password || '');
     setHeaderName(collection.settings?.auth?.header_name || 'Authorization');
     setHeaderValue(collection.settings?.auth?.header_value || '');
-    setBaseUrl(collection.settings?.base_url || '');
     setTimeoutMs(
       collection.settings?.timeout_ms ? String(collection.settings.timeout_ms) : ''
     );
@@ -96,7 +98,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
         ? collection.settings.headers.map((h) => ({ ...h, enabled: h.enabled !== false }))
         : []
     );
-  }, [collection.id, collection.settings]);
+  }, [collection.id, collection.name, collection.settings]);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -113,6 +115,11 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
 
   const updateMutation = useMutation({
     mutationFn: () => {
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        throw new Error('Collection name cannot be empty');
+      }
+
       const authSettings: CollectionAuthSettings = {
         auth_type: authType,
         token: authType === 'bearer' ? token : undefined,
@@ -135,9 +142,9 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
       return apiRequest<Collection>(`/collections/${collection.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
+          name: trimmedName,
           settings: {
             auth: authSettings,
-            base_url: baseUrl.trim() || undefined,
             headers: validHeaders,
             timeout_ms: !isNaN(parsedTimeout as number) && (parsedTimeout as number) > 0 ? parsedTimeout : undefined,
             description: description.trim() || undefined,
@@ -190,17 +197,17 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-950/80 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-700/80 text-zinc-300">
-              <Shield size={14} className="text-secondary" />
+              <Settings size={14} className="text-secondary" />
             </div>
             <div>
               <h2 className="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
                 Collection Settings
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
-                  {collection.name}
+                  {name || collection.name}
                 </span>
               </h2>
               <p className="text-[10px] text-zinc-400">
-                Configurations shared by endpoints in this collection
+                Configurations and options for this collection
               </p>
             </div>
           </div>
@@ -217,6 +224,18 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
         <div className="px-5 border-b border-zinc-800/80 flex items-center gap-4 text-xs bg-zinc-950 flex-shrink-0">
           <button
             type="button"
+            onClick={() => setActiveTab('general')}
+            className={`py-2.5 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'general'
+                ? 'border-primary text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Settings size={13} />
+            <span>General</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setActiveTab('auth')}
             className={`py-2.5 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'auth'
@@ -226,18 +245,6 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
           >
             <Shield size={13} />
             <span>Authorization</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('general')}
-            className={`py-2.5 flex items-center gap-1.5 font-medium border-b-2 transition ${
-              activeTab === 'general'
-                ? 'border-primary text-zinc-100'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Globe size={13} />
-            <span>Base URL & General</span>
           </button>
           <button
             type="button"
@@ -260,7 +267,62 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
 
         {/* Scrollable Body */}
         <div className="p-5 space-y-4 text-xs overflow-y-auto flex-1">
-          {/* TAB 1: Authorization */}
+          {/* TAB 1: General */}
+          {activeTab === 'general' && (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-zinc-300 font-semibold mb-1">
+                  Collection Name <span className="text-red-400">*</span>
+                </label>
+                <p className="text-[11px] text-zinc-400 mb-2 leading-relaxed">
+                  Display name of this collection in workspace sidebar and exports.
+                </p>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Authentication API or Payments Service"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700 font-sans"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-semibold mb-1">
+                  Default Request Timeout (ms)
+                </label>
+                <p className="text-[11px] text-zinc-400 mb-2 leading-relaxed">
+                  Applied to requests in this collection that do not specify their own timeout. Default: 30000ms.
+                </p>
+                <input
+                  type="number"
+                  min="0"
+                  step="500"
+                  value={timeoutMs}
+                  onChange={(e) => setTimeoutMs(e.target.value)}
+                  placeholder="30000"
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-zinc-300 font-semibold mb-1">
+                  Description / Documentation
+                </label>
+                <p className="text-[11px] text-zinc-400 mb-2 leading-relaxed">
+                  Notes or context for team members working on this collection.
+                </p>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Notes, prerequisites, environment setup instructions..."
+                  rows={3}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700 resize-none font-sans"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: Authorization */}
           {activeTab === 'auth' && (
             <div className="space-y-4">
               <div>
@@ -354,63 +416,6 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
                   </div>
                 </div>
               )}
-            </div>
-          )}
-
-          {/* TAB 2: General & Base URL */}
-          {activeTab === 'general' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-zinc-300 font-semibold mb-1">
-                  Default Base URL / Server Host
-                </label>
-                <p className="text-[11px] text-zinc-400 mb-2 leading-relaxed">
-                  Prepended to all relative endpoint paths (e.g. <code className="text-zinc-300 font-mono">/users</code>) and serves as fallback server address for gRPC endpoints.
-                </p>
-                <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-700 h-8">
-                  <VariableInput
-                    value={baseUrl}
-                    onChange={setBaseUrl}
-                    variables={effectiveVariables}
-                    placeholder="https://api.example.com or {{BASE_URL}}"
-                    className="w-full h-full"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-zinc-300 font-semibold mb-1">
-                  Default Request Timeout (ms)
-                </label>
-                <p className="text-[11px] text-zinc-400 mb-2 leading-relaxed">
-                  Applied to requests in this collection that do not specify their own timeout. Default: 30000ms.
-                </p>
-                <input
-                  type="number"
-                  min="0"
-                  step="500"
-                  value={timeoutMs}
-                  onChange={(e) => setTimeoutMs(e.target.value)}
-                  placeholder="30000"
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-zinc-700"
-                />
-              </div>
-
-              <div>
-                <label className="block text-zinc-300 font-semibold mb-1">
-                  Description / Documentation
-                </label>
-                <p className="text-[11px] text-zinc-400 mb-2 leading-relaxed">
-                  Notes or context for team members working on this collection.
-                </p>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Notes, prerequisites, environment setup instructions..."
-                  rows={3}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-zinc-700 resize-none font-sans"
-                />
-              </div>
             </div>
           )}
 
@@ -514,7 +519,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
           <button
             type="button"
             onClick={() => updateMutation.mutate()}
-            disabled={updateMutation.isPending}
+            disabled={updateMutation.isPending || !name.trim()}
             className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded text-xs font-medium flex items-center gap-1.5 shadow transition"
           >
             <Save size={12} />

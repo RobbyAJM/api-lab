@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  resolveEndpointUrl,
   applyInheritedHeaders,
   applyCollectionSettingsToHttp,
   applyCollectionSettingsToGrpc,
@@ -11,56 +10,6 @@ import type {
   HttpExecutionRequest,
   GrpcExecutionRequest,
 } from '@api-lab/api-types';
-
-test('resolveEndpointUrl: prepends baseUrl to relative paths with proper slash handling', () => {
-  // Case 1: base has no slash, path has slash
-  assert.equal(
-    resolveEndpointUrl('/users', 'https://api.example.com'),
-    'https://api.example.com/users'
-  );
-
-  // Case 2: base has slash, path has slash (deduplication)
-  assert.equal(
-    resolveEndpointUrl('/users', 'https://api.example.com/'),
-    'https://api.example.com/users'
-  );
-
-  // Case 3: base has slash, path has no slash
-  assert.equal(
-    resolveEndpointUrl('users', 'https://api.example.com/'),
-    'https://api.example.com/users'
-  );
-
-  // Case 4: base has no slash, path has no slash
-  assert.equal(
-    resolveEndpointUrl('users', 'https://api.example.com'),
-    'https://api.example.com/users'
-  );
-});
-
-test('resolveEndpointUrl: leaves absolute URLs untouched', () => {
-  assert.equal(
-    resolveEndpointUrl('https://other.com/test', 'https://api.example.com'),
-    'https://other.com/test'
-  );
-  assert.equal(
-    resolveEndpointUrl('http://localhost:3000/api', 'https://api.example.com'),
-    'http://localhost:3000/api'
-  );
-});
-
-test('resolveEndpointUrl: substitutes variables in baseUrl and url', () => {
-  const vars = { HOST: 'api.nutrade.com', VERSION: 'v2' };
-  assert.equal(
-    resolveEndpointUrl('/{{VERSION}}/orders', 'https://{{HOST}}', vars),
-    'https://api.nutrade.com/v2/orders'
-  );
-});
-
-test('resolveEndpointUrl: returns original URL when baseUrl is empty', () => {
-  assert.equal(resolveEndpointUrl('/orders', ''), '/orders');
-  assert.equal(resolveEndpointUrl('/orders', undefined), '/orders');
-});
 
 test('applyInheritedHeaders: merges collection headers if not present in request', () => {
   const headers = { 'Content-Type': 'application/json' };
@@ -91,9 +40,9 @@ test('applyInheritedHeaders: endpoint headers override collection headers case-i
   assert.equal(result['X-Client-ID'], undefined);
 });
 
-test('applyCollectionSettingsToHttp: full pipeline (baseUrl, headers, auth, timeout)', () => {
+test('applyCollectionSettingsToHttp: full pipeline (headers, auth, timeout)', () => {
   const req: HttpExecutionRequest = {
-    url: '/v1/items',
+    url: 'https://api.example.com/v1/items',
     method: 'GET',
     headers: { 'X-Custom': 'original' },
     query_params: [],
@@ -101,7 +50,6 @@ test('applyCollectionSettingsToHttp: full pipeline (baseUrl, headers, auth, time
   };
 
   const settings: CollectionSettings = {
-    base_url: 'https://api.example.com',
     timeout_ms: 15000,
     headers: [
       { key: 'Accept', value: 'application/json', enabled: true },
@@ -138,9 +86,9 @@ test('applyCollectionSettingsToHttp: endpoint overrides timeout when explicitly 
   assert.equal(result.timeout_ms, 5000);
 });
 
-test('applyCollectionSettingsToGrpc: falls back to collection baseUrl for server_address and merges metadata', () => {
+test('applyCollectionSettingsToGrpc: merges metadata headers and auth', () => {
   const req: GrpcExecutionRequest = {
-    server_address: '',
+    server_address: 'localhost:50051',
     service: 'item.ItemService',
     method: 'GetItem',
     metadata: {},
@@ -148,7 +96,6 @@ test('applyCollectionSettingsToGrpc: falls back to collection baseUrl for server
   };
 
   const settings: CollectionSettings = {
-    base_url: 'localhost:50051',
     timeout_ms: 8000,
     headers: [
       { key: 'x-request-id', value: 'req-999', enabled: true },
