@@ -128,7 +128,26 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     resolveVariables().then(setActiveVariables);
   }, [activeEnvironmentId]);
 
-  const effectiveTls = useTls || shouldAutoDetectTls(serverAddress, activeVariables);
+  // Fetch parent collection for inherited settings
+  const { data: collection } = useQuery<Collection>({
+    queryKey: ['collection', endpoint.collection_id],
+    queryFn: () => apiRequest<Collection>(`/collections/${endpoint.collection_id}`),
+    enabled: !!endpoint.collection_id,
+  });
+
+  // Fetch folders of collection to compute reflection folder inheritance
+  const { data: folders = [] } = useQuery<CollectionFolder[]>({
+    queryKey: ['folders', endpoint.collection_id],
+    queryFn: () => apiRequest<CollectionFolder[]>(`/collections/${endpoint.collection_id}/folders`),
+    enabled: !!endpoint.collection_id,
+  });
+
+  const inheritedInfo = resolveInheritedGrpcAddress(endpoint, folders, collection?.settings);
+  const effectiveServerAddress = inheritedInfo.isInherited
+    ? (inheritedInfo.inheritedAddress || '')
+    : serverAddress;
+
+  const effectiveTls = useTls || shouldAutoDetectTls(effectiveServerAddress, activeVariables);
 
   // Auto-discover & cache reflection per server address (Fix for Bug 1)
   const {
@@ -136,12 +155,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     isFetching: discovering,
     refetch: refetchReflection,
   } = useQuery<GrpcServiceSummary[]>({
-    queryKey: ['reflection', serverAddress, effectiveTls, activeEnvironmentId],
+    queryKey: ['reflection', effectiveServerAddress, effectiveTls, activeEnvironmentId],
     queryFn: async () => {
-      if (!serverAddress.trim()) return [];
+      if (!effectiveServerAddress.trim()) return [];
       const activeVars = await resolveVariables();
       const res = await discoverNativeGrpcServices(
-        { server_address: serverAddress, use_tls: effectiveTls },
+        { server_address: effectiveServerAddress, use_tls: effectiveTls },
         activeVars
       );
       if (res.error) {
@@ -150,7 +169,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       return res.services || [];
     },
     staleTime: 5 * 60 * 1000,
-    enabled: !!serverAddress.trim(),
+    enabled: !!effectiveServerAddress.trim(),
   });
 
   const discoveredServices = cachedServices;
@@ -191,13 +210,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [methodSearchQuery, setMethodSearchQuery] = useState('');
   const methodPickerRef = useRef<HTMLDivElement>(null);
   const methodSearchInputRef = useRef<HTMLInputElement>(null);
-
-  // Fetch parent collection for inherited settings
-  const { data: collection } = useQuery<Collection>({
-    queryKey: ['collection', endpoint.collection_id],
-    queryFn: () => apiRequest<Collection>(`/collections/${endpoint.collection_id}`),
-    enabled: !!endpoint.collection_id,
-  });
 
   // Track previous endpoint id to only reinitialize state when switching to a different endpoint without remount
   const prevEndpointIdRef = useRef(endpoint.id);
@@ -270,7 +282,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       const activeVars = await resolveVariables();
       const res = await generateNativeGrpcSamplePayload(
         {
-          server_address: serverAddress,
+          server_address: effectiveServerAddress,
           service: selectedService,
           method: selectedMethod,
           use_tls: useTls,
@@ -334,7 +346,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           const activeVars = await resolveVariables();
           const res = await generateNativeGrpcSamplePayload(
             {
-              server_address: serverAddress,
+              server_address: effectiveServerAddress,
               service: selectedService,
               method: selectedMethod,
               use_tls: effectiveTls,
@@ -354,7 +366,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         isCancelled = true;
       };
     }
-  }, [activeTab, selectedService, selectedMethod, serverAddress, effectiveTls, specSamplePayload]);
+  }, [activeTab, selectedService, selectedMethod, effectiveServerAddress, effectiveTls, specSamplePayload]);
 
   const streamType =
     currentMethodObj?.stream_type ||
@@ -380,7 +392,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
 
     return {
-      server_address: serverAddress,
+      server_address: effectiveServerAddress,
       service: selectedService,
       method: selectedMethod,
       use_tls: effectiveTls,
@@ -548,7 +560,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
 
     const execReq: GrpcExecutionRequest = {
-      server_address: serverAddress,
+      server_address: effectiveServerAddress,
       service: selectedService,
       method: selectedMethod,
       metadata: metaMap,
@@ -664,7 +676,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
 
     const execReq: GrpcExecutionRequest = {
-      server_address: serverAddress,
+      server_address: effectiveServerAddress,
       service: selectedService,
       method: selectedMethod,
       metadata: metaMap,
@@ -809,18 +821,50 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             </button>
 
             <div className="flex-1 h-full flex items-center min-w-0">
-              <VariableInput
-                value={serverAddress}
-                onChange={(val) => {
-                  setServerAddress(val);
-                  if (shouldAutoDetectTls(val, activeVariables)) {
-                    setUseTls(true);
-                  }
-                }}
-                variables={activeVariables}
-                placeholder="localhost:50051 or {{GRPC_ADDR}}"
-                className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
-              />
+              {inheritedInfo.isInherited ? (
+                <div className="flex items-center justify-between w-full h-full pr-1 font-mono text-xs select-none">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0 pl-1">
+                    <span
+                      className="text-zinc-200 truncate select-text"
+                      title={`Inherited from reflection folder "${inheritedInfo.folderName}"`}
+                    >
+                      {effectiveServerAddress || <span className="text-zinc-500 italic">No address set</span>}
+                    </span>
+                    <span
+                      className="px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/50 text-amber-300 text-[10px] font-sans flex-shrink-0"
+                      title={`Inherited from reflection folder "${inheritedInfo.folderName}"`}
+                    >
+                      Inherited
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (inheritedInfo.folderId && endpoint.collection_id) {
+                        openReflectionSettingsModal(inheritedInfo.folderId, endpoint.collection_id);
+                      }
+                    }}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-zinc-400 hover:text-zinc-100 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60 transition cursor-pointer flex-shrink-0"
+                    title={`Edit gRPC address in ${inheritedInfo.folderName} reflection settings`}
+                  >
+                    <Settings size={11} className="text-primary" />
+                    <span>Edit</span>
+                  </button>
+                </div>
+              ) : (
+                <VariableInput
+                  value={serverAddress}
+                  onChange={(val) => {
+                    setServerAddress(val);
+                    if (shouldAutoDetectTls(val, activeVariables)) {
+                      setUseTls(true);
+                    }
+                  }}
+                  variables={activeVariables}
+                  placeholder="localhost:50051 or {{GRPC_ADDR}}"
+                  className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
+                />
+              )}
             </div>
           </div>
 
