@@ -6,8 +6,7 @@ import {
   generateNativeGrpcSamplePayload,
 } from '../../api/native';
 import {
-  planGrpcHierarchy,
-  executeGrpcHierarchyCreation,
+  generateGrpcCollection,
   shouldAutoDetectTls,
 } from '../../utils/grpcReflectionGenerator';
 import { VariableInput } from '../common/VariableInput';
@@ -85,58 +84,6 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
 
     try {
       const activeVars = await resolveVariables();
-      const effectiveTls = useTls || shouldAutoDetectTls(serverAddress, activeVars);
-
-      const reflection = await discoverNativeGrpcServices(
-        { server_address: serverAddress.trim(), use_tls: effectiveTls },
-        activeVars
-      );
-
-      if (reflection.error) {
-        throw new Error(reflection.error);
-      }
-
-      if (!reflection.services || reflection.services.length === 0) {
-        throw new Error('No services discovered via gRPC server reflection.');
-      }
-
-      setStatusText(`Found ${reflection.services.length} services. Generating sample payloads...`);
-
-      // Optionally generate sample payloads for methods
-      const samplePayloads: Record<string, any> = {};
-      if (generatePayloads) {
-        for (const svc of reflection.services) {
-          for (const method of svc.methods) {
-            try {
-              const res = await generateNativeGrpcSamplePayload(
-                {
-                  server_address: serverAddress.trim(),
-                  service: svc.name,
-                  method: method.name,
-                  use_tls: effectiveTls,
-                },
-                activeVars
-              );
-              if (res.payload) {
-                samplePayloads[`${svc.name}/${method.name}`] = res.payload;
-              }
-            } catch {
-              // fallback to empty object if individual method payload generation fails
-            }
-          }
-        }
-      }
-
-      setStatusText('Generating folder hierarchy and endpoints...');
-
-      const planned = planGrpcHierarchy({
-        folderName: folderName.trim(),
-        serverAddress: serverAddress.trim(),
-        useTls: effectiveTls,
-        services: reflection.services,
-        samplePayloads,
-      });
-
       const apiCaller = {
         post: (path: string, body: any) =>
           apiRequest(path, {
@@ -145,7 +92,19 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
           }),
       };
 
-      const result = await executeGrpcHierarchyCreation(collectionId, planned, apiCaller);
+      const result = await generateGrpcCollection({
+        collectionId,
+        folderName: folderName.trim(),
+        serverAddress: serverAddress.trim(),
+        useTls,
+        generatePayloads,
+        variables: activeVars,
+        timeoutMs: 60_000,
+        onProgress: (status) => setStatusText(status),
+        discoverServices: discoverNativeGrpcServices,
+        generateSamplePayload: generateNativeGrpcSamplePayload,
+        apiCaller,
+      });
 
       // Link server address to generated root folder in collection settings (Feature 3)
       try {
@@ -153,7 +112,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
         const currentSources = coll.settings?.grpc_sources || {};
         currentSources[result.rootFolderId] = {
           server_address: serverAddress.trim(),
-          use_tls: useTls,
+          use_tls: result.effectiveTls,
         };
         await apiRequest(`/collections/${collectionId}`, {
           method: 'PATCH',
