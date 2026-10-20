@@ -48,3 +48,37 @@ test('EditorHistory: multiple edits stack and undo successively', () => {
   const redo2 = history.redo();
   assert.equal(redo2?.text, 'ABC');
 });
+
+test('EditorHistory: recordExternalChange enables Ctrl+Z undo for external generators/snippets', () => {
+  const history = new EditorHistory('{\n}', 0, 0);
+  assert.equal(history.canUndo(), false);
+
+  // User triggers "Generate Example" or clicks snippet
+  const generated = '{\n  "id": 123,\n  "name": "Generated"\n}';
+  const recorded = history.recordExternalChange(generated);
+  assert.equal(recorded, true);
+  assert.equal(history.canUndo(), true);
+
+  // Re-recording identical text does nothing
+  assert.equal(history.recordExternalChange(generated), false);
+
+  // Ctrl+Z undo restores previous state
+  const undone = history.undo(generated, 0, 0);
+  assert.ok(undone);
+  assert.equal(undone.text, '{\n}');
+
+  // Redo re-applies generated state
+  const redone = history.redo();
+  assert.ok(redone);
+  assert.equal(redone.text, generated);
+});
+
+test('EditorHistory: reset re-initializes stack', () => {
+  const history = new EditorHistory('A', 1, 1);
+  history.recordChange('B', 1, 1, true);
+  assert.equal(history.canUndo(), true);
+
+  history.reset('C', 1, 1);
+  assert.equal(history.canUndo(), false);
+  assert.equal(history.getCurrentText(), 'C');
+});

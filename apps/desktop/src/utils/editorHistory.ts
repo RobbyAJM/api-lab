@@ -26,6 +26,38 @@ export class EditorHistory {
     this.lastPushTime = Date.now();
   }
 
+  getCurrentText(): string {
+    const top = this.undoStack[this.undoStack.length - 1];
+    return top ? top.text : '';
+  }
+
+  /**
+   * Records changes from external updates (e.g. Generate Example, snippet insertion).
+   * Returns true if a snapshot was recorded, false if text was already identical.
+   */
+  recordExternalChange(newText: string, start?: number, end?: number): boolean {
+    if (this.getCurrentText() === newText) {
+      return false;
+    }
+    const s = start ?? newText.length;
+    const e = end ?? newText.length;
+    this.recordChange(newText, s, e, true);
+    return true;
+  }
+
+  /**
+   * Resets history to a new base text (e.g. tab switch or endpoint reload).
+   */
+  reset(initialText: string = '', start: number = 0, end: number = 0): void {
+    this.undoStack = [{
+      text: initialText,
+      selectionStart: start,
+      selectionEnd: end,
+    }];
+    this.redoStack = [];
+    this.lastPushTime = Date.now();
+  }
+
   /**
    * Pushes a new text snapshot into the undo stack.
    * Clears the redo stack. Group successive character typing within 350ms.
