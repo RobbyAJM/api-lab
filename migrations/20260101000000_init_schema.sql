@@ -31,8 +31,8 @@ CREATE TABLE IF NOT EXISTS workspace_members (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_workspace_user UNIQUE (workspace_id, user_id)
 );
-CREATE INDEX idx_workspace_members_user ON workspace_members(user_id);
-CREATE INDEX idx_workspace_members_workspace ON workspace_members(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_user ON workspace_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_workspace_members_workspace ON workspace_members(workspace_id);
 
 -- Invitations
 CREATE TABLE IF NOT EXISTS invitations (
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS invitations (
     status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'revoked')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_invitations_workspace ON invitations(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_invitations_workspace ON invitations(workspace_id);
 
 -- Password Reset Tokens
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
     used_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_password_reset_tokens_user ON password_reset_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_password_reset_tokens_user ON password_reset_tokens(user_id);
 
 -- Sessions
 CREATE TABLE IF NOT EXISTS sessions (
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
 -- Collections
 CREATE TABLE IF NOT EXISTS collections (
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS collections (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_collections_workspace ON collections(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_collections_workspace ON collections(workspace_id);
 
 -- Collection Folders
 CREATE TABLE IF NOT EXISTS collection_folders (
@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS collection_folders (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_collection_folders_collection ON collection_folders(collection_id);
+CREATE INDEX IF NOT EXISTS idx_collection_folders_collection ON collection_folders(collection_id);
 
 -- Endpoints
 CREATE TABLE IF NOT EXISTS endpoints (
@@ -105,8 +105,8 @@ CREATE TABLE IF NOT EXISTS endpoints (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_endpoints_collection ON endpoints(collection_id);
-CREATE INDEX idx_endpoints_folder ON endpoints(folder_id);
+CREATE INDEX IF NOT EXISTS idx_endpoints_collection ON endpoints(collection_id);
+CREATE INDEX IF NOT EXISTS idx_endpoints_folder ON endpoints(folder_id);
 
 -- Environments
 CREATE TABLE IF NOT EXISTS environments (
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS environments (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_environments_workspace ON environments(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_environments_workspace ON environments(workspace_id);
 
 -- Environment Variables
 CREATE TABLE IF NOT EXISTS environment_variables (
@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS environment_variables (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_env_variable_key UNIQUE (environment_id, key)
 );
-CREATE INDEX idx_env_variables_env ON environment_variables(environment_id);
+CREATE INDEX IF NOT EXISTS idx_env_variables_env ON environment_variables(environment_id);
 
 -- Saved Responses
 CREATE TABLE IF NOT EXISTS saved_responses (
@@ -146,5 +146,5 @@ CREATE TABLE IF NOT EXISTS saved_responses (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX idx_saved_responses_endpoint ON saved_responses(endpoint_id);
-CREATE INDEX idx_saved_responses_workspace ON saved_responses(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_saved_responses_endpoint ON saved_responses(endpoint_id);
+CREATE INDEX IF NOT EXISTS idx_saved_responses_workspace ON saved_responses(workspace_id);
