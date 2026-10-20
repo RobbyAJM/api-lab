@@ -10,6 +10,7 @@ import type {
 } from '@api-lab/api-types';
 import {
   Folder,
+  FolderSync,
   ChevronRight,
   ChevronDown,
   Plus,
@@ -37,6 +38,8 @@ import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 import {
   buildFolderTree,
   filterCollectionTree,
+  isReflectionFolder,
+  getFolderGrpcUrl,
   type FolderTreeNode,
 } from '../../utils/folderTree';
 
@@ -831,9 +834,11 @@ const CollectionNode: React.FC<{
               key={node.folder.id}
               node={node}
               collectionId={collection.id}
+              collectionSettings={collection.settings}
               expandedFolderIds={matchedFolderIds}
               collapseSignal={collapseSignal}
               level={0}
+              onSyncReflection={() => setShowSyncModal(true)}
             />
           ))}
         </div>
@@ -846,10 +851,20 @@ const CollectionNode: React.FC<{
 const FolderTreeNodeComponent: React.FC<{
   node: FolderTreeNode;
   collectionId: string;
+  collectionSettings?: Record<string, any>;
   expandedFolderIds: Set<string>;
   collapseSignal?: number;
   level?: number;
-}> = ({ node, collectionId, expandedFolderIds, collapseSignal = 0, level = 0 }) => {
+  onSyncReflection?: (folderId: string) => void;
+}> = ({
+  node,
+  collectionId,
+  collectionSettings,
+  expandedFolderIds,
+  collapseSignal = 0,
+  level = 0,
+  onSyncReflection,
+}) => {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(true);
   const [showAddSubFolder, setShowAddSubFolder] = useState(false);
@@ -857,8 +872,19 @@ const FolderTreeNodeComponent: React.FC<{
   const [subFolderName, setSubFolderName] = useState('');
   const [subEndpointName, setSubEndpointName] = useState('');
   const [subEndpointProtocol, setSubEndpointProtocol] = useState<'http' | 'grpc'>('http');
+  const [folderContextMenuPos, setFolderContextMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   const isAutoExpanded = expandedFolderIds.has(node.folder.id) || isOpen;
+  const isReflection = isReflectionFolder(node.folder, collectionSettings);
+  const grpcUrl = getFolderGrpcUrl(node.folder, collectionSettings);
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!folderContextMenuPos) return;
+    const handleClick = () => setFolderContextMenuPos(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [folderContextMenuPos]);
 
   // Collapse Collections/Folders button trigger (Feature 1)
   useEffect(() => {
@@ -917,14 +943,30 @@ const FolderTreeNodeComponent: React.FC<{
   });
 
   return (
-    <div className="pl-1">
+    <div
+      className="pl-1 relative"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setFolderContextMenuPos({ x: e.clientX, y: e.clientY });
+      }}
+    >
       <div className="flex items-center justify-between w-full py-1 text-xs text-zinc-400 hover:text-zinc-200 group rounded hover:bg-zinc-800/30 px-1">
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-1 truncate flex-1 text-left"
         >
           {isAutoExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          <Folder size={12} className="text-amber-400/80 flex-shrink-0" />
+          {isReflection ? (
+            <span
+              title={`gRPC Reflection Folder (${grpcUrl || 'configured'})`}
+              className="flex items-center"
+            >
+              <FolderSync size={12} className="text-secondary flex-shrink-0" />
+            </span>
+          ) : (
+            <Folder size={12} className="text-amber-400/80 flex-shrink-0" />
+          )}
           <span className="truncate">{node.folder.name}</span>
         </button>
 
@@ -952,6 +994,64 @@ const FolderTreeNodeComponent: React.FC<{
           </button>
         </div>
       </div>
+
+      {/* Right-click Context Menu */}
+      {folderContextMenuPos && (
+        <div
+          style={{ top: `${folderContextMenuPos.y}px`, left: `${folderContextMenuPos.x}px` }}
+          className="fixed z-50 bg-zinc-900 border border-zinc-700/80 rounded-lg shadow-2xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {isReflection && onSyncReflection && (
+            <>
+              <button
+                onClick={() => {
+                  setFolderContextMenuPos(null);
+                  onSyncReflection(node.folder.id);
+                }}
+                className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+              >
+                <RefreshCw size={12} className="text-secondary" />
+                <span>Sync Reflection</span>
+              </button>
+              <div className="h-px bg-zinc-800 my-1" />
+            </>
+          )}
+          <button
+            onClick={() => {
+              setFolderContextMenuPos(null);
+              setIsOpen(true);
+              setShowAddSubEndpoint(true);
+            }}
+            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+          >
+            <Plus size={12} className="text-zinc-400" />
+            <span>Add Endpoint</span>
+          </button>
+          <button
+            onClick={() => {
+              setFolderContextMenuPos(null);
+              setIsOpen(true);
+              setShowAddSubFolder(true);
+            }}
+            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+          >
+            <Folder size={12} className="text-amber-400" />
+            <span>Add Subfolder</span>
+          </button>
+          <div className="h-px bg-zinc-800 my-1" />
+          <button
+            onClick={() => {
+              setFolderContextMenuPos(null);
+              setShowDeleteFolderModal(true);
+            }}
+            className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-2"
+          >
+            <Trash2 size={12} />
+            <span>Delete Folder</span>
+          </button>
+        </div>
+      )}
 
       {showAddSubFolder && (
         <div className="p-1 pl-4 flex gap-1 bg-zinc-900/60 border-t border-zinc-800 my-1 rounded">
@@ -1016,9 +1116,11 @@ const FolderTreeNodeComponent: React.FC<{
               key={childNode.folder.id}
               node={childNode}
               collectionId={collectionId}
+              collectionSettings={collectionSettings}
               expandedFolderIds={expandedFolderIds}
               collapseSignal={collapseSignal}
               level={level + 1}
+              onSyncReflection={onSyncReflection}
             />
           ))}
         </div>
