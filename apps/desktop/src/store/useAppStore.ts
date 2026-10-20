@@ -81,6 +81,11 @@ interface AppState {
     environmentId?: string;
     environmentName?: string;
   } | null;
+  reflectionSettingsModal: {
+    isOpen: boolean;
+    folderId: string;
+    collectionId: string;
+  } | null;
 
   setAuth: (token: string, user: UserSummary, workspace?: WorkspaceSummary) => void;
   logout: () => void;
@@ -107,6 +112,8 @@ interface AppState {
     environmentName?: string;
   }) => void;
   closeEditVariableModal: () => void;
+  openReflectionSettingsModal: (folderId: string, collectionId: string) => void;
+  closeReflectionSettingsModal: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -423,4 +430,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }),
   closeEditVariableModal: () => set({ editVariableModal: null }),
+  reflectionSettingsModal: null,
+  openReflectionSettingsModal: (folderId, collectionId) =>
+    set({
+      reflectionSettingsModal: {
+        isOpen: true,
+        folderId,
+        collectionId,
+      },
+    }),
+  closeReflectionSettingsModal: () => set({ reflectionSettingsModal: null }),
 }));

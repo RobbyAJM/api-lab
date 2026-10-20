@@ -9,6 +9,7 @@ import {
   getFolderGrpcUrl,
   getSidebarItemType,
   resolveRootFolderId,
+  resolveInheritedGrpcAddress,
 } from './folderTree.ts';
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
 
@@ -272,6 +273,90 @@ test('resolveRootFolderId: resolves root folder for root, child, and grandchild'
   assert.equal(resolveRootFolderId(mockFolders, 'non-existent'), null);
   assert.equal(resolveRootFolderId(mockFolders, null), null);
   assert.equal(resolveRootFolderId(mockFolders, undefined), null);
+});
+
+test('resolveInheritedGrpcAddress: inherits gRPC address for direct child and descendant endpoints', () => {
+  const foldersWithReflection: CollectionFolder[] = [
+    {
+      id: 'f-refl-root',
+      collection_id: 'c1',
+      parent_folder_id: null,
+      name: 'NuTrade Reflection',
+      grpc_url: '{{GRPC_HOST}}',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-sub-auth',
+      collection_id: 'c1',
+      parent_folder_id: 'f-refl-root',
+      name: 'AuthService',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-normal-root',
+      collection_id: 'c1',
+      parent_folder_id: null,
+      name: 'Standard HTTP Folder',
+      sort_order: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  // 1. Direct child of reflection folder
+  const epDirect = { folder_id: 'f-refl-root' };
+  const resDirect = resolveInheritedGrpcAddress(epDirect, foldersWithReflection);
+  assert.equal(resDirect.isInherited, true);
+  assert.equal(resDirect.inheritedAddress, '{{GRPC_HOST}}');
+  assert.equal(resDirect.folderId, 'f-refl-root');
+  assert.equal(resDirect.folderName, 'NuTrade Reflection');
+
+  // 2. Descendant subfolder of reflection folder
+  const epDescendant = { folder_id: 'f-sub-auth' };
+  const resDescendant = resolveInheritedGrpcAddress(epDescendant, foldersWithReflection);
+  assert.equal(resDescendant.isInherited, true);
+  assert.equal(resDescendant.inheritedAddress, '{{GRPC_HOST}}');
+  assert.equal(resDescendant.folderId, 'f-refl-root');
+  assert.equal(resDescendant.folderName, 'NuTrade Reflection');
+
+  // 3. Regular folder
+  const epNormal = { folder_id: 'f-normal-root' };
+  const resNormal = resolveInheritedGrpcAddress(epNormal, foldersWithReflection);
+  assert.equal(resNormal.isInherited, false);
+  assert.equal(resNormal.inheritedAddress, null);
+
+  // 4. No folder
+  const epNoFolder = { folder_id: null };
+  const resNoFolder = resolveInheritedGrpcAddress(epNoFolder, foldersWithReflection);
+  assert.equal(resNoFolder.isInherited, false);
+
+  // 5. Legacy collection settings fallback
+  const legacyFolder: CollectionFolder = {
+    id: 'f-legacy-root',
+    collection_id: 'c1',
+    parent_folder_id: null,
+    name: 'Legacy Reflection',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+  const settings = {
+    grpc_sources: {
+      'f-legacy-root': { server_address: 'grpc.internal:50051' },
+    },
+  };
+  const resLegacy = resolveInheritedGrpcAddress(
+    { folder_id: 'f-legacy-root' },
+    [legacyFolder],
+    settings
+  );
+  assert.equal(resLegacy.isInherited, true);
+  assert.equal(resLegacy.inheritedAddress, 'grpc.internal:50051');
+  assert.equal(resLegacy.folderId, 'f-legacy-root');
 });
 
 

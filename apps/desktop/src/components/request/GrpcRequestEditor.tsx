@@ -14,6 +14,7 @@ import type {
   GrpcServiceSummary,
   VariableResponse,
   Collection,
+  CollectionFolder,
 } from '@api-lab/api-types';
 import {
   Save,
@@ -30,9 +31,11 @@ import {
   X,
   Eye,
   EyeOff,
+  Settings,
 } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
+import { resolveInheritedGrpcAddress } from '../../utils/folderTree';
 import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
@@ -60,6 +63,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setActiveEndpoint,
     setEndpointDraft,
     clearEndpointDraft,
+    openReflectionSettingsModal,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
