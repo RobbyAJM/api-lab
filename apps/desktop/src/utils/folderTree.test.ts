@@ -5,6 +5,9 @@ import {
   filterCollectionTree,
   getDescendantFolderIds,
   cascadeDeleteFolder,
+  isReflectionFolder,
+  getFolderGrpcUrl,
+  getSidebarItemType,
 } from './folderTree.ts';
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
 
@@ -192,4 +195,61 @@ test('cascadeDeleteFolder: deletes folder, subfolders, and endpoints without dum
   assert.equal(tree.rootFolders.length, 1);
   assert.equal(tree.rootFolders[0].endpoints.length, 0);
 });
+
+test('isReflectionFolder and getFolderGrpcUrl: identifies reflection folder with direct grpc_url', () => {
+  const reflectionFolder: CollectionFolder = {
+    id: 'f-grpc-1',
+    collection_id: 'c1',
+    name: 'NuTrade gRPC Services',
+    grpc_url: '{{GRPC_URL}}',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+
+  assert.equal(isReflectionFolder(reflectionFolder), true);
+  assert.equal(getFolderGrpcUrl(reflectionFolder), '{{GRPC_URL}}');
+  assert.equal(getSidebarItemType('folder', reflectionFolder), 'reflection_folder');
+});
+
+test('isReflectionFolder and getFolderGrpcUrl: identifies reflection folder with collection.settings fallback', () => {
+  const legacyFolder: CollectionFolder = {
+    id: 'f-legacy-1',
+    collection_id: 'c1',
+    name: 'Order API',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+
+  const settings = {
+    grpc_sources: {
+      'f-legacy-1': {
+        server_address: 'grpc.internal:50051',
+      },
+    },
+  };
+
+  assert.equal(isReflectionFolder(legacyFolder, settings), true);
+  assert.equal(getFolderGrpcUrl(legacyFolder, settings), 'grpc.internal:50051');
+  assert.equal(getSidebarItemType('folder', legacyFolder, settings), 'reflection_folder');
+});
+
+test('isReflectionFolder: returns false for normal folders', () => {
+  const normalFolder: CollectionFolder = {
+    id: 'f-norm-1',
+    collection_id: 'c1',
+    name: 'Standard Subfolder',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+
+  assert.equal(isReflectionFolder(normalFolder), false);
+  assert.equal(getFolderGrpcUrl(normalFolder), null);
+  assert.equal(getSidebarItemType('folder', normalFolder), 'folder');
+  assert.equal(getSidebarItemType('collection'), 'collection');
+  assert.equal(getSidebarItemType('endpoint'), 'endpoint');
+});
+
 

@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS collection_folders (
     collection_id UUID NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
     parent_folder_id UUID REFERENCES collection_folders(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
+    grpc_url VARCHAR(500),
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

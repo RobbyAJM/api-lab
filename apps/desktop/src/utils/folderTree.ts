@@ -226,3 +226,65 @@ export function cascadeDeleteFolder(
   };
 }
 
+/**
+ * Checks whether a folder is a gRPC Reflection Folder.
+ * Checks folder.grpc_url first, then falls back to collection.settings.grpc_sources.
+ */
+export function isReflectionFolder(
+  folder: CollectionFolder,
+  collectionSettings?: Record<string, any>
+): boolean {
+  if (folder.grpc_url && folder.grpc_url.trim().length > 0) {
+    return true;
+  }
+  const sources = collectionSettings?.grpc_sources;
+  if (sources && typeof sources === 'object' && sources[folder.id]?.server_address) {
+    const addr = sources[folder.id].server_address;
+    return typeof addr === 'string' && addr.trim().length > 0;
+  }
+  return false;
+}
+
+/**
+ * Returns the gRPC URL associated with a folder, or null if none.
+ */
+export function getFolderGrpcUrl(
+  folder: CollectionFolder,
+  collectionSettings?: Record<string, any>
+): string | null {
+  if (folder.grpc_url && folder.grpc_url.trim().length > 0) {
+    return folder.grpc_url.trim();
+  }
+  const sources = collectionSettings?.grpc_sources;
+  if (sources && typeof sources === 'object' && sources[folder.id]?.server_address) {
+    const addr = sources[folder.id].server_address;
+    if (typeof addr === 'string' && addr.trim().length > 0) {
+      return addr.trim();
+    }
+  }
+  return null;
+}
+
+export type SidebarItemType = 'collection' | 'reflection_folder' | 'folder' | 'endpoint';
+
+/**
+ * Identifies the exact sidebar type among the 4 canonical types:
+ * 1. Collection
+ * 2. Reflection Folder
+ * 3. Folder
+ * 4. Endpoint
+ */
+export function getSidebarItemType(
+  kind: 'collection' | 'folder' | 'endpoint',
+  folder?: CollectionFolder,
+  collectionSettings?: Record<string, any>
+): SidebarItemType {
+  if (kind === 'collection') return 'collection';
+  if (kind === 'endpoint') return 'endpoint';
+  if (folder && isReflectionFolder(folder, collectionSettings)) {
+    return 'reflection_folder';
+  }
+  return 'folder';
+}
+
+
