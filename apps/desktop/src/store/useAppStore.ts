@@ -98,7 +98,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeWorkspaceId: null,
   activeWorkspaceRole: null,
 
-  activeEnvironmentId: null,
+  activeEnvironmentId: typeof window !== 'undefined' ? localStorage.getItem('api_lab_active_environment_id') : null,
 
   openEndpoints: [],
   activeEndpointId: null,
@@ -221,7 +221,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  setActiveEnvironmentId: (id) => set({ activeEnvironmentId: id }),
+  setActiveEnvironmentId: (id) => {
+    if (typeof window !== 'undefined') {
+      if (id) {
+        localStorage.setItem('api_lab_active_environment_id', id);
+      } else {
+        localStorage.removeItem('api_lab_active_environment_id');
+      }
+    }
+    set({ activeEnvironmentId: id });
+  },
 
   openEndpoint: (endpoint) => {
     localStorage.setItem('api_lab_active_endpoint_id', endpoint.id);
