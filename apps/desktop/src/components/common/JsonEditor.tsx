@@ -1,7 +1,13 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useAppStore } from '../../store/useAppStore';
+import { apiRequest } from '../../api/client';
 import { tokenizeJsonLine, type VariableSource } from '../../utils/variableHighlight';
 import { handleEditorKeyDown } from '../../utils/editorKeyboard';
 import { EditorHistory } from '../../utils/editorHistory';
+import { findHoveredVariableToken, type BoundingBox } from '../../utils/variableHover';
+import { VariableHoverCard } from './VariableHoverCard';
+import type { Environment, VariableResponse } from '@api-lab/api-types';
 
 interface JsonEditorProps {
   value: string;
@@ -22,7 +28,72 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   const preRef = useRef<HTMLPreElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<EditorHistory | null>(null);
-  const [formatError, setFormatError] = React.useState<string | null>(null);
+  const [formatError, setFormatError] = useState<string | null>(null);
+  const clearTimerRef = useRef<any>(null);
+
+  const { activeWorkspaceId, activeEnvironmentId } = useAppStore();
+
+  const [hoverState, setHoverState] = useState<{
+    varName: string;
+    rect: BoundingBox;
+  } | null>(null);
+
+  // Fetch active environment variables for rich metadata
+  const { data: envVars = [] } = useQuery<VariableResponse[]>({
+    queryKey: ['variables', activeEnvironmentId],
+    queryFn: () =>
+      activeEnvironmentId
+        ? apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`)
+        : Promise.resolve([]),
+    enabled: !!activeEnvironmentId,
+  });
+
+  const { data: environments = [] } = useQuery<Environment[]>({
+    queryKey: ['environments', activeWorkspaceId],
+    queryFn: () =>
+      activeWorkspaceId
+        ? apiRequest<Environment[]>(`/workspaces/${activeWorkspaceId}/environments`)
+        : Promise.resolve([]),
+    enabled: !!activeWorkspaceId,
+  });
+
+  const activeEnv = environments.find((e) => e.id === activeEnvironmentId);
+  const effectiveVars = variables !== undefined ? variables : envVars;
+
+  function scheduleClear() {
+    clearTimerRef.current = setTimeout(() => {
+      setHoverState(null);
+    }, 200);
+  }
+
+  function cancelClear() {
+    if (clearTimerRef.current) {
+      clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = null;
+    }
+  }
+
+  function handleMouseMove(e: React.MouseEvent<HTMLTextAreaElement>) {
+    const hit = findHoveredVariableToken(preRef.current, e.clientX, e.clientY);
+    if (hit) {
+      cancelClear();
+      setHoverState({ varName: hit.name, rect: hit.rect });
+    } else {
+      if (hoverState) {
+        scheduleClear();
+      }
+    }
+  }
+
+  function handleMouseLeave() {
+    scheduleClear();
+  }
+
+  useEffect(() => {
+    return () => {
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+    };
+  }, []);
 
   if (!historyRef.current) {
     historyRef.current = new EditorHistory(value, 0, 0);
@@ -121,7 +192,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   function highlightJson(raw: string): React.ReactNode[] {
     const lines = raw.split('\n');
     return lines.map((line, lIdx) => {
-      const tokens = tokenizeJsonLine(line, variables);
+      const tokens = tokenizeJsonLine(line, effectiveVars);
       return (
         <React.Fragment key={lIdx}>
           {tokens.map((token, tIdx) => {
@@ -147,6 +218,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
             return (
               <span
                 key={`${lIdx}-${tIdx}`}
+                data-var-name={token.type === 'variable' ? token.varName : undefined}
                 className={colorClass}
                 title={
                   token.type === 'variable'
@@ -228,12 +300,32 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
             ref={textareaRef}
             value={value}
             onChange={handleTextareaChange}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => {
+              if (hoverState && (e.key === 'Escape' || e.key === 'Enter')) {
+                setHoverState(null);
+              }
+              handleKeyDown(e);
+            }}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
             onScroll={handleScroll}
             placeholder={placeholder}
             spellCheck={false}
             className="absolute inset-0 w-full h-full m-0 py-3 px-3 font-mono text-xs leading-5 bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-primary/40 whitespace-pre"
           />
+
+          {/* Variable Hover Card */}
+          {hoverState && (
+            <VariableHoverCard
+              varName={hoverState.varName}
+              rect={hoverState.rect}
+              variables={envVars.length > 0 ? envVars : effectiveVars}
+              activeEnv={activeEnv}
+              onClose={() => setHoverState(null)}
+              onMouseEnter={cancelClear}
+              onMouseLeave={scheduleClear}
+            />
+          )}
         </div>
       </div>
     </div>

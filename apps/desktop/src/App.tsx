@@ -10,6 +10,7 @@ import { GrpcRequestEditor } from './components/request/GrpcRequestEditor';
 import { ResponseViewer } from './components/response/ResponseViewer';
 import { AuthModal } from './components/auth/AuthModal';
 import { EnvironmentModal } from './components/environments/EnvironmentModal';
+import { EditVariableModal } from './components/common/EditVariableModal';
 import { MembersModal } from './components/members/MembersModal';
 import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSettingsModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
@@ -177,6 +178,7 @@ export const App: React.FC = () => {
       {/* Modals */}
       <AuthModal />
       <EnvironmentModal />
+      <EditVariableModal />
       <MembersModal />
       <WorkspaceSettingsModal />
       <CommandPaletteModal />

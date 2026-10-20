@@ -276,6 +276,9 @@ pub async fn update_variable(
 
     let is_sensitive = dto.is_sensitive.unwrap_or(var.is_sensitive);
     let key = dto.key.as_deref().unwrap_or(&var.key).trim().to_string();
+    if key.is_empty() {
+        return Err(ApiError::BadRequest("variable key cannot be empty".into()));
+    }
 
     let plain_val = if let Some(v) = dto.value {
         v
