@@ -437,6 +437,40 @@ async fn test_environments_and_sensitive_variables() {
     assert_eq!(vars[0].key, "API_SECRET");
     assert_eq!(vars[0].value, "super-secret-key-999");
     assert!(vars[0].is_sensitive);
+    let var_id = vars[0].id;
+
+    // 4. Update variable to non-sensitive with new value
+    let update_req = Request::builder()
+        .method("PATCH")
+        .uri(format!("/api/v1/variables/{var_id}"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "key": "API_SECRET_UPDATED",
+                "value": "now-plain-value",
+                "is_sensitive": false
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(update_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let updated_var: VariableResponse = parse_body(res.into_body()).await;
+    assert_eq!(updated_var.key, "API_SECRET_UPDATED");
+    assert_eq!(updated_var.value, "now-plain-value");
+    assert!(!updated_var.is_sensitive);
+
+    // 5. Update variable with empty key returns BadRequest
+    let bad_key_req = Request::builder()
+        .method("PATCH")
+        .uri(format!("/api/v1/variables/{var_id}"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "key": "   " }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(bad_key_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]

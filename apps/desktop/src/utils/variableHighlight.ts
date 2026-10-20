@@ -1,3 +1,5 @@
+import type { VariableResponse } from '@api-lab/api-types';
+
 export interface VariableToken {
   text: string;
   isVariable: boolean;
@@ -6,11 +8,21 @@ export interface VariableToken {
   value?: string;
 }
 
-export type VariableSource = Record<string, string> | Set<string> | Map<string, string> | null | undefined;
+export type VariableSource =
+  | Record<string, string>
+  | Set<string>
+  | Map<string, string>
+  | VariableResponse[]
+  | null
+  | undefined;
 
 function hasVariable(name: string, env?: VariableSource): { exists: boolean; value?: string } {
   if (!env) {
     return { exists: false };
+  }
+  if (Array.isArray(env)) {
+    const found = env.find((v) => v.key === name);
+    return found ? { exists: true, value: found.value } : { exists: false };
   }
   if (env instanceof Set) {
     return { exists: env.has(name) };
@@ -19,7 +31,7 @@ function hasVariable(name: string, env?: VariableSource): { exists: boolean; val
     return { exists: env.has(name), value: env.get(name) };
   }
   if (Object.prototype.hasOwnProperty.call(env, name)) {
-    return { exists: true, value: env[name] };
+    return { exists: true, value: (env as any)[name] };
   }
   return { exists: false };
 }
