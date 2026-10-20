@@ -438,6 +438,7 @@ const CollectionNode: React.FC<{
   const [showGrpcModal, setShowGrpcModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [syncTargetFolderId, setSyncTargetFolderId] = useState<string | undefined>(undefined);
 
   // Collapse Collections/Folders button trigger (Feature 1)
   useEffect(() => {
@@ -817,7 +818,11 @@ const CollectionNode: React.FC<{
         folders={folders}
         endpoints={endpoints}
         isOpen={showSyncModal}
-        onClose={() => setShowSyncModal(false)}
+        onClose={() => {
+          setShowSyncModal(false);
+          setSyncTargetFolderId(undefined);
+        }}
+        initialFolderId={syncTargetFolderId}
       />
 
       {/* Recursive Multi-Level Tree Rendering (Feature 2) */}
@@ -838,7 +843,10 @@ const CollectionNode: React.FC<{
               expandedFolderIds={matchedFolderIds}
               collapseSignal={collapseSignal}
               level={0}
-              onSyncReflection={() => setShowSyncModal(true)}
+              onSyncReflection={(folderId) => {
+                setSyncTargetFolderId(folderId);
+                setShowSyncModal(true);
+              }}
             />
           ))}
         </div>
