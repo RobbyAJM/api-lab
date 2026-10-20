@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Endpoint, Environment } from '@api-lab/api-types';
 import { X, Radio, ArrowDownUp, AlertTriangle, Plus, Settings } from 'lucide-react';
+import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 
 export const EndpointTabBar: React.FC = () => {
   const {
@@ -42,7 +43,13 @@ export const EndpointTabBar: React.FC = () => {
   useEffect(() => {
     const handleWindowClick = () => setContextMenu(null);
     window.addEventListener('click', handleWindowClick);
-    return () => window.removeEventListener('click', handleWindowClick);
+    window.addEventListener('contextmenu', handleWindowClick);
+    window.addEventListener(CONTEXT_MENU_CLOSE_EVENT, handleWindowClick);
+    return () => {
+      window.removeEventListener('click', handleWindowClick);
+      window.removeEventListener('contextmenu', handleWindowClick);
+      window.removeEventListener(CONTEXT_MENU_CLOSE_EVENT, handleWindowClick);
+    };
   }, []);
 
   function handleAttemptClose(ep: Endpoint) {
@@ -165,6 +172,7 @@ export const EndpointTabBar: React.FC = () => {
                 onContextMenu={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  closeAllContextMenus();
                   setContextMenu({
                     tabId: ep.id,
                     x: Math.min(e.clientX, window.innerWidth - 180),

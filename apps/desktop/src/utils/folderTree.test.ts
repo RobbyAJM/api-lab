@@ -8,6 +8,7 @@ import {
   isReflectionFolder,
   getFolderGrpcUrl,
   getSidebarItemType,
+  resolveRootFolderId,
 } from './folderTree.ts';
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
 
@@ -251,5 +252,27 @@ test('isReflectionFolder: returns false for normal folders', () => {
   assert.equal(getSidebarItemType('collection'), 'collection');
   assert.equal(getSidebarItemType('endpoint'), 'endpoint');
 });
+
+test('resolveRootFolderId: resolves root folder for root, child, and grandchild', () => {
+  // mockFolders has:
+  // f-root-1 (root) -> f-child-auth -> f-grandchild-sub
+  // f-root-2 (root)
+
+  // Target is root folder
+  assert.equal(resolveRootFolderId(mockFolders, 'f-root-1'), 'f-root-1');
+  assert.equal(resolveRootFolderId(mockFolders, 'f-root-2'), 'f-root-2');
+
+  // Target is child folder
+  assert.equal(resolveRootFolderId(mockFolders, 'f-child-auth'), 'f-root-1');
+
+  // Target is grandchild folder
+  assert.equal(resolveRootFolderId(mockFolders, 'f-grandchild-sub'), 'f-root-1');
+
+  // Unknown or null
+  assert.equal(resolveRootFolderId(mockFolders, 'non-existent'), null);
+  assert.equal(resolveRootFolderId(mockFolders, null), null);
+  assert.equal(resolveRootFolderId(mockFolders, undefined), null);
+});
+
 
 
