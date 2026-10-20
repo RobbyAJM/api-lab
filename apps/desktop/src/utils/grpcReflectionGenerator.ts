@@ -31,8 +31,14 @@ export interface PlannedHierarchy {
  * Auto-detects whether an address should default to TLS.
  * Defaults to true for remote domain names (e.g. grpcb.in:9001), https, and :443.
  */
-export function shouldAutoDetectTls(addr: string): boolean {
-  const clean = (addr || '').trim().toLowerCase();
+export function shouldAutoDetectTls(addr: string, variables?: Record<string, string>): boolean {
+  let clean = (addr || '').trim().toLowerCase();
+  if (variables) {
+    clean = clean.replace(/\{\{([A-Za-z0-9_]+)\}\}/g, (_, key) => {
+      const val = variables[key] ?? variables[key.toLowerCase()] ?? variables[key.toUpperCase()];
+      return (val || '').trim().toLowerCase();
+    });
+  }
   if (clean.startsWith('https://') || clean.endsWith(':443')) {
     return true;
   }
