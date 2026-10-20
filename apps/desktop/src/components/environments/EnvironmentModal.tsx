@@ -23,6 +23,7 @@ import {
   filterVariables,
   validateEnvironmentName,
 } from '../../utils/environmentManager';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
 export const EnvironmentModal: React.FC = () => {
   const queryClient = useQueryClient();
@@ -133,12 +134,14 @@ export const EnvironmentModal: React.FC = () => {
   });
 
   // Delete Environment
+  const [envToDelete, setEnvToDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteEnvMutation = useMutation({
     mutationFn: (id: string) =>
       apiRequest(`/environments/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['environments', activeWorkspaceId] });
       setSelectedEnvId(null);
+      setEnvToDelete(null);
     },
   });
 
@@ -408,7 +411,7 @@ export const EnvironmentModal: React.FC = () => {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            deleteEnvMutation.mutate(env.id);
+                            setEnvToDelete({ id: env.id, name: env.name });
                           }}
                           className="p-1 rounded text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition"
                           title="Delete environment"
@@ -679,6 +682,19 @@ export const EnvironmentModal: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <ConfirmDeleteModal
+        isOpen={!!envToDelete}
+        type="environment"
+        name={envToDelete?.name}
+        isPending={deleteEnvMutation.isPending}
+        onConfirm={async () => {
+          if (envToDelete) {
+            await deleteEnvMutation.mutateAsync(envToDelete.id);
+          }
+        }}
+        onClose={() => setEnvToDelete(null)}
+      />
     </div>
   );
 };

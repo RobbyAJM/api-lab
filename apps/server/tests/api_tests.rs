@@ -21,6 +21,18 @@ async fn setup_app() -> axum::Router {
         .await
         .expect("failed to connect to test postgres");
 
+    let _ = sqlx::query(
+        r#"
+        ALTER TABLE endpoints
+        DROP CONSTRAINT IF EXISTS endpoints_folder_id_fkey;
+        ALTER TABLE endpoints
+        ADD CONSTRAINT endpoints_folder_id_fkey
+        FOREIGN KEY (folder_id) REFERENCES collection_folders(id) ON DELETE CASCADE;
+        "#,
+    )
+    .execute(&pool)
+    .await;
+
     let encryption_key =
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
     let (tx_ws, _) = broadcast::channel(100);
@@ -444,4 +456,159 @@ async fn test_grpc_reflection_unavailable_response() {
     assert!(res.error.is_some());
     let err_str = res.error.unwrap();
     assert!(err_str.contains("gRPC server reflection unavailable on target; reflection required"));
+}
+
+#[tokio::test]
+async fn test_delete_folder_cascades_endpoints_and_subfolders() {
+    let app = setup_app().await;
+    let email = format!("user_{}@example.com", Uuid::new_v4());
+
+    // 1. Register User
+    let reg_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email,
+                "name": "Folder Test User",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_req).await.unwrap();
+    let auth: AuthResponse = parse_body(res.into_body()).await;
+    let token = auth.token;
+    let ws_id = auth.workspace.unwrap().id;
+
+    // 2. Create Collection
+    let coll_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/workspaces/{ws_id}/collections"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "name": "Cascade Test Collection" }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(coll_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let coll: Value = parse_body(res.into_body()).await;
+    let coll_id = coll["id"].as_str().unwrap();
+
+    // 3. Create Root Folder
+    let folder_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/collections/{coll_id}/folders"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "name": "Parent Folder" }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(folder_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let parent_folder: Value = parse_body(res.into_body()).await;
+    let parent_folder_id = parent_folder["id"].as_str().unwrap();
+
+    // 4. Create Nested Child Subfolder
+    let subfolder_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/collections/{coll_id}/folders"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "name": "Child Subfolder",
+                "parent_folder_id": parent_folder_id
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(subfolder_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let subfolder: Value = parse_body(res.into_body()).await;
+    let subfolder_id = subfolder["id"].as_str().unwrap();
+
+    // 5. Create Endpoint in Parent Folder
+    let ep1_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/collections/{coll_id}/endpoints"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "name": "Endpoint in Parent",
+                "protocol": "http",
+                "folder_id": parent_folder_id,
+                "config": { "method": "GET", "url": "/parent" }
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(ep1_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 6. Create Endpoint in Child Subfolder
+    let ep2_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/collections/{coll_id}/endpoints"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "name": "Endpoint in Child",
+                "protocol": "http",
+                "folder_id": subfolder_id,
+                "config": { "method": "POST", "url": "/child" }
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(ep2_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // Verify endpoints exist
+    let list_req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/collections/{coll_id}/endpoints"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(list_req).await.unwrap();
+    let eps: Vec<Value> = parse_body(res.into_body()).await;
+    assert_eq!(eps.len(), 2);
+
+    // 7. Delete Parent Folder
+    let del_req = Request::builder()
+        .method("DELETE")
+        .uri(format!("/api/v1/folders/{parent_folder_id}"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(del_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 8. Verify endpoints are completely deleted, NOT moved to root (folder_id: null)!
+    let list_req_after = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/collections/{coll_id}/endpoints"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(list_req_after).await.unwrap();
+    let eps_after: Vec<Value> = parse_body(res.into_body()).await;
+    assert_eq!(
+        eps_after.len(),
+        0,
+        "Endpoints inside deleted folder and subfolders must be deleted, not moved to root"
+    );
+
+    // 9. Verify folders are deleted
+    let folders_req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/collections/{coll_id}/folders"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(folders_req).await.unwrap();
+    let folders_after: Vec<Value> = parse_body(res.into_body()).await;
+    assert_eq!(folders_after.len(), 0);
 }
