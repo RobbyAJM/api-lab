@@ -38,6 +38,10 @@ export const App: React.FC = () => {
     openAuthModal,
     envModalOpen,
     setEnvModalOpen,
+    membersModalOpen,
+    setMembersModalOpen,
+    workspaceModalOpen,
+    setWorkspaceModalOpen,
     commandPaletteOpen,
     setCommandPaletteOpen,
     shortcutsHelpOpen,
@@ -155,6 +159,12 @@ export const App: React.FC = () => {
         } else if (envModalOpen) {
           e.preventDefault();
           setEnvModalOpen(false);
+        } else if (membersModalOpen) {
+          e.preventDefault();
+          setMembersModalOpen(false);
+        } else if (workspaceModalOpen) {
+          e.preventDefault();
+          setWorkspaceModalOpen(false);
         }
       }
     };
@@ -165,10 +175,14 @@ export const App: React.FC = () => {
     commandPaletteOpen,
     shortcutsHelpOpen,
     envModalOpen,
+    membersModalOpen,
+    workspaceModalOpen,
     activeEndpointId,
     setCommandPaletteOpen,
     setShortcutsHelpOpen,
     setEnvModalOpen,
+    setMembersModalOpen,
+    setWorkspaceModalOpen,
     closeEndpoint,
     closeOtherEndpoints,
     closeAllEndpoints,
