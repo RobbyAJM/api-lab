@@ -11,6 +11,8 @@
     "test": "cargo test --workspace && node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts"
   },
   "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
     "typescript": "^5.7.3"
   }
 }

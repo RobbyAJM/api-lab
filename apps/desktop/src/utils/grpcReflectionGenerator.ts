@@ -23,6 +23,7 @@ export interface PlannedServiceFolder {
 
 export interface PlannedHierarchy {
   rootFolderName: string;
+  serverAddress: string;
   serviceFolders: PlannedServiceFolder[];
   totalEndpoints: number;
 }
@@ -105,6 +106,7 @@ export function planGrpcHierarchy(options: {
 
   return {
     rootFolderName,
+    serverAddress: options.serverAddress.trim(),
     serviceFolders,
     totalEndpoints,
   };
@@ -126,10 +128,11 @@ export async function executeGrpcHierarchyCreation(
   createdServiceFoldersCount: number;
   createdEndpointsCount: number;
 }> {
-  // 1. Create root folder {folderName}
+  // 1. Create root folder {folderName} with grpc_url stored directly on the folder
   const rootFolder = await api.post(`/collections/${collectionId}/folders`, {
     name: planned.rootFolderName,
     parent_folder_id: null,
+    grpc_url: planned.serverAddress,
   });
 
   const rootFolderId = rootFolder.id;

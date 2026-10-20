@@ -612,3 +612,92 @@ async fn test_delete_folder_cascades_endpoints_and_subfolders() {
     let folders_after: Vec<Value> = parse_body(res.into_body()).await;
     assert_eq!(folders_after.len(), 0);
 }
+
+#[tokio::test]
+async fn test_create_and_retrieve_reflection_folder_with_grpc_url() {
+    let app = setup_app().await;
+    let email = format!("user_{}@example.com", Uuid::new_v4());
+
+    // 1. Register User
+    let reg_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email,
+                "name": "Reflection Folder User",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_req).await.unwrap();
+    let auth: AuthResponse = parse_body(res.into_body()).await;
+    let token = auth.token;
+    let ws_id = auth.workspace.unwrap().id;
+
+    // 2. Create Collection
+    let coll_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/workspaces/{ws_id}/collections"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "name": "gRPC Test Collection" }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(coll_req).await.unwrap();
+    let coll: Value = parse_body(res.into_body()).await;
+    let coll_id = coll["id"].as_str().unwrap();
+
+    // 3. Create Reflection Folder with variable grpc_url: {{GRPC_HOST}}
+    let folder_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/collections/{coll_id}/folders"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "name": "NuTrade Reflection Services",
+                "grpc_url": "{{GRPC_HOST}}"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(folder_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let created: Value = parse_body(res.into_body()).await;
+    let folder_id = created["id"].as_str().unwrap();
+    assert_eq!(created["grpc_url"].as_str().unwrap(), "{{GRPC_HOST}}");
+
+    // 4. List folders and verify grpc_url is preserved
+    let list_req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/collections/{coll_id}/folders"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(list_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let folders: Vec<Value> = parse_body(res.into_body()).await;
+    assert_eq!(folders.len(), 1);
+    assert_eq!(folders[0]["id"].as_str().unwrap(), folder_id);
+    assert_eq!(folders[0]["grpc_url"].as_str().unwrap(), "{{GRPC_HOST}}");
+
+    // 5. Update folder grpc_url
+    let update_req = Request::builder()
+        .method("PATCH")
+        .uri(format!("/api/v1/folders/{folder_id}"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "grpc_url": "localhost:50051"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(update_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let updated: Value = parse_body(res.into_body()).await;
+    assert_eq!(updated["grpc_url"].as_str().unwrap(), "localhost:50051");
+}
