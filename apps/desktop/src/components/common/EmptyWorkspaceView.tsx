@@ -1,4 +1,5 @@
 import React from 'react';
+import appLogo from '../../assets/api-lab-logo.png';
 import { useAppStore } from '../../store/useAppStore';
 
 export const EmptyWorkspaceView: React.FC = () => {
@@ -25,32 +26,14 @@ export const EmptyWorkspaceView: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8 select-none text-zinc-400 bg-zinc-950 min-h-0 overflow-y-auto">
-      {/* Astronaut / API Explorer Emblem */}
-      <div className="w-32 h-32 md:w-36 md:h-36 rounded-full bg-zinc-900/40 border border-zinc-800/80 flex items-center justify-center mb-8 shadow-inner shadow-black/60 relative group">
-        <svg
-          viewBox="0 0 200 200"
-          className="w-20 h-20 text-zinc-600/70 group-hover:text-zinc-500/90 transition-colors"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          {/* Stylized Floating Explorer / Astronaut Silhouette */}
-          <circle cx="100" cy="54" r="22" stroke="currentColor" fill="rgba(39, 39, 42, 0.4)" />
-          {/* Visor */}
-          <path d="M92 48h16a8 8 0 0 1 8 8v2a8 8 0 0 1-8 8H92a8 8 0 0 1-8-8v-2a8 8 0 0 1 8-8z" fill="currentColor" opacity="0.3" />
-          {/* Body */}
-          <path d="M78 86c0-6 8-10 22-10s22 4 22 10v46c0 4-4 8-10 8H88c-6 0-10-4-10-8V86z" fill="rgba(39, 39, 42, 0.3)" />
-          {/* Backpack */}
-          <rect x="66" y="82" width="12" height="42" rx="4" fill="rgba(39, 39, 42, 0.5)" />
-          {/* Limbs / Jet Pack Thrusters */}
-          <path d="M88 140l-12 36" />
-          <path d="M112 140l12 36" />
-          <path d="M78 98l-18 20" />
-          <path d="M122 98l20 22" />
-        </svg>
-        <div className="absolute inset-0 rounded-full bg-gradient-to-b from-primary/5 to-transparent pointer-events-none" />
+      {/* Primary API Lab Logo & Emblem */}
+      <div className="w-28 h-28 md:w-32 md:h-32 rounded-3xl bg-zinc-900/60 border border-zinc-800/80 flex items-center justify-center mb-8 shadow-2xl relative group p-5">
+        <img
+          src={appLogo}
+          alt="API Lab Logo"
+          className="w-full h-full object-contain filter drop-shadow-md group-hover:scale-105 transition-transform duration-200"
+        />
+        <div className="absolute inset-0 rounded-3xl bg-gradient-to-b from-primary/10 to-transparent pointer-events-none" />
       </div>
 
       {/* Action Shortcuts Menu */}

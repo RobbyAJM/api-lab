@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import appLogo from '../../assets/api-lab-logo.png';
 import { useAppStore } from '../../store/useAppStore';
 import {
   apiRequest,
@@ -168,10 +169,8 @@ export const AuthModal: React.FC = () => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
       <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-6 text-zinc-100">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-5">
-          <div className="flex items-center gap-2">
-            <span className="h-6 w-6 rounded bg-primary flex items-center justify-center font-bold text-xs text-white">
-              AL
-            </span>
+          <div className="flex items-center gap-2.5">
+            <img src={appLogo} alt="API Lab" className="h-7 w-7 rounded-md object-contain" />
             <h2 className="font-semibold text-lg tracking-tight">API Lab</h2>
           </div>
           <div className="flex items-center gap-2.5">

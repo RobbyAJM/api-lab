@@ -10,7 +10,7 @@ import { VariableInput } from '../common/VariableInput';
 import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
-import { applyInheritedHttpAuth } from '../../utils/authInheritance';
+import { applyCollectionSettingsToHttp } from '../../utils/collectionSettings';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { getEffectiveEndpointConfig } from '../../utils/tabManager';
 
@@ -287,7 +287,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         }
       }
 
-      const finalReq = applyInheritedHttpAuth(
+      const finalReq = applyCollectionSettingsToHttp(
         beforeResult.request,
         currentColl?.settings,
         beforeResult.variables

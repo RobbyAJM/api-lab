@@ -50,8 +50,18 @@ export interface CollectionAuthSettings {
   header_value?: string;
 }
 
+export interface CollectionHeaderSetting {
+  key: string;
+  value: string;
+  enabled?: boolean;
+}
+
 export interface CollectionSettings {
   auth?: CollectionAuthSettings;
+  base_url?: string;
+  headers?: CollectionHeaderSetting[];
+  timeout_ms?: number;
+  description?: string;
 }
 
 export interface Collection {
