@@ -96,7 +96,35 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [showReqSchemaPreview, setShowReqSchemaPreview] = useState(false);
   const [showResSchemaPreview, setShowResSchemaPreview] = useState(false);
 
-  const effectiveTls = useTls || shouldAutoDetectTls(serverAddress);
+  const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
+
+  async function resolveVariables(): Promise<Record<string, string>> {
+    const activeVars: Record<string, string> = {};
+    if (activeEnvironmentId) {
+      const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
+      if (envVars) {
+        for (const v of envVars) {
+          activeVars[v.key] = v.value;
+        }
+      } else {
+        try {
+          const fetched = await apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`);
+          for (const v of fetched) {
+            activeVars[v.key] = v.value;
+          }
+        } catch {
+          // fallback
+        }
+      }
+    }
+    return activeVars;
+  }
+
+  useEffect(() => {
+    resolveVariables().then(setActiveVariables);
+  }, [activeEnvironmentId]);
+
+  const effectiveTls = useTls || shouldAutoDetectTls(serverAddress, activeVariables);
 
   // Auto-discover & cache reflection per server address (Fix for Bug 1)
   const {
@@ -104,7 +132,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     isFetching: discovering,
     refetch: refetchReflection,
   } = useQuery<GrpcServiceSummary[]>({
-    queryKey: ['reflection', serverAddress, effectiveTls],
+    queryKey: ['reflection', serverAddress, effectiveTls, activeEnvironmentId],
     queryFn: async () => {
       if (!serverAddress.trim()) return [];
       const activeVars = await resolveVariables();
@@ -147,7 +175,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
   const [hookLogs, setHookLogs] = useState<string[]>([]);
 
-  const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
   const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'scripts' | 'options' | 'specification'>('payload');
   const [copiedSpec, setCopiedSpec] = useState<'signature' | 'input' | 'output' | 'sample' | null>(null);
   const [sampleSpecLoading, setSampleSpecLoading] = useState(false);
@@ -168,32 +195,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     enabled: !!endpoint.collection_id,
   });
 
-  async function resolveVariables(): Promise<Record<string, string>> {
-    const activeVars: Record<string, string> = {};
-    if (activeEnvironmentId) {
-      const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
-      if (envVars) {
-        for (const v of envVars) {
-          activeVars[v.key] = v.value;
-        }
-      } else {
-        try {
-          const fetched = await apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`);
-          for (const v of fetched) {
-            activeVars[v.key] = v.value;
-          }
-        } catch {
-          // fallback
-        }
-      }
-    }
-    return activeVars;
-  }
-
-  useEffect(() => {
-    resolveVariables().then(setActiveVariables);
-  }, [activeEnvironmentId]);
-
   // Track previous endpoint id to only reinitialize state when switching to a different endpoint without remount
   const prevEndpointIdRef = useRef(endpoint.id);
   useEffect(() => {
@@ -207,7 +208,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       setUseTls(
         cfg.use_tls !== undefined
           ? Boolean(cfg.use_tls)
-          : shouldAutoDetectTls(cfg.server_address || 'localhost:50051')
+          : shouldAutoDetectTls(cfg.server_address || 'localhost:50051', activeVariables)
       );
       setSelectedService(cfg.service || '');
       setSelectedMethod(cfg.method || '');
@@ -796,7 +797,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           <div className="flex-1 flex items-center pl-2 min-w-0">
             <button
               type="button"
-              onClick={() => setUseTls(!useTls)}
+              onClick={() => setUseTls(!effectiveTls)}
               className="p-1 text-zinc-500 hover:text-zinc-300 transition mr-1 flex-shrink-0"
               title={effectiveTls ? 'TLS Enabled (Click to disable)' : 'TLS Disabled (Click to enable)'}
             >
@@ -808,7 +809,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 value={serverAddress}
                 onChange={(val) => {
                   setServerAddress(val);
-                  if (shouldAutoDetectTls(val)) {
+                  if (shouldAutoDetectTls(val, activeVariables)) {
                     setUseTls(true);
                   }
                 }}

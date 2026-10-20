@@ -380,28 +380,57 @@ fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> Vec<G
     summaries
 }
 
-pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
-    let start = Instant::now();
-    let use_tls = req.use_tls.unwrap_or(false);
+async fn connect_and_fetch_pool(
+    addr: &str,
+    service: &str,
+    explicit_tls: Option<bool>,
+) -> Result<(Channel, DescriptorPool), String> {
+    let clean = addr.trim();
+    let has_https = clean.starts_with("https://") || clean.ends_with(":443");
+    let has_http = clean.starts_with("http://");
 
-    let channel = match create_channel(&req.server_address, use_tls).await {
-        Ok(c) => c,
-        Err(e) => {
-            return GrpcExecutionResponse {
-                status_code: 14, // UNAVAILABLE
-                status_message: format!("Connection failed: {e}"),
-                response_time_ms: start.elapsed().as_millis() as u64,
-                response_size_bytes: 0,
-                metadata: HashMap::new(),
-                body: serde_json::Value::Null,
-                error: Some(format!("Connection error: {e}. gRPC server reflection unavailable on target; reflection required.")),
-            };
-        }
+    let host_part = clean.split(':').next().unwrap_or(clean);
+    let is_local = host_part == "localhost"
+        || host_part == "127.0.0.1"
+        || host_part == "0.0.0.0"
+        || host_part == "::1";
+
+    let initial_tls = if has_https {
+        true
+    } else if has_http {
+        false
+    } else if !is_local && host_part.contains('.') {
+        explicit_tls.unwrap_or(true)
+    } else {
+        explicit_tls.unwrap_or(false)
     };
 
-    // Query reflection to obtain schema
-    let pool = match fetch_pool_for_symbol(channel.clone(), &req.service).await {
-        Ok(p) => p,
+    let first_res = match create_channel_direct(clean, initial_tls).await {
+        Ok(c) => match fetch_pool_for_symbol(c.clone(), service).await {
+            Ok(pool) => return Ok((c, pool)),
+            Err(e) => Err(e),
+        },
+        Err(e) => Err(e),
+    };
+
+    if !has_https && !has_http {
+        let fallback_tls = !initial_tls;
+        if let Ok(c) = create_channel_direct(clean, fallback_tls).await {
+            if let Ok(pool) = fetch_pool_for_symbol(c.clone(), service).await {
+                return Ok((c, pool));
+            }
+        }
+    }
+
+    first_res
+}
+
+pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
+    let start = Instant::now();
+
+    // ponytail: fallback handles mixed env ports; full URL parser planned if per-service config needed
+    let (channel, pool) = match connect_and_fetch_pool(&req.server_address, &req.service, req.use_tls).await {
+        Ok(cp) => cp,
         Err(e) => {
             return GrpcExecutionResponse {
                 status_code: 14,
@@ -611,25 +640,10 @@ where
     F: FnMut(serde_json::Value) + Send + 'static,
 {
     let start = Instant::now();
-    let use_tls = req.use_tls.unwrap_or(false);
 
-    let channel = match create_channel(&req.server_address, use_tls).await {
-        Ok(c) => c,
-        Err(e) => {
-            return GrpcExecutionResponse {
-                status_code: 14,
-                status_message: format!("Connection failed: {e}"),
-                response_time_ms: start.elapsed().as_millis() as u64,
-                response_size_bytes: 0,
-                metadata: HashMap::new(),
-                body: serde_json::Value::Null,
-                error: Some(format!("Connection error: {e}")),
-            };
-        }
-    };
-
-    let pool = match fetch_pool_for_symbol(channel.clone(), &req.service).await {
-        Ok(p) => p,
+    // ponytail: fallback handles mixed env ports; full URL parser planned if per-service config needed
+    let (channel, pool) = match connect_and_fetch_pool(&req.server_address, &req.service, req.use_tls).await {
+        Ok(cp) => cp,
         Err(e) => {
             return GrpcExecutionResponse {
                 status_code: 14,
@@ -973,19 +987,9 @@ impl tonic::codec::Decoder for DynamicRawDecoder {
 pub async fn generate_sample_for_method(
     req: GrpcSamplePayloadRequest,
 ) -> GrpcSamplePayloadResponse {
-    let use_tls = req.use_tls.unwrap_or(false);
-    let channel = match create_channel(&req.server_address, use_tls).await {
-        Ok(c) => c,
-        Err(e) => {
-            return GrpcSamplePayloadResponse {
-                payload: serde_json::Value::Null,
-                error: Some(format!("Connection error: {e}")),
-            };
-        }
-    };
-
-    let pool = match fetch_pool_for_symbol(channel, &req.service).await {
-        Ok(p) => p,
+    // ponytail: fallback handles mixed env ports; full URL parser planned if per-service config needed
+    let (_channel, pool) = match connect_and_fetch_pool(&req.server_address, &req.service, req.use_tls).await {
+        Ok(cp) => cp,
         Err(e) => {
             return GrpcSamplePayloadResponse {
                 payload: serde_json::Value::Null,

@@ -141,6 +141,10 @@ test('shouldAutoDetectTls: accurately detects remote domains vs local', () => {
   assert.equal(shouldAutoDetectTls('http://my-service.com'), false);
   assert.equal(shouldAutoDetectTls('localhost:50051'), false);
   assert.equal(shouldAutoDetectTls('127.0.0.1:3100'), false);
+  // Variables resolution support
+  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'nu-trade.dev.dxtr.asia' }), true);
+  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'localhost:9091' }), false);
+  assert.equal(shouldAutoDetectTls('{{URL}}', { url: 'https://custom.rpc.io' }), true);
 });
 
 test('planGrpcHierarchy: preserves useTls setting for remote endpoints', () => {
