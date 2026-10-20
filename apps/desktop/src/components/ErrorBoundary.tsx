@@ -26,17 +26,19 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: '24px', color: '#f87171', backgroundColor: '#18181b', minHeight: '100vh', fontFamily: 'monospace' }}>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold' }}>API Lab Frontend Error</h2>
-          <pre style={{ marginTop: '12px', whiteSpace: 'pre-wrap', backgroundColor: '#27272a', padding: '12px', borderRadius: '6px' }}>
-            {this.state.error?.stack || this.state.error?.message}
-          </pre>
-          <button
-            onClick={() => window.location.reload()}
-            style={{ marginTop: '16px', padding: '8px 16px', backgroundColor: '#4f46e5', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-          >
-            Reload Application
-          </button>
+        <div className="p-6 bg-zinc-950 text-zinc-100 min-h-screen font-mono flex flex-col justify-center items-center select-text">
+          <div className="w-full max-w-2xl bg-zinc-900 border border-zinc-800 rounded-md p-6 space-y-4">
+            <h2 className="text-sm font-semibold text-rose-400">API Lab Frontend Error</h2>
+            <pre className="text-xs bg-zinc-950 border border-zinc-800/80 p-3 rounded text-zinc-300 overflow-x-auto whitespace-pre-wrap max-h-96">
+              {this.state.error?.stack || this.state.error?.message}
+            </pre>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover active:bg-blue-700 text-white rounded text-xs font-sans font-medium transition cursor-pointer"
+            >
+              Reload Application
+            </button>
+          </div>
         </div>
       );
     }

@@ -9,6 +9,7 @@ import type {
   VariableResponse,
 } from '@api-lab/api-types';
 import { VariableInput } from '../common/VariableInput';
+import { Select } from '../common/Select';
 import { X, Shield, Settings, Sliders, Plus, Trash2, Save, Check } from 'lucide-react';
 
 interface CollectionSettingsModalProps {
@@ -186,17 +187,17 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 font-sans select-none animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans select-none animate-in fade-in duration-100"
       onClick={onClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
+        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-zinc-800 bg-zinc-950/80 flex-shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-zinc-800 border border-zinc-700/80 text-zinc-300">
+            <div className="p-1.5 rounded bg-zinc-800 border border-zinc-700/80 text-zinc-300">
               <Settings size={14} className="text-secondary" />
             </div>
             <div>
@@ -335,16 +336,17 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
                 </p>
 
                 <label className="block text-zinc-400 mb-1 font-medium">Auth Type</label>
-                <select
+                <Select
                   value={authType}
-                  onChange={(e) => setAuthType(e.target.value as any)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 font-mono"
-                >
-                  <option value="none">No Auth (Inherit Disabled)</option>
-                  <option value="bearer">Bearer Token (JWT / API Token)</option>
-                  <option value="basic">Basic Auth (Username & Password)</option>
-                  <option value="custom">Custom Header (API Key)</option>
-                </select>
+                  onChange={(val) => setAuthType(val as any)}
+                  options={[
+                    { value: 'none', label: 'No Auth (Inherit Disabled)' },
+                    { value: 'bearer', label: 'Bearer Token (JWT / API Token)' },
+                    { value: 'basic', label: 'Basic Auth (Username & Password)' },
+                    { value: 'custom', label: 'Custom Header (API Key)' },
+                  ]}
+                  fontMono
+                />
               </div>
 
               {authType === 'bearer' && (
@@ -442,7 +444,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
               </div>
 
               {headers.length === 0 ? (
-                <div className="p-6 text-center border border-dashed border-zinc-800 rounded-lg text-zinc-500">
+                <div className="p-6 text-center border border-dashed border-zinc-800 rounded-md text-zinc-500">
                   <Sliders size={20} className="mx-auto mb-2 opacity-50" />
                   <p className="text-xs">No collection headers configured</p>
                   <p className="text-[10px] text-zinc-600 mt-0.5">Click "Add Header" above to add shared headers like Accept or X-Tenant-ID</p>

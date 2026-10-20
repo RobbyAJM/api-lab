@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Environment, VariableResponse } from '@api-lab/api-types';
 import { X, Lock, Eye, EyeOff, Save } from 'lucide-react';
+import { Select } from './Select';
 
 export const EditVariableModal: React.FC = () => {
   const queryClient = useQueryClient();
@@ -103,7 +104,7 @@ export const EditVariableModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 font-sans"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 font-sans"
       onClick={closeEditVariableModal}
       onKeyDown={(e) => {
         if (e.key === 'Escape') closeEditVariableModal();
@@ -114,7 +115,7 @@ export const EditVariableModal: React.FC = () => {
       }}
     >
       <div
-        className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col text-zinc-100"
+        className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col text-zinc-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -148,22 +149,18 @@ export const EditVariableModal: React.FC = () => {
             <label className="block text-zinc-400 font-medium mb-1 text-[11px]">
               Environment
             </label>
-            <select
+            <Select
               value={targetEnvId}
               disabled={isEditing}
-              onChange={(e) => setTargetEnvId(e.target.value)}
-              className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-200 text-xs focus:border-primary focus:outline-none disabled:opacity-60 cursor-pointer font-mono"
-            >
-              {environments.length === 0 ? (
-                <option value="">No environments found</option>
-              ) : (
-                environments.map((env) => (
-                  <option key={env.id} value={env.id}>
-                    {env.name} {env.id === activeEnvironmentId ? '(Active)' : ''}
-                  </option>
-                ))
-              )}
-            </select>
+              onChange={setTargetEnvId}
+              options={environments.map((env) => ({
+                value: env.id,
+                label: env.name,
+                badge: env.id === activeEnvironmentId ? 'Active' : undefined,
+              }))}
+              placeholder={environments.length === 0 ? 'No environments found' : 'Select environment'}
+              fontMono
+            />
           </div>
 
           {/* Variable Key */}

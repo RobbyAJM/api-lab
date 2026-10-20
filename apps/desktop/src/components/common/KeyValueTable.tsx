@@ -131,7 +131,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
             placeholder={`key: value\nkey2: value2`}
-            className="w-full h-48 bg-zinc-900 border border-zinc-800 rounded-lg p-3 font-mono text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 resize-none"
+            className="w-full h-48 bg-zinc-900 border border-zinc-800 rounded-md p-3 font-mono text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 resize-none"
             spellCheck={false}
           />
           <p className="text-[10px] text-zinc-500 font-sans">
@@ -139,7 +139,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
           </p>
         </div>
       ) : (
-        <div className="border border-zinc-800/80 rounded-lg overflow-hidden bg-zinc-950">
+        <div className="border border-zinc-800/80 rounded-md overflow-hidden bg-zinc-950">
           {/* Table Header */}
           <div className="grid grid-cols-12 bg-zinc-900/60 border-b border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
             <div className="col-span-5">Key</div>

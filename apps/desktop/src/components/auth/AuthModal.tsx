@@ -166,8 +166,8 @@ export const AuthModal: React.FC = () => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl p-6 text-zinc-100">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4">
+      <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl p-6 text-zinc-100">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-4 mb-5">
           <div className="flex items-center gap-2.5">
             <img src={appLogo} alt="API Lab" className="h-7 w-7 rounded-md object-contain" />
@@ -182,7 +182,7 @@ export const AuthModal: React.FC = () => {
                 setTestStatus(null);
               }}
               title="Server Settings"
-              className={`p-1.5 rounded-lg border transition ${
+              className={`p-1.5 rounded-md border transition ${
                 showServerSettings
                   ? 'bg-zinc-800 text-zinc-100 border-zinc-700 shadow-sm'
                   : 'bg-zinc-950/60 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border-zinc-800'
@@ -207,7 +207,7 @@ export const AuthModal: React.FC = () => {
         </div>
 
         {showServerSettings && (
-          <div className="mb-5 p-3.5 bg-zinc-950 border border-zinc-800 rounded-lg shadow-inner">
+          <div className="mb-5 p-3.5 bg-zinc-950 border border-zinc-800 rounded-md shadow-inner">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-zinc-200">Server Configuration</span>

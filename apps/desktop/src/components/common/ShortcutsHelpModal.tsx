@@ -15,11 +15,11 @@ export const ShortcutsHelpModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
       onClick={() => setShortcutsHelpOpen(false)}
     >
       <div
-        className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -47,7 +47,7 @@ export const ShortcutsHelpModal: React.FC = () => {
                 <span className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider block">
                   {cat}
                 </span>
-                <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-lg divide-y divide-zinc-800/60">
+                <div className="bg-zinc-900/70 border border-zinc-800/80 rounded-md divide-y divide-zinc-800/60">
                   {catItems.map((sc) => (
                     <div
                       key={sc.id}

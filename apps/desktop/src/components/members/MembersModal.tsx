@@ -8,6 +8,7 @@ import type {
   Role,
 } from '@api-lab/api-types';
 import { X, UserPlus, Trash2, Copy, Check } from 'lucide-react';
+import { Select } from '../common/Select';
 
 export const MembersModal: React.FC = () => {
   const queryClient = useQueryClient();
@@ -109,11 +110,11 @@ export const MembersModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
       onClick={() => setMembersModalOpen(false)}
     >
       <div
-        className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl flex flex-col max-h-[600px] text-zinc-100"
+        className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl flex flex-col max-h-[600px] text-zinc-100"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -141,19 +142,21 @@ export const MembersModal: React.FC = () => {
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
           {/* Admin Invite Generator */}
           {isAdmin && (
-            <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-lg space-y-2.5">
+            <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-md space-y-2.5">
               <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
                 <UserPlus size={14} /> Invite New Member
               </span>
               <div className="flex items-center gap-2">
-                <select
+                <Select
                   value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as Role)}
-                  className="bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none focus:border-zinc-700"
-                >
-                  <option value="developer">Role: Developer</option>
-                  <option value="admin">Role: Admin</option>
-                </select>
+                  onChange={(val) => setInviteRole(val as Role)}
+                  options={[
+                    { value: 'developer', label: 'Role: Developer' },
+                    { value: 'admin', label: 'Role: Admin' },
+                  ]}
+                  size="sm"
+                  className="w-36"
+                />
                 <button
                   onClick={() => inviteMutation.mutate()}
                   disabled={inviteMutation.isPending}
@@ -201,19 +204,21 @@ export const MembersModal: React.FC = () => {
 
                   <div className="flex items-center gap-2">
                     {isAdmin ? (
-                      <select
+                      <Select
                         value={m.role}
-                        onChange={(e) =>
+                        onChange={(val) =>
                           updateRoleMutation.mutate({
                             memberId: m.id,
-                            role: e.target.value as Role,
+                            role: val as Role,
                           })
                         }
-                        className="bg-zinc-900 border border-zinc-800 rounded px-2 py-0.5 text-xs text-zinc-300 focus:outline-none focus:border-zinc-700"
-                      >
-                        <option value="developer">Developer</option>
-                        <option value="admin">Admin</option>
-                      </select>
+                        options={[
+                          { value: 'developer', label: 'Developer' },
+                          { value: 'admin', label: 'Admin' },
+                        ]}
+                        size="xs"
+                        className="w-28"
+                      />
                     ) : (
                       <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-medium uppercase text-[10px]">
                         {m.role}
