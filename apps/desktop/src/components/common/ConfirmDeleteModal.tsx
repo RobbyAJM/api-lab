@@ -51,11 +51,11 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 animate-in fade-in duration-100"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+        className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -83,7 +83,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
 
           {/* Collection confirmation checkbox */}
           {config.requireCheckbox && (
-            <label className="flex items-start gap-2.5 p-3 rounded-lg bg-red-950/20 border border-red-900/40 cursor-pointer select-none">
+            <label className="flex items-start gap-2.5 p-3 rounded-md bg-red-950/20 border border-red-900/40 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={isChecked}
@@ -103,7 +103,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             type="button"
             onClick={onClose}
             disabled={isPending}
-            className="px-3.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 rounded-lg transition font-medium"
+            className="px-3.5 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70 rounded-md transition font-medium"
           >
             Cancel
           </button>
@@ -111,7 +111,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
             type="button"
             onClick={() => onConfirm()}
             disabled={!canConfirm}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition flex items-center gap-1.5 ${
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-md transition flex items-center gap-1.5 ${
               canConfirm
                 ? 'bg-red-600 hover:bg-red-500 text-white shadow-sm'
                 : 'bg-red-950/40 text-red-400/40 border border-red-900/20 cursor-not-allowed'

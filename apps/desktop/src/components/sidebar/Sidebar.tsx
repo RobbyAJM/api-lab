@@ -33,6 +33,7 @@ import {
   Keyboard,
 } from 'lucide-react';
 import { GenerateGrpcModal } from './GenerateGrpcModal';
+import { Select } from '../common/Select';
 import { CollectionSettingsModal } from '../collections/CollectionSettingsModal';
 import { SyncReflectionModal } from '../collections/SyncReflectionModal';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
@@ -173,55 +174,53 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
-      className="relative bg-zinc-950 border-r border-zinc-800/80 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
+      className="relative bg-zinc-950 border-r border-zinc-800/60 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
     >
       {/* Brand Header */}
-      <div className="px-3 py-2 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-950">
+      <div className="px-3 py-2 border-b border-zinc-800/60 flex items-center justify-between bg-zinc-950">
         <div className="flex items-center gap-2">
           <img src={appLogo} alt="API Lab" className="w-5 h-5 rounded object-contain" />
           <span className="font-semibold text-xs text-zinc-100 tracking-tight">API Lab</span>
         </div>
-        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+        <span className="text-[10px] font-mono text-zinc-500 font-medium">
           v0.1.0
         </span>
       </div>
 
       {/* Workspace Switcher */}
-      <div className="p-2.5 border-b border-zinc-800/80 flex items-center gap-2 relative select-none">
-        {/* Workspace Emblem */}
-        <span className="w-6 h-6 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-[11px] text-zinc-300 font-mono font-semibold flex-shrink-0">
-          {activeWorkspace?.name?.[0]?.toUpperCase() || 'W'}
-        </span>
-
-        {/* Minimalist Modern Dropdown Button */}
+      <div className="px-2 py-1.5 border-b border-zinc-800/60 flex items-center gap-1 relative select-none">
+        {/* Minimalist Dropdown Button */}
         <div className="flex-1 relative min-w-0" ref={wsDropdownRef}>
           <button
             type="button"
             onClick={() => setIsWsDropdownOpen(!isWsDropdownOpen)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-zinc-900/80 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700/80 text-xs text-zinc-200 transition shadow-sm group"
+            className="w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-zinc-900/80 text-xs text-zinc-200 transition group"
             title={activeWorkspace ? `${activeWorkspace.name} (${activeWorkspace.role})` : 'Select Workspace'}
           >
-            <div className="flex items-center gap-1.5 truncate">
-              <span className="font-semibold text-zinc-100 truncate">
+            <div className="flex items-center gap-2 truncate min-w-0">
+              <span className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-300 font-mono font-semibold flex-shrink-0">
+                {activeWorkspace?.name?.[0]?.toUpperCase() || 'W'}
+              </span>
+              <span className="font-semibold text-zinc-200 truncate">
                 {activeWorkspace?.name || 'Select Workspace'}
               </span>
               {activeWorkspace && (
-                <span className="text-[10px] text-zinc-500 font-mono lowercase">
-                  ({activeWorkspace.role})
+                <span className="text-[10px] text-zinc-500 font-mono lowercase flex-shrink-0">
+                  {activeWorkspace.role}
                 </span>
               )}
             </div>
             <ChevronDown
-              size={13}
+              size={12}
               className={`text-zinc-500 group-hover:text-zinc-300 transition-transform flex-shrink-0 ml-1 ${
                 isWsDropdownOpen ? 'rotate-180' : ''
               }`}
             />
           </button>
 
-          {/* Minimalist Modern Floating Dropdown Menu */}
+          {/* Minimalist Floating Dropdown Menu */}
           {isWsDropdownOpen && (
-            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl p-1.5 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 font-sans">
+            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-zinc-950 border border-zinc-800 rounded-md shadow-xl p-1 space-y-0.5 font-sans">
               <div className="px-2 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
                 Workspaces
               </div>
@@ -236,7 +235,7 @@ export const Sidebar: React.FC = () => {
                         setActiveWorkspaceId(ws.id);
                         setIsWsDropdownOpen(false);
                       }}
-                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition text-left ${
+                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition text-left ${
                         isCurrent
                           ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
                           : 'text-zinc-300 hover:text-white hover:bg-zinc-900/60 border border-transparent'
@@ -267,7 +266,7 @@ export const Sidebar: React.FC = () => {
                   setIsWsDropdownOpen(false);
                   setWorkspaceModalOpen(true);
                 }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-zinc-300 hover:text-white hover:bg-zinc-900/60 transition text-left"
+                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-zinc-300 hover:text-white hover:bg-zinc-900/60 transition text-left"
               >
                 <Settings size={12} className="text-zinc-400" />
                 <span>Workspace Settings...</span>
@@ -276,27 +275,27 @@ export const Sidebar: React.FC = () => {
           )}
         </div>
 
-        {/* Setting Button directly opening Workspace Settings Modal */}
+        {/* Setting Button */}
         <button
           type="button"
           onClick={() => setWorkspaceModalOpen(true)}
-          className="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 rounded-lg transition border border-transparent hover:border-zinc-800 flex-shrink-0"
+          className="p-1.5 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900/80 rounded-md transition flex-shrink-0"
           title="Workspace Settings"
         >
           <Settings size={14} />
         </button>
       </div>
 
-      {/* Searchbar in Collection (Feature 5) */}
-      <div className="px-3 py-2 border-b border-zinc-800/80 bg-zinc-900/40">
+      {/* Searchbar in Collection */}
+      <div className="px-2.5 pt-2 pb-1">
         <div className="relative flex items-center">
           <Search size={12} className="absolute left-2.5 text-zinc-500 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search collections & endpoints..."
-            className="w-full bg-zinc-950 border border-zinc-800 rounded pl-7 pr-12 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+            placeholder="Search..."
+            className="w-full bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/60 focus:border-zinc-700 focus:bg-zinc-900 rounded-md pl-7 pr-12 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition"
           />
           {searchQuery ? (
             <button
@@ -311,7 +310,7 @@ export const Sidebar: React.FC = () => {
               className="absolute right-1.5 flex items-center hover:opacity-80 transition"
               title="Open Command Palette (Ctrl+K)"
             >
-              <kbd className="text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60 select-none">
+              <kbd className="text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-800 text-zinc-500 select-none">
                 Ctrl+K
               </kbd>
             </button>
@@ -319,12 +318,9 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Collections Header (Result V3) */}
-      <div className="flex items-center justify-between px-3 py-2 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider select-none">
-        <div className="flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-zinc-500" />
-          <span>Collections</span>
-        </div>
+      {/* Collections Header */}
+      <div className="flex items-center justify-between px-3 pt-2.5 pb-1 text-[10px] font-semibold text-zinc-500 tracking-wider uppercase select-none">
+        <span>Collections</span>
         <div className="flex items-center gap-1 text-zinc-400">
           <button
             onClick={() => setCollapseSignal((s) => s + 1)}
@@ -377,19 +373,19 @@ export const Sidebar: React.FC = () => {
         ))}
       </div>
 
-      {/* Footer / User Profile (Result V3) */}
-      <div className="p-2.5 border-t border-zinc-800/80 flex items-center justify-between text-xs bg-zinc-950 flex-shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded bg-zinc-800 border border-zinc-700/80 flex items-center justify-center font-medium text-zinc-200 text-xs flex-shrink-0">
+      {/* Footer / User Profile */}
+      <div className="p-2 border-t border-zinc-800/60 flex items-center justify-between text-xs bg-zinc-950 flex-shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-6 h-6 rounded-md bg-zinc-800 flex items-center justify-center font-medium text-zinc-300 text-[11px] flex-shrink-0">
             {user?.name?.slice(0, 2).toUpperCase() || 'AD'}
           </div>
-          <div className="truncate">
-            <div className="font-medium text-zinc-200 truncate">{user?.name || 'Admin'}</div>
-            <div className="text-[10px] text-zinc-500 font-mono truncate">{user?.email || 'admin@nutrade.internal'}</div>
+          <div className="truncate min-w-0">
+            <div className="font-medium text-zinc-200 text-xs truncate leading-tight">{user?.name || 'Admin'}</div>
+            <div className="text-[10px] text-zinc-500 font-mono truncate leading-tight">{user?.email || 'admin@nutrade.internal'}</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 text-zinc-400">
+        <div className="flex items-center gap-0.5 text-zinc-400 flex-shrink-0">
           <button
             onClick={() => setShortcutsHelpOpen(true)}
             className="p-1 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
@@ -587,7 +583,7 @@ const CollectionNode: React.FC<{
 
   return (
     <div
-      className="rounded border border-zinc-900 bg-zinc-900/30 relative"
+      className="relative"
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -595,7 +591,7 @@ const CollectionNode: React.FC<{
         setContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
     >
-      <div className="flex items-center justify-between px-2 py-1.5 text-xs hover:bg-zinc-800/40 rounded group">
+      <div className="flex items-center justify-between px-2 py-1 text-xs hover:bg-zinc-900/70 rounded-md group">
         {isRenaming ? (
           <div className="flex items-center gap-1 flex-1 py-0.5">
             <input
@@ -622,11 +618,11 @@ const CollectionNode: React.FC<{
             className="flex items-center gap-1.5 text-zinc-200 font-medium truncate flex-1 text-left py-0.5"
           >
             {isExpanded ? (
-              <ChevronDown size={13} className="text-zinc-400 flex-shrink-0" />
+              <ChevronDown size={13} className="text-zinc-500 flex-shrink-0" />
             ) : (
-              <ChevronRight size={13} className="text-zinc-400 flex-shrink-0" />
+              <ChevronRight size={13} className="text-zinc-500 flex-shrink-0" />
             )}
-            <span className="truncate font-semibold">{collection.name}</span>
+            <span className="truncate font-semibold text-zinc-100">{collection.name}</span>
             {collection.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
               <span title="Shared Auth configured">
                 <Shield size={11} className="text-secondary flex-shrink-0" />
@@ -639,25 +635,25 @@ const CollectionNode: React.FC<{
           <button
             onClick={() => setShowSettingsModal(true)}
             title="Collection Setting"
-            className="p-1 hover:text-zinc-200 text-zinc-400"
+            className="p-1 hover:text-zinc-200 text-zinc-500"
           >
             <Settings size={12} />
           </button>
           <button
             onClick={() => setShowAddEndpoint(!showAddEndpoint)}
             title="Add Endpoint"
-            className="p-1 hover:text-zinc-200 text-zinc-400"
+            className="p-1 hover:text-zinc-200 text-zinc-500"
           >
             <Plus size={12} />
           </button>
           <button
             onClick={() => setShowAddFolder(!showAddFolder)}
             title="Add Folder"
-            className="p-1 hover:text-amber-400 text-zinc-400"
+            className="p-1 hover:text-amber-400 text-zinc-500"
           >
             <Folder size={12} />
           </button>
-          <button onClick={onDelete} title="Delete Collection" className="p-1 hover:text-red-400 text-zinc-400">
+          <button onClick={onDelete} title="Delete Collection" className="p-1 hover:text-red-400 text-zinc-500">
             <Trash2 size={12} />
           </button>
         </div>
@@ -667,7 +663,7 @@ const CollectionNode: React.FC<{
       {contextMenuPos && (
         <div
           style={{ top: `${contextMenuPos.y}px`, left: `${contextMenuPos.x}px` }}
-          className="fixed z-50 bg-zinc-900 border border-zinc-700/80 rounded-lg shadow-2xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -768,22 +764,25 @@ const CollectionNode: React.FC<{
 
       {showAddEndpoint && (
         <div className="p-1.5 pl-4 flex flex-col gap-1 bg-zinc-900/60 border-t border-zinc-800">
-          <div className="flex gap-1">
-            <select
+          <div className="flex gap-1 items-center">
+            <Select
               value={endpointProtocol}
-              onChange={(e) => {
-                const val = e.target.value as 'http' | 'grpc' | 'grpc_reflection';
-                setEndpointProtocol(val);
-                if (val === 'grpc_reflection') {
+              onChange={(val) => {
+                const p = val as 'http' | 'grpc' | 'grpc_reflection';
+                setEndpointProtocol(p);
+                if (p === 'grpc_reflection') {
                   setShowGrpcModal(true);
                 }
               }}
-              className="bg-zinc-950 border border-zinc-800 rounded px-1 py-0.5 text-xs font-mono"
-            >
-              <option value="http">HTTP</option>
-              <option value="grpc">gRPC</option>
-              <option value="grpc_reflection">Generate gRPC</option>
-            </select>
+              options={[
+                { value: 'http', label: 'HTTP' },
+                { value: 'grpc', label: 'gRPC' },
+                { value: 'grpc_reflection', label: 'Generate gRPC' },
+              ]}
+              size="xs"
+              fontMono
+              className="w-32 flex-shrink-0"
+            />
             {endpointProtocol !== 'grpc_reflection' && (
               <input
                 type="text"
@@ -987,21 +986,25 @@ const FolderTreeNodeComponent: React.FC<{
         setFolderContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
     >
-      <div className="flex items-center justify-between w-full py-1 text-xs text-zinc-400 hover:text-zinc-200 group rounded hover:bg-zinc-800/30 px-1">
+      <div className="flex items-center justify-between w-full py-1 text-xs text-zinc-400 hover:text-zinc-200 group rounded-md hover:bg-zinc-900/50 px-1.5">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1 truncate flex-1 text-left"
+          className="flex items-center gap-1.5 truncate flex-1 text-left"
         >
-          {isAutoExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          {isAutoExpanded ? (
+            <ChevronDown size={12} className="text-zinc-500 flex-shrink-0" />
+          ) : (
+            <ChevronRight size={12} className="text-zinc-500 flex-shrink-0" />
+          )}
           {isReflection ? (
             <span
               title={`gRPC Reflection Folder (${grpcUrl || 'configured'})`}
               className="flex items-center"
             >
-              <FolderSync size={12} className="text-secondary flex-shrink-0" />
+              <FolderSync size={13} className="text-secondary flex-shrink-0" />
             </span>
           ) : (
-            <Folder size={12} className="text-amber-400/80 flex-shrink-0" />
+            <Folder size={13} className="text-amber-400/80 flex-shrink-0" />
           )}
           <span className="truncate">{node.folder.name}</span>
         </button>
@@ -1010,21 +1013,21 @@ const FolderTreeNodeComponent: React.FC<{
           <button
             onClick={() => setShowAddSubEndpoint(!showAddSubEndpoint)}
             title="Add Endpoint in this folder"
-            className="p-0.5 hover:text-zinc-200"
+            className="p-0.5 hover:text-zinc-200 text-zinc-500"
           >
             <Plus size={11} />
           </button>
           <button
             onClick={() => setShowAddSubFolder(!showAddSubFolder)}
             title="Add Subfolder"
-            className="p-0.5 hover:text-amber-400"
+            className="p-0.5 hover:text-amber-400 text-zinc-500"
           >
             <Folder size={11} />
           </button>
           <button
             onClick={() => setShowDeleteFolderModal(true)}
             title="Delete Folder"
-            className="p-0.5 hover:text-red-400"
+            className="p-0.5 hover:text-red-400 text-zinc-500"
           >
             <Trash2 size={11} />
           </button>
@@ -1035,7 +1038,7 @@ const FolderTreeNodeComponent: React.FC<{
       {folderContextMenuPos && (
         <div
           style={{ top: `${folderContextMenuPos.y}px`, left: `${folderContextMenuPos.x}px` }}
-          className="fixed z-50 bg-zinc-900 border border-zinc-700/80 rounded-lg shadow-2xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
           {isReflection && (
@@ -1120,15 +1123,18 @@ const FolderTreeNodeComponent: React.FC<{
       )}
 
       {showAddSubEndpoint && (
-        <div className="p-1 pl-4 flex gap-1 bg-zinc-900/60 border-t border-zinc-800 my-1 rounded">
-          <select
+        <div className="p-1 pl-4 flex gap-1 items-center bg-zinc-900/60 border-t border-zinc-800 my-1 rounded">
+          <Select
             value={subEndpointProtocol}
-            onChange={(e) => setSubEndpointProtocol(e.target.value as any)}
-            className="bg-zinc-950 border border-zinc-800 rounded px-1 py-0.5 text-xs font-mono"
-          >
-            <option value="http">HTTP</option>
-            <option value="grpc">gRPC</option>
-          </select>
+            onChange={(val) => setSubEndpointProtocol(val as any)}
+            options={[
+              { value: 'http', label: 'HTTP' },
+              { value: 'grpc', label: 'gRPC' },
+            ]}
+            size="xs"
+            fontMono
+            className="w-24 flex-shrink-0"
+          />
           <input
             type="text"
             value={subEndpointName}
@@ -1152,7 +1158,7 @@ const FolderTreeNodeComponent: React.FC<{
       )}
 
       {isAutoExpanded && (
-        <div className="pl-3 space-y-0.5 border-l border-zinc-800/60 ml-2">
+        <div className="pl-3 space-y-0.5 border-l border-zinc-800/40 ml-2">
           {/* Child Endpoints */}
           {node.endpoints.map((ep) => (
             <EndpointItem key={ep.id} endpoint={ep} />
@@ -1237,50 +1243,47 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
           setActiveEndpoint(endpoint);
           localStorage.setItem('api_lab_active_endpoint_id', endpoint.id);
         }}
-        className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition text-left cursor-pointer ${
+        className={`w-full flex items-center justify-between px-2 py-1 rounded-md text-xs transition text-left cursor-pointer ${
           isActive
-            ? 'bg-zinc-900 text-zinc-100 font-medium border border-zinc-800 shadow-sm'
-            : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+            ? 'bg-zinc-800/70 text-zinc-100 font-medium'
+            : 'hover:bg-zinc-900/70 text-zinc-400 hover:text-zinc-200'
         }`}
       >
-        <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+        <div className="flex items-center gap-2 truncate flex-1 min-w-0">
           {endpoint.protocol === 'http' ? (
             <span
-              className={`text-[9px] font-bold font-mono px-1 rounded ${
+              className={`w-7 text-[9px] font-mono font-bold flex-shrink-0 text-left ${
                 method === 'GET'
-                  ? 'text-emerald-400 bg-emerald-950/40 border border-emerald-900/40'
+                  ? 'text-emerald-400'
                   : method === 'POST'
-                  ? 'text-primary bg-primary-subtle border border-primary-border'
+                  ? 'text-primary'
                   : method === 'PUT' || method === 'PATCH'
-                  ? 'text-amber-400 bg-amber-950/40 border border-amber-900/40'
-                  : 'text-red-400 bg-red-950/40 border border-red-900/40'
+                  ? 'text-amber-400'
+                  : 'text-red-400'
               }`}
             >
-              {method}
+              {method.slice(0, 4)}
             </span>
           ) : streamType === 'bidi_stream' ? (
-            /* gRPC Stream Bidirectional Icon (Yellow badge) */
             <span
               title="gRPC Bidirectional Stream"
-              className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5"
+              className="w-4 h-4 flex items-center justify-center flex-shrink-0 text-amber-400"
             >
-              <ArrowLeftRight size={9} /> STREAM
+              <ArrowLeftRight size={11} />
             </span>
           ) : streamType === 'omni_stream' ? (
-            /* gRPC Stream Omnidirectional Icon (Yellow badge) */
             <span
-              title="gRPC Omnidirectional Stream"
-              className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5"
+              title="gRPC Stream"
+              className="w-4 h-4 flex items-center justify-center flex-shrink-0 text-amber-400"
             >
-              <ArrowDownUp size={9} /> STREAM
+              <ArrowDownUp size={11} />
             </span>
           ) : (
-            /* gRPC Unary Icon (Subtle badge) */
             <span
               title="gRPC Unary Call"
-              className="text-[9px] font-bold font-mono px-1 rounded text-zinc-300 bg-zinc-900 border border-zinc-800 flex items-center gap-0.5"
+              className="w-4 h-4 flex items-center justify-center flex-shrink-0 text-zinc-500 group-hover:text-zinc-400"
             >
-              <Radio size={9} /> gRPC
+              <Radio size={11} />
             </span>
           )}
           <span className="truncate">{endpoint.name}</span>
@@ -1298,7 +1301,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
             <Trash2 size={11} />
           </button>
           {isActive && (
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30 ml-1" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary ml-1" />
           )}
         </div>
       </div>
@@ -1307,7 +1310,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
       {contextMenuPos && (
         <div
           style={{ top: `${contextMenuPos.y}px`, left: `${contextMenuPos.x}px` }}
-          className="fixed z-50 bg-zinc-900 border border-zinc-700/80 rounded-lg shadow-2xl py-1 w-40 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 w-40 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
           onClick={(e) => e.stopPropagation()}
         >
           <button

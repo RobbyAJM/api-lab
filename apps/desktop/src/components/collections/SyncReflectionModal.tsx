@@ -13,6 +13,8 @@ import {
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
 import { resolveRootFolderId } from '../../utils/folderTree';
 import { VariableInput } from '../common/VariableInput';
+import { Select } from '../common/Select';
+import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
 import { useAppStore } from '../../store/useAppStore';
 import type { Collection, CollectionFolder, Endpoint, Environment, VariableResponse } from '@api-lab/api-types';
 import {
@@ -313,11 +315,11 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
       onClick={() => !syncing && onClose()}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-xl max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -330,19 +332,14 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {environments.length > 0 && (
-              <select
-                value={effectiveEnvId || ''}
-                onChange={(e) => setActiveEnvironmentId(e.target.value || null)}
-                className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-[11px] rounded px-2 py-0.5 font-mono focus:outline-none cursor-pointer"
-                title="Active Environment for Variable Substitution"
-              >
-                <option value="">No Environment</option>
-                {environments.map((env) => (
-                  <option key={env.id} value={env.id}>
-                    {env.name}
-                  </option>
-                ))}
-              </select>
+              <EnvironmentDropdown
+                environments={environments}
+                value={effectiveEnvId}
+                onChange={(val) => setActiveEnvironmentId(val)}
+                size="xs"
+                align="right"
+                showManageShortcut={false}
+              />
             )}
             <button onClick={onClose} disabled={syncing} className="text-zinc-400 hover:text-zinc-200 p-1">
               <X size={14} />
@@ -354,17 +351,12 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         <div className="p-4 space-y-3.5 text-xs overflow-y-auto flex-1">
           <div>
             <label className="block text-zinc-400 mb-1">Target Root Group / Folder</label>
-            <select
+            <Select
               value={selectedRootFolderId}
-              onChange={(e) => setSelectedRootFolderId(e.target.value)}
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 font-mono focus:outline-none focus:border-zinc-700"
-            >
-              {rootFolders.map((rf) => (
-                <option key={rf.id} value={rf.id}>
-                  {rf.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSelectedRootFolderId}
+              options={rootFolders.map((rf) => ({ value: rf.id, label: rf.name }))}
+              fontMono
+            />
           </div>
 
           <div>

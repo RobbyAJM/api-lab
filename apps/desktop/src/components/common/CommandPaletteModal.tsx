@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Collection, Endpoint } from '@api-lab/api-types';
-import { Search, X, CornerDownLeft, Layers, Radio, Terminal } from 'lucide-react';
+import { Search, X, CornerDownLeft, Layers, Radio, Terminal, ArrowDownUp } from 'lucide-react';
 import {
   searchUnifiedCommandPalette,
   navigateListIndex,
@@ -130,11 +130,11 @@ export const CommandPaletteModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-24 p-4"
+      className="fixed inset-0 z-50 bg-black/75 flex items-start justify-center pt-24 p-4"
       onClick={() => setCommandPaletteOpen(false)}
     >
       <div
-        className="w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -179,7 +179,7 @@ export const CommandPaletteModal: React.FC = () => {
                     key={item.id}
                     onClick={() => handleSelect(item)}
                     onMouseEnter={() => setSelectedIndex(idx)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition ${
+                    className={`flex items-center justify-between px-3 py-2 rounded text-xs cursor-pointer transition ${
                       isSelected
                         ? 'bg-zinc-800 text-white border border-zinc-700/80'
                         : 'hover:bg-zinc-900/80 text-zinc-300 border border-transparent'
@@ -220,7 +220,7 @@ export const CommandPaletteModal: React.FC = () => {
                   key={item.id}
                   onClick={() => handleSelect(item)}
                   onMouseEnter={() => setSelectedIndex(idx)}
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg text-xs cursor-pointer transition ${
+                  className={`flex items-center justify-between px-3 py-2 rounded text-xs cursor-pointer transition ${
                     isSelected
                       ? 'bg-zinc-800 text-white border border-zinc-700/80'
                       : 'hover:bg-zinc-900/80 text-zinc-300 border border-transparent'
@@ -243,12 +243,13 @@ export const CommandPaletteModal: React.FC = () => {
                         {item.methodLabel}
                       </span>
                     ) : item.methodLabel === 'STREAM' ? (
-                      <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded text-amber-300 bg-amber-950/60 border border-amber-800/40 flex items-center gap-1">
-                        <Radio size={10} />
-                        STREAM
+                      <span className="text-[9px] font-medium font-mono px-1.5 py-0.5 rounded text-amber-300 bg-amber-950/40 border border-amber-800/30 flex items-center gap-1">
+                        <ArrowDownUp size={10} />
+                        Stream
                       </span>
                     ) : (
-                      <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded text-zinc-300 bg-zinc-900 border border-zinc-800">
+                      <span className="text-[9px] font-medium font-mono px-1.5 py-0.5 rounded text-zinc-300 bg-zinc-900 border border-zinc-800 flex items-center gap-1">
+                        <Radio size={10} />
                         gRPC
                       </span>
                     )}
