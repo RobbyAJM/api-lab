@@ -308,5 +308,68 @@ export function resolveRootFolderId(
   return current.id;
 }
 
+export interface InheritedGrpcAddressInfo {
+  isInherited: boolean;
+  inheritedAddress: string | null;
+  folderId: string | null;
+  folderName: string | null;
+}
+
+/**
+ * Determines if an endpoint is inside a Reflection Folder (directly or via ancestor subfolder)
+ * and resolves the inherited gRPC server address and source folder info.
+ */
+export function resolveInheritedGrpcAddress(
+  endpoint: { folder_id?: string | null },
+  folders: CollectionFolder[],
+  collectionSettings?: Record<string, any>
+): InheritedGrpcAddressInfo {
+  if (!endpoint.folder_id || !folders || folders.length === 0) {
+    return {
+      isInherited: false,
+      inheritedAddress: null,
+      folderId: null,
+      folderName: null,
+    };
+  }
+
+  // 1. Traverse up to find root ancestor folder
+  const rootId = resolveRootFolderId(folders, endpoint.folder_id);
+  const targetFolder = folders.find((f) => f.id === (rootId || endpoint.folder_id));
+
+  if (targetFolder && isReflectionFolder(targetFolder, collectionSettings)) {
+    const addr = getFolderGrpcUrl(targetFolder, collectionSettings);
+    return {
+      isInherited: true,
+      inheritedAddress: addr,
+      folderId: targetFolder.id,
+      folderName: targetFolder.name,
+    };
+  }
+
+  // 2. Check immediate or intermediate ancestors if root was not reflection
+  let curr = folders.find((f) => f.id === endpoint.folder_id);
+  while (curr) {
+    if (isReflectionFolder(curr, collectionSettings)) {
+      const addr = getFolderGrpcUrl(curr, collectionSettings);
+      return {
+        isInherited: true,
+        inheritedAddress: addr,
+        folderId: curr.id,
+        folderName: curr.name,
+      };
+    }
+    if (!curr.parent_folder_id) break;
+    curr = folders.find((f) => f.id === curr!.parent_folder_id);
+  }
+
+  return {
+    isInherited: false,
+    inheritedAddress: null,
+    folderId: null,
+    folderName: null,
+  };
+}
+
 
 
