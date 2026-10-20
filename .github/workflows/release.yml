@@ -1,9 +1,6 @@
 name: Release Client
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       tag_name:
@@ -73,7 +70,7 @@ jobs:
           projectPath: apps/desktop
           tagName: ${{ github.event.inputs.tag_name || 'v__VERSION__' }}
           releaseName: 'API Lab ${{ github.event.inputs.tag_name || '' }}'
-          releaseBody: 'Automated release build of API Lab desktop client for Windows and macOS.'
-          releaseDraft: ${{ github.event.inputs.draft == 'true' || github.event_name == 'push' }}
+          releaseBody: 'Release build of API Lab desktop client for Windows and macOS.'
+          releaseDraft: ${{ github.event.inputs.draft }}
           prerelease: false
           args: ${{ matrix.args }}
