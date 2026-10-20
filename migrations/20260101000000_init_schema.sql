@@ -95,7 +95,7 @@ CREATE INDEX idx_collection_folders_collection ON collection_folders(collection_
 CREATE TABLE IF NOT EXISTS endpoints (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     collection_id UUID NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
-    folder_id UUID REFERENCES collection_folders(id) ON DELETE SET NULL,
+    folder_id UUID REFERENCES collection_folders(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     protocol VARCHAR(20) NOT NULL CHECK (protocol IN ('http', 'grpc')),
     config JSONB NOT NULL DEFAULT '{}'::jsonb,
