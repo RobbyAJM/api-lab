@@ -332,8 +332,11 @@ export function handleEditorKeyDown(
     return handleTabIndentation(text, start, end, Boolean(action.shiftKey));
   }
 
-  // Enter
+  // Enter (ignore if Ctrl/Cmd held - used for request execution shortcut)
   if (action.key === 'Enter') {
+    if (isMod) {
+      return null;
+    }
     return handleEnterKey(text, start, end);
   }
 

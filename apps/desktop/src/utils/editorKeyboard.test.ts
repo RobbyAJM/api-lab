@@ -129,3 +129,37 @@ test('handleEditorKeyDown: dispatches Ctrl+Z (undo) and Ctrl+Y (redo) with histo
   assert.equal(macRedo.text, 'hello world');
 });
 
+test('handleEditorKeyDown: ignores Enter when Ctrl or Cmd is pressed (prevents newline on request execute)', () => {
+  const code = '{"message": "hello"}';
+
+  // Ctrl+Enter: must return null so no newline is inserted
+  const ctrlEnter = handleEditorKeyDown(code, code.length, code.length, {
+    key: 'Enter',
+    ctrlKey: true,
+  });
+  assert.equal(ctrlEnter, null);
+
+  // Cmd+Enter (Mac): must return null
+  const cmdEnter = handleEditorKeyDown(code, code.length, code.length, {
+    key: 'Enter',
+    metaKey: true,
+  });
+  assert.equal(cmdEnter, null);
+
+  // Normal Enter: must insert newline
+  const normalEnter = handleEditorKeyDown(code, code.length, code.length, {
+    key: 'Enter',
+  });
+  assert.ok(normalEnter);
+  assert.equal(normalEnter.text, `${code}\n`);
+
+  // Shift+Enter: must insert newline
+  const shiftEnter = handleEditorKeyDown(code, code.length, code.length, {
+    key: 'Enter',
+    shiftKey: true,
+  });
+  assert.ok(shiftEnter);
+  assert.equal(shiftEnter.text, `${code}\n`);
+});
+
+

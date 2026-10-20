@@ -33,6 +33,7 @@ import {
 import { GenerateGrpcModal } from './GenerateGrpcModal';
 import { CollectionSettingsModal } from '../collections/CollectionSettingsModal';
 import { SyncReflectionModal } from '../collections/SyncReflectionModal';
+import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 import {
   buildFolderTree,
   filterCollectionTree,
@@ -152,11 +153,13 @@ export const Sidebar: React.FC = () => {
   });
 
   // Delete Collection
+  const [collectionToDelete, setCollectionToDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteCollectionMutation = useMutation({
     mutationFn: (id: string) =>
       apiRequest(`/collections/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['collections', activeWorkspaceId] });
+      setCollectionToDelete(null);
     },
   });
 
@@ -353,7 +356,7 @@ export const Sidebar: React.FC = () => {
             collection={coll}
             searchQuery={searchQuery}
             collapseSignal={collapseSignal}
-            onDelete={() => deleteCollectionMutation.mutate(coll.id)}
+            onDelete={() => setCollectionToDelete({ id: coll.id, name: coll.name })}
           />
         ))}
       </div>
@@ -400,6 +403,19 @@ export const Sidebar: React.FC = () => {
         onMouseDown={startResizing}
         className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize hover:bg-zinc-700 active:bg-zinc-600 transition-colors z-40"
         title="Drag to resize sidebar width"
+      />
+
+      <ConfirmDeleteModal
+        isOpen={!!collectionToDelete}
+        type="collection"
+        name={collectionToDelete?.name}
+        isPending={deleteCollectionMutation.isPending}
+        onConfirm={async () => {
+          if (collectionToDelete) {
+            await deleteCollectionMutation.mutateAsync(collectionToDelete.id);
+          }
+        }}
+        onClose={() => setCollectionToDelete(null)}
       />
     </aside>
   );
@@ -888,12 +904,15 @@ const FolderTreeNodeComponent: React.FC<{
     },
   });
 
+  const [showDeleteFolderModal, setShowDeleteFolderModal] = useState(false);
+
   const deleteFolderMutation = useMutation({
     mutationFn: () =>
       apiRequest(`/folders/${node.folder.id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['folders', collectionId] });
       queryClient.invalidateQueries({ queryKey: ['endpoints', collectionId] });
+      setShowDeleteFolderModal(false);
     },
   });
 
@@ -925,7 +944,7 @@ const FolderTreeNodeComponent: React.FC<{
             <Folder size={11} />
           </button>
           <button
-            onClick={() => deleteFolderMutation.mutate()}
+            onClick={() => setShowDeleteFolderModal(true)}
             title="Delete Folder"
             className="p-0.5 hover:text-red-400"
           >
@@ -1004,76 +1023,156 @@ const FolderTreeNodeComponent: React.FC<{
           ))}
         </div>
       )}
+
+      <ConfirmDeleteModal
+        isOpen={showDeleteFolderModal}
+        type="folder"
+        name={node.folder.name}
+        isPending={deleteFolderMutation.isPending}
+        onConfirm={async () => {
+          await deleteFolderMutation.mutateAsync();
+        }}
+        onClose={() => setShowDeleteFolderModal(false)}
+      />
     </div>
   );
 };
 
-// Individual Endpoint item with 3 gRPC stream icons (Feature 1 & Feature 2)
+// Individual Endpoint item with 3 gRPC stream icons & delete action
 const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
-  const { activeEndpointId, setActiveEndpoint } = useAppStore();
-  const isActive = activeEndpointId === endpoint.id;
+  const queryClient = useQueryClient();
+  const { activeEndpointId, setActiveEndpoint, closeEndpoint } = useAppStore();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
 
+  useEffect(() => {
+    if (!contextMenuPos) return;
+    const handleClick = () => setContextMenuPos(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, [contextMenuPos]);
+
+  const deleteEndpointMutation = useMutation({
+    mutationFn: () => apiRequest(`/endpoints/${endpoint.id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['endpoints', endpoint.collection_id] });
+      closeEndpoint(endpoint.id);
+      setShowDeleteModal(false);
+    },
+  });
+
+  const isActive = activeEndpointId === endpoint.id;
   const method = endpoint.protocol === 'http' ? endpoint.config?.method || 'GET' : 'gRPC';
   const streamType = endpoint.config?.stream_type || 'unary';
 
   return (
-    <button
-      onClick={() => {
-        setActiveEndpoint(endpoint);
-        localStorage.setItem('api_lab_active_endpoint_id', endpoint.id);
+    <div
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
-      className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition text-left group ${
-        isActive
-          ? 'bg-zinc-900 text-zinc-100 font-medium border border-zinc-800 shadow-sm'
-          : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200'
-      }`}
+      className="relative group"
     >
-      <div className="flex items-center gap-1.5 truncate">
-        {endpoint.protocol === 'http' ? (
-          <span
-            className={`text-[9px] font-bold font-mono px-1 rounded ${
-              method === 'GET'
-                ? 'text-emerald-400 bg-emerald-950/40 border border-emerald-900/40'
-                : method === 'POST'
-                ? 'text-primary bg-primary-subtle border border-primary-border'
-                : method === 'PUT' || method === 'PATCH'
-                ? 'text-amber-400 bg-amber-950/40 border border-amber-900/40'
-                : 'text-red-400 bg-red-950/40 border border-red-900/40'
-            }`}
+      <div
+        onClick={() => {
+          setActiveEndpoint(endpoint);
+          localStorage.setItem('api_lab_active_endpoint_id', endpoint.id);
+        }}
+        className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition text-left cursor-pointer ${
+          isActive
+            ? 'bg-zinc-900 text-zinc-100 font-medium border border-zinc-800 shadow-sm'
+            : 'hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200'
+        }`}
+      >
+        <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+          {endpoint.protocol === 'http' ? (
+            <span
+              className={`text-[9px] font-bold font-mono px-1 rounded ${
+                method === 'GET'
+                  ? 'text-emerald-400 bg-emerald-950/40 border border-emerald-900/40'
+                  : method === 'POST'
+                  ? 'text-primary bg-primary-subtle border border-primary-border'
+                  : method === 'PUT' || method === 'PATCH'
+                  ? 'text-amber-400 bg-amber-950/40 border border-amber-900/40'
+                  : 'text-red-400 bg-red-950/40 border border-red-900/40'
+              }`}
+            >
+              {method}
+            </span>
+          ) : streamType === 'bidi_stream' ? (
+            /* gRPC Stream Bidirectional Icon (Yellow badge) */
+            <span
+              title="gRPC Bidirectional Stream"
+              className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5"
+            >
+              <ArrowLeftRight size={9} /> STREAM
+            </span>
+          ) : streamType === 'omni_stream' ? (
+            /* gRPC Stream Omnidirectional Icon (Yellow badge) */
+            <span
+              title="gRPC Omnidirectional Stream"
+              className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5"
+            >
+              <ArrowDownUp size={9} /> STREAM
+            </span>
+          ) : (
+            /* gRPC Unary Icon (Subtle badge) */
+            <span
+              title="gRPC Unary Call"
+              className="text-[9px] font-bold font-mono px-1 rounded text-zinc-300 bg-zinc-900 border border-zinc-800 flex items-center gap-0.5"
+            >
+              <Radio size={9} /> gRPC
+            </span>
+          )}
+          <span className="truncate">{endpoint.name}</span>
+        </div>
+
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowDeleteModal(true);
+            }}
+            title="Delete Endpoint"
+            className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 text-zinc-400 transition"
           >
-            {method}
-          </span>
-        ) : streamType === 'bidi_stream' ? (
-          /* gRPC Stream Bidirectional Icon (Yellow badge) */
-          <span
-            title="gRPC Bidirectional Stream"
-            className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5"
-          >
-            <ArrowLeftRight size={9} /> STREAM
-          </span>
-        ) : streamType === 'omni_stream' ? (
-          /* gRPC Stream Omnidirectional Icon (Yellow badge) */
-          <span
-            title="gRPC Omnidirectional Stream"
-            className="text-[9px] font-bold font-mono px-1 rounded text-amber-300 bg-amber-950/40 border border-amber-800/40 flex items-center gap-0.5"
-          >
-            <ArrowDownUp size={9} /> STREAM
-          </span>
-        ) : (
-          /* gRPC Unary Icon (Subtle badge) */
-          <span
-            title="gRPC Unary Call"
-            className="text-[9px] font-bold font-mono px-1 rounded text-zinc-300 bg-zinc-900 border border-zinc-800 flex items-center gap-0.5"
-          >
-            <Radio size={9} /> gRPC
-          </span>
-        )}
-        <span className="truncate">{endpoint.name}</span>
+            <Trash2 size={11} />
+          </button>
+          {isActive && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30 ml-1" />
+          )}
+        </div>
       </div>
 
-      {isActive && (
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ring-2 ring-emerald-400/30 flex-shrink-0 ml-1" />
+      {/* Right-click Context Menu */}
+      {contextMenuPos && (
+        <div
+          style={{ top: `${contextMenuPos.y}px`, left: `${contextMenuPos.x}px` }}
+          className="fixed z-50 bg-zinc-900 border border-zinc-700/80 rounded-lg shadow-2xl py-1 w-40 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              setContextMenuPos(null);
+              setShowDeleteModal(true);
+            }}
+            className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-2"
+          >
+            <Trash2 size={12} />
+            <span>Delete Endpoint</span>
+          </button>
+        </div>
       )}
-    </button>
+
+      <ConfirmDeleteModal
+        isOpen={showDeleteModal}
+        type="endpoint"
+        name={endpoint.name}
+        isPending={deleteEndpointMutation.isPending}
+        onConfirm={() => deleteEndpointMutation.mutate()}
+        onClose={() => setShowDeleteModal(false)}
+      />
+    </div>
   );
 };
