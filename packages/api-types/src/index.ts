@@ -58,7 +58,6 @@ export interface CollectionHeaderSetting {
 
 export interface CollectionSettings {
   auth?: CollectionAuthSettings;
-  base_url?: string;
   headers?: CollectionHeaderSetting[];
   timeout_ms?: number;
   description?: string;
