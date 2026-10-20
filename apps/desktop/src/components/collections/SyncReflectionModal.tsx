@@ -110,7 +110,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
     setStatusMessage('Querying fresh gRPC reflection...');
     setPlan(null);
 
-    const effectiveTls = useTls || shouldAutoDetectTls(serverAddress);
+    const effectiveTls = useTls || shouldAutoDetectTls(serverAddress, activeVariables);
 
     try {
       const res = await discoverNativeGrpcServices(
@@ -280,7 +280,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
                 value={serverAddress}
                 onChange={(val) => {
                   setServerAddress(val);
-                  if (shouldAutoDetectTls(val)) {
+                  if (shouldAutoDetectTls(val, activeVariables)) {
                     setUseTls(true);
                   }
                 }}

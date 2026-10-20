@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import {
@@ -36,6 +36,12 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
   const [statusText, setStatusText] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
+  const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!isOpen) return;
+    resolveVariables().then(setActiveVariables);
+  }, [activeEnvironmentId, isOpen]);
 
   if (!isOpen) return null;
 
@@ -77,10 +83,9 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
     setErrorText(null);
     setStatusText('Discovering services via reflection...');
 
-    const effectiveTls = useTls || shouldAutoDetectTls(serverAddress);
-
     try {
       const activeVars = await resolveVariables();
+      const effectiveTls = useTls || shouldAutoDetectTls(serverAddress, activeVars);
 
       const reflection = await discoverNativeGrpcServices(
         { server_address: serverAddress.trim(), use_tls: effectiveTls },
@@ -230,10 +235,11 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
                 value={serverAddress}
                 onChange={(val) => {
                   setServerAddress(val);
-                  if (shouldAutoDetectTls(val)) {
+                  if (shouldAutoDetectTls(val, activeVariables)) {
                     setUseTls(true);
                   }
                 }}
+                variables={activeVariables}
                 disabled={loading}
                 placeholder="localhost:9091, grpcb.in:9001, or {{GRPC_HOST}}"
                 className="w-full h-8"
