@@ -86,6 +86,11 @@ interface AppState {
     folderId: string;
     collectionId: string;
   } | null;
+  swaggerSettingsModal: {
+    isOpen: boolean;
+    folderId: string;
+    collectionId: string;
+  } | null;
 
   setAuth: (token: string, user: UserSummary, workspace?: WorkspaceSummary) => void;
   logout: () => void;
@@ -114,6 +119,8 @@ interface AppState {
   closeEditVariableModal: () => void;
   openReflectionSettingsModal: (folderId: string, collectionId: string) => void;
   closeReflectionSettingsModal: () => void;
+  openSwaggerSettingsModal: (folderId: string, collectionId: string) => void;
+  closeSwaggerSettingsModal: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -440,4 +447,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }),
   closeReflectionSettingsModal: () => set({ reflectionSettingsModal: null }),
+  swaggerSettingsModal: null,
+  openSwaggerSettingsModal: (folderId: string, collectionId: string) =>
+    set({
+      swaggerSettingsModal: {
+        isOpen: true,
+        folderId,
+        collectionId,
+      },
+    }),
+  closeSwaggerSettingsModal: () => set({ swaggerSettingsModal: null }),
 }));

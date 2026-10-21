@@ -146,6 +146,7 @@ pub struct CollectionFolder {
     pub parent_folder_id: Option<Uuid>,
     pub name: String,
     pub grpc_url: Option<String>,
+    pub swagger_url: Option<String>,
     pub sort_order: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

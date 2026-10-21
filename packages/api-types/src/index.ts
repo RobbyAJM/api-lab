@@ -79,6 +79,7 @@ export interface CollectionFolder {
   parent_folder_id?: string | null;
   name: string;
   grpc_url?: string | null;
+  swagger_url?: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
