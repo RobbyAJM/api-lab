@@ -5,6 +5,7 @@ import { apiRequest } from '../../api/client';
 import { tokenizeJsonLine, type VariableSource } from '../../utils/variableHighlight';
 import { handleEditorKeyDown } from '../../utils/editorKeyboard';
 import { EditorHistory } from '../../utils/editorHistory';
+import { parseJsonWithComments } from '../../utils/jsonComments';
 import { findHoveredVariableToken, type BoundingBox } from '../../utils/variableHover';
 import {
   findFoldableRanges,
@@ -149,7 +150,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   function handleBeautify() {
     setFormatError(null);
     try {
-      const parsed = JSON.parse(value);
+      const parsed = parseJsonWithComments(value);
       const formatted = JSON.stringify(parsed, null, 2);
       setFoldedStartLines(new Set());
       historyRef.current?.recordChange(formatted, 0, 0, true);
@@ -163,7 +164,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   function handleMinify() {
     setFormatError(null);
     try {
-      const parsed = JSON.parse(value);
+      const parsed = parseJsonWithComments(value);
       const minified = JSON.stringify(parsed);
       setFoldedStartLines(new Set());
       historyRef.current?.recordChange(minified, 0, 0, true);
@@ -269,6 +270,8 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
               colorClass = token.isDefined
                 ? 'text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-800/50 px-0.5 rounded'
                 : 'text-rose-300 font-bold bg-rose-950/60 border border-rose-800/50 px-0.5 rounded';
+            } else if (token.type === 'comment') {
+              colorClass = 'text-zinc-500 italic';
             } else if (token.type === 'key') {
               colorClass = 'text-secondary font-medium';
             } else if (token.type === 'string') {

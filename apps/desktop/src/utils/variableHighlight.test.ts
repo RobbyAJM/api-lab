@@ -136,3 +136,37 @@ test('tokenizeJsonLine: standalone variable outside quotes', () => {
   assert.equal(varToken.varName, 'ID');
   assert.equal(varToken.isDefined, true);
 });
+
+test('tokenizeJsonLine: parses single-line comment', () => {
+  const line = '  // This is a comment';
+  const tokens = tokenizeJsonLine(line);
+
+  const comment = tokens.find((t) => t.type === 'comment');
+  assert.ok(comment);
+  assert.equal(comment.text, '// This is a comment');
+});
+
+test('tokenizeJsonLine: parses inline comment after JSON tokens', () => {
+  const line = '  "key": "value", // inline note';
+  const tokens = tokenizeJsonLine(line);
+
+  const key = tokens.find((t) => t.type === 'key');
+  assert.ok(key);
+
+  const comment = tokens.find((t) => t.type === 'comment');
+  assert.ok(comment);
+  assert.equal(comment.text, '// inline note');
+});
+
+test('tokenizeJsonLine: preserves slashes inside string literals', () => {
+  const line = '  "url": "https://example.com/api//v1"';
+  const tokens = tokenizeJsonLine(line);
+
+  const comment = tokens.find((t) => t.type === 'comment');
+  assert.equal(comment, undefined);
+
+  const str = tokens.find((t) => t.type === 'string');
+  assert.ok(str);
+  assert.equal(str.text, '"https://example.com/api//v1"');
+});
+

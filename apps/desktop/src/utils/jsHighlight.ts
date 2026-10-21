@@ -61,51 +61,31 @@ const JS_GLOBALS = new Set([
 
 /**
  * Tokenizes a single line of JavaScript into colored syntax tokens.
+ * ponytail: line-level tokenizer; multiline block comments (/* *\/) highlight per-line if closed.
  */
 export function tokenizeJsLine(line: string): JsSyntaxToken[] {
   if (!line) return [];
 
-  // Single-line comment check
-  const commentIndex = line.indexOf('//');
-  if (commentIndex !== -1) {
-    // Check if // is inside a string literal
-    const beforeComment = line.substring(0, commentIndex);
-    const doubleQuotes = (beforeComment.match(/"/g) || []).length;
-    const singleQuotes = (beforeComment.match(/'/g) || []).length;
-
-    // If not inside an unclosed string
-    if (doubleQuotes % 2 === 0 && singleQuotes % 2 === 0) {
-      const codeTokens = tokenizeJsCode(beforeComment);
-      const commentToken: JsSyntaxToken = {
-        type: 'comment',
-        text: line.substring(commentIndex),
-      };
-      return [...codeTokens, commentToken];
-    }
-  }
-
-  return tokenizeJsCode(line);
-}
-
-function tokenizeJsCode(code: string): JsSyntaxToken[] {
   const regex =
-    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"|'(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\'])*'|`[^`]*`|\b(?:true|false|null|undefined)\b|\b\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?\b|\b[A-Za-z_$][A-Za-z0-9_$]*\b|===|!==|==|!=|<=|>=|=>|&&|\|\||[+\-*\/%=<>!?:&|^~]|[{}()[\].,;])/g;
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"|'(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\'])*'|`[^`]*`|\/\/.*|\/\*.*?\*\/|\b(?:true|false|null|undefined)\b|\b\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?\b|\b[A-Za-z_$][A-Za-z0-9_$]*\b|===|!==|==|!=|<=|>=|=>|&&|\|\||[+\-*\/%=<>!?:&|^~]|[{}()[\].,;])/g;
 
   const tokens: JsSyntaxToken[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(code)) !== null) {
+  while ((match = regex.exec(line)) !== null) {
     if (match.index > lastIndex) {
       tokens.push({
         type: 'text',
-        text: code.substring(lastIndex, match.index),
+        text: line.substring(lastIndex, match.index),
       });
     }
 
     const raw = match[0];
 
-    if (raw.startsWith('"') || raw.startsWith("'") || raw.startsWith('`')) {
+    if (raw.startsWith('//') || raw.startsWith('/*')) {
+      tokens.push({ type: 'comment', text: raw });
+    } else if (raw.startsWith('"') || raw.startsWith("'") || raw.startsWith('`')) {
       tokens.push({ type: 'string', text: raw });
     } else if (raw === 'true' || raw === 'false' || raw === 'null' || raw === 'undefined') {
       tokens.push({ type: 'boolean', text: raw });
@@ -126,10 +106,10 @@ function tokenizeJsCode(code: string): JsSyntaxToken[] {
     lastIndex = regex.lastIndex;
   }
 
-  if (lastIndex < code.length) {
+  if (lastIndex < line.length) {
     tokens.push({
       type: 'text',
-      text: code.substring(lastIndex),
+      text: line.substring(lastIndex),
     });
   }
 

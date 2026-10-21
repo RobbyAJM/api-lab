@@ -14,6 +14,7 @@ import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/ho
 import { applyCollectionSettingsToHttp } from '../../utils/collectionSettings';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { getEffectiveEndpointConfig } from '../../utils/tabManager';
+import { stripJsonComments } from '../../utils/jsonComments';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -254,12 +255,14 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       if (k.trim()) headerMap[k.trim()] = v;
     }
 
+    const cleanBody = bodyType === 'json' && body ? stripJsonComments(body) : body;
+
     const execReq: HttpExecutionRequest = {
       url,
       method,
       headers: headerMap,
       query_params: queryParams.filter(([k]) => k.trim()),
-      body: bodyType === 'none' ? undefined : body,
+      body: bodyType === 'none' ? undefined : cleanBody,
       body_type: bodyType,
       auth,
       timeout_ms: 30000,

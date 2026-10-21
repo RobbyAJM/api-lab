@@ -31,6 +31,19 @@ test('tokenizeJsLine: handles comments at end of line', () => {
   assert.equal(commentToken.text, '// Verify OK');
 });
 
+test('tokenizeJsLine: parses string with http:// followed by comment correctly', () => {
+  const line = 'const url = "https://example.com/api"; // Endpoint target';
+  const tokens = tokenizeJsLine(line);
+
+  const str = tokens.find((t) => t.type === 'string');
+  assert.ok(str);
+  assert.equal(str.text, '"https://example.com/api"');
+
+  const comment = tokens.find((t) => t.type === 'comment');
+  assert.ok(comment);
+  assert.equal(comment.text, '// Endpoint target');
+});
+
 test('tokenizeJsLine: parses pm.environment.set snippet', () => {
   const line = 'pm.environment.set("nutrade_token", body.details.token);';
   const tokens = tokenizeJsLine(line);
