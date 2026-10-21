@@ -162,13 +162,16 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
                 Swagger URL
               </label>
             </div>
-            <VariableInput
-              value={swaggerUrl}
-              onChange={setSwaggerUrl}
-              variables={envVars}
-              placeholder="e.g. http://localhost:9090/swagger/combined/nutrade.swagger.json"
-              className="font-mono text-xs"
-            />
+            <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-600 transition h-8 flex items-center">
+              <VariableInput
+                value={swaggerUrl}
+                onChange={setSwaggerUrl}
+                variables={envVars}
+                disabled={saveMutation.isPending}
+                placeholder="e.g. http://localhost:9090/swagger/combined/nutrade.swagger.json"
+                className="w-full h-full"
+              />
+            </div>
             <p className="mt-1 text-[10px] text-zinc-500 flex items-center gap-1">
               <Info size={11} className="flex-shrink-0" />
               <span>
