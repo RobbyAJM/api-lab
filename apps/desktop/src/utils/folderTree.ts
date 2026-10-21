@@ -419,5 +419,45 @@ export function resolveInheritedGrpcAddress(
   };
 }
 
+/**
+ * Resolves all ancestor folder IDs containing the given folderId,
+ * walking up the parent_folder_id chain to the root folder.
+ */
+export function getAncestorFolderIds(
+  folders: CollectionFolder[],
+  folderId?: string | null
+): Set<string> {
+  const result = new Set<string>();
+  if (!folderId) return result;
+
+  const folderMap = new Map<string, CollectionFolder>();
+  for (const f of folders) {
+    folderMap.set(f.id, f);
+  }
+
+  let currId: string | null | undefined = folderId;
+  const visited = new Set<string>();
+
+  while (currId && !visited.has(currId)) {
+    visited.add(currId);
+    result.add(currId);
+    const f = folderMap.get(currId);
+    currId = f ? f.parent_folder_id : null;
+  }
+
+  return result;
+}
+
+/**
+ * Checks if a collection contains the active endpoint.
+ */
+export function isCollectionHighlighted(
+  collectionId: string,
+  activeEndpoint?: { collection_id?: string | null } | null
+): boolean {
+  return Boolean(activeEndpoint && activeEndpoint.collection_id === collectionId);
+}
+
+
 
 
