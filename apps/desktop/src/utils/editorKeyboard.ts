@@ -51,7 +51,8 @@ export function handleTabIndentation(
   start: number,
   end: number,
   isShift: boolean,
-  indentStr: string = '  '
+  indentStr: string = '  ',
+  forceLineIndent: boolean = false
 ): EditorChangeResult {
   const isMultiLine = text.substring(start, end).includes('\n') || start !== end;
 
@@ -115,6 +116,17 @@ export function handleTabIndentation(
 
   // Single cursor (no selection)
   if (!isShift) {
+    if (forceLineIndent) {
+      // Indent entire current line at line beginning
+      const lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+      const newText = text.substring(0, lineStart) + indentStr + text.substring(lineStart);
+      return {
+        text: newText,
+        selectionStart: start + indentStr.length,
+        selectionEnd: start + indentStr.length,
+      };
+    }
+
     // Insert 2 spaces at cursor
     const newText = text.substring(0, start) + indentStr + text.substring(end);
     return {
@@ -352,6 +364,53 @@ export function handleToggleComment(
 }
 
 /**
+ * Removes the current line where cursor is focused (Ctrl+X with no selection).
+ * Copies the deleted line to system clipboard if clipboard API is available.
+ * ponytail: line deletion handles single, middle, and trailing line without selection; full multi-line cut delegates to browser cut event.
+ */
+export function handleDeleteLine(
+  text: string,
+  start: number,
+  end: number
+): EditorChangeResult {
+  const lineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  const lineEnd = text.indexOf('\n', end);
+
+  let removeStart = lineStart;
+  let removeEnd = lineEnd;
+  let removedText = '';
+
+  if (lineEnd !== -1) {
+    // Delete line including its trailing newline
+    removeEnd = lineEnd + 1;
+    removedText = text.substring(removeStart, removeEnd);
+  } else if (lineStart > 0) {
+    // Last line with preceding newline: delete from preceding newline to end
+    removeStart = lineStart - 1;
+    removeEnd = text.length;
+    removedText = text.substring(removeStart + 1) + '\n';
+  } else {
+    // Only line in document
+    removeStart = 0;
+    removeEnd = text.length;
+    removedText = text + '\n';
+  }
+
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(removedText).catch(() => {});
+  }
+
+  const newText = text.substring(0, removeStart) + text.substring(removeEnd);
+  const newPos = Math.min(removeStart, newText.length);
+
+  return {
+    text: newText,
+    selectionStart: newPos,
+    selectionEnd: newPos,
+  };
+}
+
+/**
  * Master dispatcher for code editor keyboard events.
  * Returns null if default browser behavior should proceed.
  */
@@ -401,6 +460,25 @@ export function handleEditorKeyDown(
   // Toggle line comment (Ctrl+/ or Cmd+/)
   if (isMod && (action.key === '/' || action.key === '?')) {
     return handleToggleComment(text, start, end);
+  }
+
+  // Adjust indentation (Ctrl+[ to unindent, Ctrl+] to indent)
+  if (isMod && !action.shiftKey && !action.altKey) {
+    if (action.key === '[') {
+      return handleTabIndentation(text, start, end, true);
+    }
+    if (action.key === ']') {
+      return handleTabIndentation(text, start, end, false, '  ', true);
+    }
+  }
+
+  // Remove current line (Ctrl+X with no selection)
+  if (isMod && !action.shiftKey && !action.altKey && (action.key === 'x' || action.key === 'X')) {
+    if (start === end) {
+      return handleDeleteLine(text, start, end);
+    }
+    // With selection: let native browser cut proceed
+    return null;
   }
 
   // Tab / Shift+Tab

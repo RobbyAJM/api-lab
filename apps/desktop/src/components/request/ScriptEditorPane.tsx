@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { HookTestResult } from '../../utils/hookRunner';
 import { JavaScriptEditor } from '../common/JavaScriptEditor';
-import { CheckCircle, XCircle, Terminal, Check } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Terminal, Check } from 'lucide-react';
 
 export interface ScriptSnippet {
   title: string;
@@ -202,14 +202,29 @@ export const ScriptEditorPane: React.FC<ScriptEditorPaneProps> = ({
                   <div className="space-y-1">
                     {tests.map((t, idx) => (
                       <div key={idx} className="flex items-center gap-1.5">
-                        {t.passed ? (
-                          <CheckCircle size={13} className="text-emerald-400" />
+                        {t.status === 'warn' ? (
+                          <AlertTriangle size={13} className="text-amber-400 flex-shrink-0" />
+                        ) : t.passed ? (
+                          <CheckCircle size={13} className="text-emerald-400 flex-shrink-0" />
                         ) : (
-                          <XCircle size={13} className="text-rose-400" />
+                          <XCircle size={13} className="text-rose-400 flex-shrink-0" />
                         )}
-                        <span className={t.passed ? 'text-zinc-200' : 'text-rose-300'}>
+                        <span
+                          className={
+                            t.status === 'warn'
+                              ? 'text-amber-300'
+                              : t.passed
+                              ? 'text-zinc-200'
+                              : 'text-rose-300'
+                          }
+                        >
                           {t.name}
                         </span>
+                        {t.warning && (
+                          <span className="text-[10px] text-amber-400 ml-1">
+                            ({t.warning})
+                          </span>
+                        )}
                         {t.error && (
                           <span className="text-[10px] text-rose-400 ml-1">
                             ({t.error})

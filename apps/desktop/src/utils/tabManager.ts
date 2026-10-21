@@ -224,3 +224,27 @@ export function isEndpointDirtyInState(state: TabState, endpointId: string): boo
   const draft = state.endpointDrafts?.[endpointId];
   return isConfigDirty(ep.config, draft);
 }
+
+/**
+ * Returns the adjacent endpoint when navigating left ('prev') or right ('next').
+ * Returns null if no adjacent tab exists in that direction.
+ * ponytail: clamp at ends without cycle wrap; avoids accidental wraparound during rapid navigation.
+ */
+export function getAdjacentEndpoint(
+  openEndpoints: Endpoint[],
+  activeEndpointId: string | null,
+  direction: 'prev' | 'next'
+): Endpoint | null {
+  if (openEndpoints.length === 0) return null;
+  const currentIndex = openEndpoints.findIndex((e) => e.id === activeEndpointId);
+  if (currentIndex === -1) {
+    return openEndpoints[0];
+  }
+  const nextIndex =
+    direction === 'prev'
+      ? Math.max(0, currentIndex - 1)
+      : Math.min(openEndpoints.length - 1, currentIndex + 1);
+
+  if (nextIndex === currentIndex) return null;
+  return openEndpoints[nextIndex];
+}

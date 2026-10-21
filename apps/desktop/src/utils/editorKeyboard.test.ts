@@ -6,6 +6,7 @@ import {
   handlePairInsertion,
   handleBackspacePair,
   handleToggleComment,
+  handleDeleteLine,
   handleEditorKeyDown,
 } from './editorKeyboard.ts';
 import { EditorHistory } from './editorHistory.ts';
@@ -203,6 +204,57 @@ test('handleEditorKeyDown: dispatches Ctrl+/ to toggle comment', () => {
   const unres = handleEditorKeyDown(res.text, 5, 5, { key: '/', metaKey: true });
   assert.ok(unres);
   assert.equal(unres.text, code);
+});
+
+test('handleDeleteLine: removes current line at cursor', () => {
+  // Middle line
+  const threeLines = 'line1\nline2\nline3';
+  const resMiddle = handleDeleteLine(threeLines, 8, 8); // cursor in "line2"
+  assert.equal(resMiddle.text, 'line1\nline3');
+  assert.equal(resMiddle.selectionStart, 6);
+
+  // First line
+  const resFirst = handleDeleteLine(threeLines, 2, 2); // cursor in "line1"
+  assert.equal(resFirst.text, 'line2\nline3');
+  assert.equal(resFirst.selectionStart, 0);
+
+  // Last line
+  const resLast = handleDeleteLine(threeLines, 14, 14); // cursor in "line3"
+  assert.equal(resLast.text, 'line1\nline2');
+  assert.equal(resLast.selectionStart, 11);
+
+  // Single line document
+  const single = 'only one line';
+  const resSingle = handleDeleteLine(single, 4, 4);
+  assert.equal(resSingle.text, '');
+  assert.equal(resSingle.selectionStart, 0);
+});
+
+test('handleEditorKeyDown: dispatches Ctrl+[ and Ctrl+] for indentation', () => {
+  const text = 'line1\n  line2';
+
+  // Ctrl+[ on line 2 unindents
+  const unindent = handleEditorKeyDown(text, 10, 10, { key: '[', ctrlKey: true });
+  assert.ok(unindent);
+  assert.equal(unindent.text, 'line1\nline2');
+
+  // Ctrl+] on line 1 indents line
+  const indent = handleEditorKeyDown(text, 2, 2, { key: ']', ctrlKey: true });
+  assert.ok(indent);
+  assert.equal(indent.text, '  line1\n  line2');
+});
+
+test('handleEditorKeyDown: dispatches Ctrl+X to remove current line when no selection', () => {
+  const text = 'alpha\nbeta\ngamma';
+
+  // No selection (start === end): removes current line
+  const cutLine = handleEditorKeyDown(text, 8, 8, { key: 'x', ctrlKey: true });
+  assert.ok(cutLine);
+  assert.equal(cutLine.text, 'alpha\ngamma');
+
+  // With selection: returns null to allow browser native clipboard cut
+  const withSelection = handleEditorKeyDown(text, 0, 5, { key: 'x', ctrlKey: true });
+  assert.equal(withSelection, null);
 });
 
 
