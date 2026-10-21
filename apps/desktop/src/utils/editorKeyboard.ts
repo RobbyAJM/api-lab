@@ -281,6 +281,77 @@ export function handleBackspacePair(
 }
 
 /**
+ * Toggles line comments (//) on single cursor line or across multi-line selection.
+ * ponytail: line comments only; add block comment toggle (Shift+Alt+A) if multi-syntax mix needed.
+ */
+export function handleToggleComment(
+  text: string,
+  start: number,
+  end: number
+): EditorChangeResult {
+  const firstLineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  let lastLineEnd = text.indexOf('\n', end);
+  if (lastLineEnd === -1) lastLineEnd = text.length;
+
+  if (end > start && text[end - 1] === '\n') {
+    lastLineEnd = end - 1;
+  }
+
+  const before = text.substring(0, firstLineStart);
+  const middle = text.substring(firstLineStart, lastLineEnd);
+  const after = text.substring(lastLineEnd);
+
+  const lines = middle.split('\n');
+  const nonEmptyLines = lines.filter((l) => l.trim().length > 0);
+
+  const allCommented =
+    nonEmptyLines.length > 0 &&
+    nonEmptyLines.every((l) => /^\s*\/\//.test(l));
+
+  let startDelta = 0;
+  let totalDelta = 0;
+
+  const newLines = lines.map((line, idx) => {
+    let newLine: string;
+    let lineDelta: number;
+
+    if (allCommented) {
+      if (/^\s*\/\//.test(line)) {
+        newLine = line.replace(/^(\s*)\/\/ ?/, '$1');
+        lineDelta = newLine.length - line.length;
+      } else {
+        newLine = line;
+        lineDelta = 0;
+      }
+    } else {
+      const match = line.match(/^(\s*)(.*)$/);
+      if (match) {
+        newLine = `${match[1]}// ${match[2]}`;
+        lineDelta = newLine.length - line.length;
+      } else {
+        newLine = `// ${line}`;
+        lineDelta = 3;
+      }
+    }
+
+    if (idx === 0) {
+      startDelta = lineDelta;
+    }
+    totalDelta += lineDelta;
+    return newLine;
+  });
+
+  const newMiddle = newLines.join('\n');
+  const newText = before + newMiddle + after;
+
+  return {
+    text: newText,
+    selectionStart: Math.max(firstLineStart, start + startDelta),
+    selectionEnd: Math.max(firstLineStart, end + totalDelta),
+  };
+}
+
+/**
  * Master dispatcher for code editor keyboard events.
  * Returns null if default browser behavior should proceed.
  */
@@ -325,6 +396,11 @@ export function handleEditorKeyDown(
       }
       return { text, selectionStart: start, selectionEnd: end };
     }
+  }
+
+  // Toggle line comment (Ctrl+/ or Cmd+/)
+  if (isMod && (action.key === '/' || action.key === '?')) {
+    return handleToggleComment(text, start, end);
   }
 
   // Tab / Shift+Tab
