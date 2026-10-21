@@ -81,7 +81,7 @@ export function tokenizeVariables(text: string, env?: VariableSource): VariableT
 }
 
 export interface JsonSyntaxToken {
-  type: 'key' | 'string' | 'number' | 'boolean' | 'null' | 'delimiter' | 'variable' | 'text';
+  type: 'key' | 'string' | 'number' | 'boolean' | 'null' | 'delimiter' | 'variable' | 'comment' | 'text';
   text: string;
   varName?: string;
   isDefined?: boolean;
@@ -93,7 +93,7 @@ export interface JsonSyntaxToken {
  */
 export function tokenizeJsonLine(line: string, env?: VariableSource): JsonSyntaxToken[] {
   const mainRegex =
-    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\{\{[A-Za-z0-9_]+\}\}|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}[\],:])/g;
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\/\/.*|\/\*.*?\*\/|\{\{[A-Za-z0-9_]+\}\}|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}[\],:])/g;
 
   const tokens: JsonSyntaxToken[] = [];
   let lastIndex = 0;
@@ -109,7 +109,12 @@ export function tokenizeJsonLine(line: string, env?: VariableSource): JsonSyntax
 
     const raw = match[0];
 
-    if (raw.startsWith('{{') && raw.endsWith('}}')) {
+    if (raw.startsWith('//') || raw.startsWith('/*')) {
+      tokens.push({
+        type: 'comment',
+        text: raw,
+      });
+    } else if (raw.startsWith('{{') && raw.endsWith('}}')) {
       const varName = raw.slice(2, -2);
       const { exists } = hasVariable(varName, env);
       tokens.push({

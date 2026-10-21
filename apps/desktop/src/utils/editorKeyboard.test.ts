@@ -5,6 +5,7 @@ import {
   handleEnterKey,
   handlePairInsertion,
   handleBackspacePair,
+  handleToggleComment,
   handleEditorKeyDown,
 } from './editorKeyboard.ts';
 import { EditorHistory } from './editorHistory.ts';
@@ -161,5 +162,48 @@ test('handleEditorKeyDown: ignores Enter when Ctrl or Cmd is pressed (prevents n
   assert.ok(shiftEnter);
   assert.equal(shiftEnter.text, `${code}\n`);
 });
+
+test('handleToggleComment: comments single line at cursor', () => {
+  const code = 'const x = 10;';
+  const res = handleToggleComment(code, 6, 6);
+  assert.equal(res.text, '// const x = 10;');
+  assert.equal(res.selectionStart, 9);
+  assert.equal(res.selectionEnd, 9);
+
+  // Toggle back to uncomment
+  const unres = handleToggleComment(res.text, 9, 9);
+  assert.equal(unres.text, code);
+  assert.equal(unres.selectionStart, 6);
+});
+
+test('handleToggleComment: comments indented lines preserving indentation', () => {
+  const code = '  const y = 20;';
+  const res = handleToggleComment(code, 4, 4);
+  assert.equal(res.text, '  // const y = 20;');
+
+  const unres = handleToggleComment(res.text, 7, 7);
+  assert.equal(unres.text, code);
+});
+
+test('handleToggleComment: multi-line selection comments and uncomments all lines', () => {
+  const multi = 'line1\nline2\nline3';
+  const commented = handleToggleComment(multi, 2, 8);
+  assert.equal(commented.text, '// line1\n// line2\nline3');
+
+  const uncommented = handleToggleComment(commented.text, 5, 14);
+  assert.equal(uncommented.text, multi);
+});
+
+test('handleEditorKeyDown: dispatches Ctrl+/ to toggle comment', () => {
+  const code = '{"foo": "bar"}';
+  const res = handleEditorKeyDown(code, 2, 2, { key: '/', ctrlKey: true });
+  assert.ok(res);
+  assert.equal(res.text, '// {"foo": "bar"}');
+
+  const unres = handleEditorKeyDown(res.text, 5, 5, { key: '/', metaKey: true });
+  assert.ok(unres);
+  assert.equal(unres.text, code);
+});
+
 
 
