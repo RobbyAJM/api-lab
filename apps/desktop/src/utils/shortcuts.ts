@@ -263,13 +263,80 @@ export type UnifiedPaletteItem =
       keyLabel: string;
     };
 
+export interface PaletteActionRecord {
+  id: string;
+  type: 'endpoint' | 'command';
+  timestamp: number;
+}
+
+export const PALETTE_RECENCY_STORAGE_KEY = 'api_lab_palette_recency';
+
+/**
+ * Records an endpoint open or command execution in recency history.
+ * Deduplicates by ID, places target at index 0, and caps history size.
+ */
+export function recordPaletteAction(
+  history: PaletteActionRecord[],
+  item: { id: string; type: 'endpoint' | 'command' },
+  timestamp: number = Date.now(),
+  maxHistory: number = 100
+): PaletteActionRecord[] {
+  const filtered = history.filter((h) => h.id !== item.id);
+  const updated: PaletteActionRecord[] = [
+    { id: item.id, type: item.type, timestamp },
+    ...filtered,
+  ];
+  return updated.slice(0, maxHistory);
+}
+
+/**
+ * Loads recorded palette recency from storage.
+ */
+export function loadPaletteRecency(storage?: Storage): PaletteActionRecord[] {
+  try {
+    const s = storage || (typeof window !== 'undefined' ? window.localStorage : undefined);
+    if (!s) return [];
+    const raw = s.getItem(PALETTE_RECENCY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (item): item is PaletteActionRecord =>
+        Boolean(item) &&
+        typeof item.id === 'string' &&
+        (item.type === 'endpoint' || item.type === 'command') &&
+        typeof item.timestamp === 'number'
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Persists palette recency list to storage.
+ */
+export function savePaletteRecency(
+  records: PaletteActionRecord[],
+  storage?: Storage
+): void {
+  try {
+    const s = storage || (typeof window !== 'undefined' ? window.localStorage : undefined);
+    if (!s) return;
+    s.setItem(PALETTE_RECENCY_STORAGE_KEY, JSON.stringify(records));
+  } catch {
+    // ignore storage exceptions
+  }
+}
+
 /**
  * Searches both executable actions and workspace endpoints in Command Palette.
+ * Matches are sorted descending by latest action timestamp.
  */
 export function searchUnifiedCommandPalette(
   endpoints: Endpoint[],
   collections: Collection[],
-  query: string
+  query: string,
+  history: PaletteActionRecord[] = []
 ): UnifiedPaletteItem[] {
   const q = query.trim().toLowerCase();
   const keywords = q.split(/\s+/).filter(Boolean);
@@ -297,7 +364,32 @@ export function searchUnifiedCommandPalette(
     ...item,
   }));
 
-  return [...matchedCommands, ...endpointItems];
+  const allItems = [...matchedCommands, ...endpointItems];
+
+  if (!history || history.length === 0) {
+    return allItems;
+  }
+
+  const recencyMap = new Map<string, number>();
+  for (const h of history) {
+    if (!recencyMap.has(h.id)) {
+      recencyMap.set(h.id, h.timestamp);
+    }
+  }
+
+  return allItems
+    .map((item, originalIndex) => ({
+      item,
+      originalIndex,
+      timestamp: recencyMap.get(item.id) ?? -1,
+    }))
+    .sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return b.timestamp - a.timestamp;
+      }
+      return a.originalIndex - b.originalIndex;
+    })
+    .map((entry) => entry.item);
 }
 
 /**

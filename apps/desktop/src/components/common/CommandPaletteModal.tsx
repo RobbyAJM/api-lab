@@ -7,7 +7,11 @@ import { Search, X, CornerDownLeft, Layers, Radio, Terminal, ArrowDownUp } from 
 import {
   searchUnifiedCommandPalette,
   navigateListIndex,
+  recordPaletteAction,
+  loadPaletteRecency,
+  savePaletteRecency,
   type UnifiedPaletteItem,
+  type PaletteActionRecord,
 } from '../../utils/shortcuts';
 
 export const CommandPaletteModal: React.FC = () => {
@@ -26,6 +30,7 @@ export const CommandPaletteModal: React.FC = () => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [allEndpoints, setAllEndpoints] = useState<Endpoint[]>([]);
+  const [paletteHistory, setPaletteHistory] = useState<PaletteActionRecord[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -62,16 +67,17 @@ export const CommandPaletteModal: React.FC = () => {
     };
   }, [commandPaletteOpen, collections, queryClient]);
 
-  // Auto-focus input when opened
+  // Auto-focus input and load latest recency when opened
   useEffect(() => {
     if (commandPaletteOpen) {
+      setPaletteHistory(loadPaletteRecency());
       setQuery('');
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [commandPaletteOpen]);
 
-  const items = searchUnifiedCommandPalette(allEndpoints, collections, query);
+  const items = searchUnifiedCommandPalette(allEndpoints, collections, query, paletteHistory);
 
   // Reset selected index when query changes
   useEffect(() => {
@@ -92,6 +98,11 @@ export const CommandPaletteModal: React.FC = () => {
 
   function handleSelect(item: UnifiedPaletteItem) {
     if (item.type === 'command') {
+      const recency = loadPaletteRecency();
+      const updated = recordPaletteAction(recency, { id: item.id, type: 'command' });
+      savePaletteRecency(updated);
+      setPaletteHistory(updated);
+
       if (item.actionId === 'close_tab') {
         if (activeEndpointId) {
           closeEndpoint(activeEndpointId);
@@ -104,6 +115,11 @@ export const CommandPaletteModal: React.FC = () => {
         closeAllEndpoints();
       }
     } else {
+      const recency = loadPaletteRecency();
+      const updated = recordPaletteAction(recency, { id: item.endpoint.id, type: 'endpoint' });
+      savePaletteRecency(updated);
+      setPaletteHistory(updated);
+
       setActiveEndpoint(item.endpoint);
       localStorage.setItem('api_lab_active_endpoint_id', item.endpoint.id);
     }
