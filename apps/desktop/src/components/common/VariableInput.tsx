@@ -106,7 +106,8 @@ export const VariableInput: React.FC<VariableInputProps> = ({
 
   return (
     <div
-      className={`relative inline-flex items-center overflow-hidden font-mono text-xs ${className}`}
+      onClick={() => inputRef.current?.focus()}
+      className={`relative flex items-center overflow-hidden font-mono text-xs cursor-text ${className}`}
     >
       {/* Syntax Highlight Backdrop */}
       <div
