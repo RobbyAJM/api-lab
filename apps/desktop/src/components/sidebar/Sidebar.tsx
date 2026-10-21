@@ -31,11 +31,14 @@ import {
   ChevronsDownUp,
   RefreshCw,
   Keyboard,
+  Globe,
 } from 'lucide-react';
 import { GenerateGrpcModal } from './GenerateGrpcModal';
+import { GenerateSwaggerModal } from './GenerateSwaggerModal';
 import { Select } from '../common/Select';
 import { CollectionSettingsModal } from '../collections/CollectionSettingsModal';
 import { SyncReflectionModal } from '../collections/SyncReflectionModal';
+import { SyncSwaggerModal } from '../collections/SyncSwaggerModal';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 import {
@@ -43,6 +46,8 @@ import {
   filterCollectionTree,
   isReflectionFolder,
   getFolderGrpcUrl,
+  isSwaggerFolder,
+  getFolderSwaggerUrl,
   type FolderTreeNode,
 } from '../../utils/folderTree';
 
@@ -448,6 +453,9 @@ const CollectionNode: React.FC<{
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncTargetFolderId, setSyncTargetFolderId] = useState<string | undefined>(undefined);
+  const [showSwaggerModal, setShowSwaggerModal] = useState(false);
+  const [showSwaggerSyncModal, setShowSwaggerSyncModal] = useState(false);
+  const [syncTargetSwaggerFolderId, setSyncTargetSwaggerFolderId] = useState<string | undefined>(undefined);
 
   // Collapse Collections/Folders button trigger (Feature 1)
   useEffect(() => {
@@ -465,7 +473,7 @@ const CollectionNode: React.FC<{
 
   const [folderName, setFolderName] = useState('');
   const [endpointName, setEndpointName] = useState('');
-  const [endpointProtocol, setEndpointProtocol] = useState<'http' | 'grpc' | 'grpc_reflection'>('http');
+  const [endpointProtocol, setEndpointProtocol] = useState<'http' | 'grpc' | 'grpc_reflection' | 'swagger'>('http');
   const { activeEnvironmentId } = useAppStore();
 
   // Close context menu on outside click or global close event
@@ -723,12 +731,32 @@ const CollectionNode: React.FC<{
           <button
             onClick={() => {
               setContextMenuPos(null);
+              setShowSwaggerModal(true);
+            }}
+            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+          >
+            <Globe size={12} className="text-emerald-400" />
+            <span>Generate Swagger</span>
+          </button>
+          <button
+            onClick={() => {
+              setContextMenuPos(null);
               setShowSyncModal(true);
             }}
             className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
           >
             <RefreshCw size={12} className="text-zinc-400" />
             <span>Sync Reflection</span>
+          </button>
+          <button
+            onClick={() => {
+              setContextMenuPos(null);
+              setShowSwaggerSyncModal(true);
+            }}
+            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+          >
+            <RefreshCw size={12} className="text-emerald-400" />
+            <span>Sync Swagger</span>
           </button>
           <div className="h-px bg-zinc-800 my-1" />
           <button
@@ -768,22 +796,25 @@ const CollectionNode: React.FC<{
             <Select
               value={endpointProtocol}
               onChange={(val) => {
-                const p = val as 'http' | 'grpc' | 'grpc_reflection';
+                const p = val as 'http' | 'grpc' | 'grpc_reflection' | 'swagger';
                 setEndpointProtocol(p);
                 if (p === 'grpc_reflection') {
                   setShowGrpcModal(true);
+                } else if (p === 'swagger') {
+                  setShowSwaggerModal(true);
                 }
               }}
               options={[
                 { value: 'http', label: 'HTTP' },
                 { value: 'grpc', label: 'gRPC' },
                 { value: 'grpc_reflection', label: 'Generate gRPC' },
+                { value: 'swagger', label: 'Generate Swagger' },
               ]}
               size="xs"
               fontMono
               className="w-32 flex-shrink-0"
             />
-            {endpointProtocol !== 'grpc_reflection' && (
+            {endpointProtocol !== 'grpc_reflection' && endpointProtocol !== 'swagger' && (
               <input
                 type="text"
                 value={endpointName}
@@ -796,6 +827,8 @@ const CollectionNode: React.FC<{
               onClick={() => {
                 if (endpointProtocol === 'grpc_reflection') {
                   setShowGrpcModal(true);
+                } else if (endpointProtocol === 'swagger') {
+                  setShowSwaggerModal(true);
                 } else if (endpointName.trim()) {
                   createEndpointMutation.mutate({
                     name: endpointName.trim(),
@@ -804,7 +837,13 @@ const CollectionNode: React.FC<{
                 }
               }}
               className="bg-primary hover:bg-primary-hover px-2 rounded text-xs text-white"
-              title={endpointProtocol === 'grpc_reflection' ? 'Generate gRPC' : 'Add Endpoint'}
+              title={
+                endpointProtocol === 'grpc_reflection'
+                  ? 'Generate gRPC'
+                  : endpointProtocol === 'swagger'
+                  ? 'Generate Swagger'
+                  : 'Add Endpoint'
+              }
             >
               +
             </button>
@@ -818,6 +857,18 @@ const CollectionNode: React.FC<{
         isOpen={showGrpcModal}
         onClose={() => {
           setShowGrpcModal(false);
+          setShowAddEndpoint(false);
+          setEndpointProtocol('http');
+        }}
+        activeEnvironmentId={activeEnvironmentId}
+      />
+
+      {/* Generate Swagger Modal */}
+      <GenerateSwaggerModal
+        collectionId={collection.id}
+        isOpen={showSwaggerModal}
+        onClose={() => {
+          setShowSwaggerModal(false);
           setShowAddEndpoint(false);
           setEndpointProtocol('http');
         }}
@@ -844,6 +895,19 @@ const CollectionNode: React.FC<{
         initialFolderId={syncTargetFolderId}
       />
 
+      {/* Sync Swagger Modal */}
+      <SyncSwaggerModal
+        collection={collection}
+        folders={folders}
+        endpoints={endpoints}
+        isOpen={showSwaggerSyncModal}
+        onClose={() => {
+          setShowSwaggerSyncModal(false);
+          setSyncTargetSwaggerFolderId(undefined);
+        }}
+        initialFolderId={syncTargetSwaggerFolderId}
+      />
+
       {/* Recursive Multi-Level Tree Rendering (Feature 2) */}
       {isExpanded && (
         <div className="pl-3 pr-1 pb-1 space-y-0.5">
@@ -866,6 +930,10 @@ const CollectionNode: React.FC<{
                 setSyncTargetFolderId(folderId);
                 setShowSyncModal(true);
               }}
+              onSyncSwagger={(folderId) => {
+                setSyncTargetSwaggerFolderId(folderId);
+                setShowSwaggerSyncModal(true);
+              }}
             />
           ))}
         </div>
@@ -883,6 +951,7 @@ const FolderTreeNodeComponent: React.FC<{
   collapseSignal?: number;
   level?: number;
   onSyncReflection?: (folderId: string) => void;
+  onSyncSwagger?: (folderId: string) => void;
 }> = ({
   node,
   collectionId,
@@ -891,9 +960,10 @@ const FolderTreeNodeComponent: React.FC<{
   collapseSignal = 0,
   level = 0,
   onSyncReflection,
+  onSyncSwagger,
 }) => {
   const queryClient = useQueryClient();
-  const { openReflectionSettingsModal } = useAppStore();
+  const { openReflectionSettingsModal, openSwaggerSettingsModal } = useAppStore();
   const [isOpen, setIsOpen] = useState(true);
   const [showAddSubFolder, setShowAddSubFolder] = useState(false);
   const [showAddSubEndpoint, setShowAddSubEndpoint] = useState(false);
@@ -905,6 +975,8 @@ const FolderTreeNodeComponent: React.FC<{
   const isAutoExpanded = expandedFolderIds.has(node.folder.id) || isOpen;
   const isReflection = isReflectionFolder(node.folder, collectionSettings);
   const grpcUrl = getFolderGrpcUrl(node.folder, collectionSettings);
+  const isSwagger = isSwaggerFolder(node.folder, collectionSettings);
+  const swaggerUrl = getFolderSwaggerUrl(node.folder, collectionSettings);
 
   // Close context menu on outside click or global close event
   useEffect(() => {
@@ -1003,6 +1075,13 @@ const FolderTreeNodeComponent: React.FC<{
             >
               <FolderSync size={13} className="text-secondary flex-shrink-0" />
             </span>
+          ) : isSwagger ? (
+            <span
+              title={`Swagger Folder (${swaggerUrl || 'configured'})`}
+              className="flex items-center"
+            >
+              <FolderSync size={13} className="text-emerald-400 flex-shrink-0" />
+            </span>
           ) : (
             <Folder size={13} className="text-amber-400/80 flex-shrink-0" />
           )}
@@ -1059,6 +1138,33 @@ const FolderTreeNodeComponent: React.FC<{
                 onClick={() => {
                   setFolderContextMenuPos(null);
                   openReflectionSettingsModal(node.folder.id, collectionId);
+                }}
+                className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+              >
+                <Settings size={12} className="text-zinc-400" />
+                <span>Settings</span>
+              </button>
+              <div className="h-px bg-zinc-800 my-1" />
+            </>
+          )}
+          {isSwagger && (
+            <>
+              {onSyncSwagger && (
+                <button
+                  onClick={() => {
+                    setFolderContextMenuPos(null);
+                    onSyncSwagger(node.folder.id);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+                >
+                  <RefreshCw size={12} className="text-emerald-400" />
+                  <span>Sync Swagger</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setFolderContextMenuPos(null);
+                  openSwaggerSettingsModal(node.folder.id, collectionId);
                 }}
                 className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
               >
@@ -1175,6 +1281,7 @@ const FolderTreeNodeComponent: React.FC<{
               collapseSignal={collapseSignal}
               level={level + 1}
               onSyncReflection={onSyncReflection}
+              onSyncSwagger={onSyncSwagger}
             />
           ))}
         </div>
