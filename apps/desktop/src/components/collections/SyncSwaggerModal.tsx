@@ -305,16 +305,19 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                   Swagger URL
                 </label>
               </div>
-              <VariableInput
-                value={swaggerUrl}
-                onChange={(val) => {
-                  setSwaggerUrl(val);
-                  setPlan(null);
-                }}
-                variables={envVars}
-                placeholder="http://localhost:9090/swagger/combined/nutrade.swagger.json"
-                className="font-mono text-xs"
-              />
+              <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-700 transition h-8 flex items-center">
+                <VariableInput
+                  value={swaggerUrl}
+                  onChange={(val) => {
+                    setSwaggerUrl(val);
+                    setPlan(null);
+                  }}
+                  variables={envVars}
+                  disabled={scanning || syncing}
+                  placeholder="http://localhost:9090/swagger/combined/nutrade.swagger.json"
+                  className="w-full h-full"
+                />
+              </div>
             </div>
 
             <div className="pt-1">

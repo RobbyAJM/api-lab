@@ -191,13 +191,16 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
             <label className="block text-[11px] font-medium text-zinc-400 mb-1">
               Swagger / OpenAPI URL
             </label>
-            <VariableInput
-              value={swaggerUrl}
-              onChange={setSwaggerUrl}
-              variables={activeVariables}
-              placeholder="http://localhost:9090/swagger/combined/nutrade.swagger.json"
-              className="font-mono text-xs"
-            />
+            <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-600 transition h-8 flex items-center">
+              <VariableInput
+                value={swaggerUrl}
+                onChange={setSwaggerUrl}
+                variables={activeVariables}
+                disabled={loading}
+                placeholder="http://localhost:9090/swagger/combined/nutrade.swagger.json"
+                className="w-full h-full"
+              />
+            </div>
             <p className="mt-1 text-[10px] text-zinc-500">
               Direct JSON URL for Swagger 2.0 or OpenAPI 3.x specifications.
             </p>

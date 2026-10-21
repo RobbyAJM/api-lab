@@ -8,6 +8,7 @@ import {
   type ParsedSwaggerSpec,
   type SwaggerDoc,
 } from './swaggerParser.ts';
+import { executeNativeHttp } from '../api/native.ts';
 
 export interface PlannedSwaggerEndpoint {
   name: string;
@@ -150,8 +151,18 @@ export function substituteUrlVariables(url: string, variables?: Record<string, s
   });
 }
 
+export function normalizeSwaggerUrl(url: string, variables?: Record<string, string>): string {
+  let effective = substituteUrlVariables((url || '').trim(), variables);
+  if (!effective) return '';
+  if (!effective.startsWith('http://') && !effective.startsWith('https://') && !effective.startsWith('{{')) {
+    effective = `http://${effective}`;
+  }
+  return effective;
+}
+
 /**
  * Standalone fetcher for Swagger/OpenAPI json with timeout protection.
+ * In Tauri desktop runtime, uses native HTTP runner to bypass browser CORS blocks on local endpoints.
  */
 export async function fetchSwaggerSpec(
   url: string,
@@ -162,34 +173,89 @@ export async function fetchSwaggerSpec(
   }
 ): Promise<SwaggerDoc> {
   const timeoutMs = options?.timeoutMs ?? 30_000;
-  const effectiveUrl = substituteUrlVariables(url, options?.variables);
-  const customFetch = options?.fetchFn || fetch;
+  const effectiveUrl = normalizeSwaggerUrl(url, options?.variables);
+  if (!effectiveUrl) {
+    throw new Error('Please specify a Swagger URL');
+  }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // 1. Explicit fetchFn provided (e.g. in tests)
+  if (options?.fetchFn) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await options.fetchFn(effectiveUrl, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json, */*',
+        },
+        signal: controller.signal,
+      });
 
+      if (!res.ok) {
+        throw new Error(`Failed to fetch Swagger spec: HTTP ${res.status} ${res.statusText}`);
+      }
+
+      const json = await res.json();
+      return json as SwaggerDoc;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error(`Swagger request timed out after ${Math.round(timeoutMs / 1000)}s`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // 2. Execute via native HTTP client (bypasses browser CORS in Tauri desktop)
   try {
-    const res = await customFetch(effectiveUrl, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json, */*',
+    const nativeRes = await executeNativeHttp(
+      {
+        url: effectiveUrl,
+        method: 'GET',
+        headers: { Accept: 'application/json, */*' },
+        query_params: [],
+        body: undefined,
+        body_type: 'none',
+        timeout_ms: timeoutMs,
       },
-      signal: controller.signal,
-    });
+      options?.variables || {}
+    );
 
-    if (!res.ok) {
-      throw new Error(`Failed to fetch Swagger spec: HTTP ${res.status} ${res.statusText}`);
+    if (nativeRes.error) {
+      throw new Error(nativeRes.error);
+    }
+    if (nativeRes.status_code >= 400 || nativeRes.status_code === 0) {
+      throw new Error(
+        `HTTP ${nativeRes.status_code} ${nativeRes.status_text || 'Error'}: ${
+          nativeRes.body ? nativeRes.body.slice(0, 200) : 'Failed to fetch specification'
+        }`
+      );
     }
 
-    const json = await res.json();
-    return json as SwaggerDoc;
-  } catch (err: any) {
-    if (err.name === 'AbortError') {
-      throw new Error(`Swagger request timed out after ${Math.round(timeoutMs / 1000)}s`);
+    try {
+      return JSON.parse(nativeRes.body) as SwaggerDoc;
+    } catch {
+      throw new Error('Swagger specification is not valid JSON');
     }
-    throw err;
-  } finally {
-    clearTimeout(timer);
+  } catch (nativeErr: any) {
+    // If native execution failed or was unavailable, try browser fetch as fallback
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(effectiveUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json, */*' },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status} ${res.statusText}`);
+      }
+      return (await res.json()) as SwaggerDoc;
+    } catch {
+      throw new Error(nativeErr.message || 'Failed to fetch Swagger specification');
+    }
   }
 }
 
