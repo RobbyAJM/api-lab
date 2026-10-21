@@ -265,14 +265,59 @@ export function getFolderGrpcUrl(
   return null;
 }
 
-export type SidebarItemType = 'collection' | 'reflection_folder' | 'folder' | 'endpoint';
+/**
+ * Checks whether a folder is an HTTP Swagger Folder.
+ * Checks folder.swagger_url first, then falls back to collection.settings.swagger_sources.
+ */
+export function isSwaggerFolder(
+  folder: CollectionFolder,
+  collectionSettings?: Record<string, any>
+): boolean {
+  if (folder.swagger_url && folder.swagger_url.trim().length > 0) {
+    return true;
+  }
+  const sources = collectionSettings?.swagger_sources;
+  if (sources && typeof sources === 'object' && sources[folder.id]?.swagger_url) {
+    const url = sources[folder.id].swagger_url;
+    return typeof url === 'string' && url.trim().length > 0;
+  }
+  return false;
+}
 
 /**
- * Identifies the exact sidebar type among the 4 canonical types:
+ * Returns the Swagger URL associated with a folder, or null if none.
+ */
+export function getFolderSwaggerUrl(
+  folder: CollectionFolder,
+  collectionSettings?: Record<string, any>
+): string | null {
+  if (folder.swagger_url && folder.swagger_url.trim().length > 0) {
+    return folder.swagger_url.trim();
+  }
+  const sources = collectionSettings?.swagger_sources;
+  if (sources && typeof sources === 'object' && sources[folder.id]?.swagger_url) {
+    const url = sources[folder.id].swagger_url;
+    if (typeof url === 'string' && url.trim().length > 0) {
+      return url.trim();
+    }
+  }
+  return null;
+}
+
+export type SidebarItemType =
+  | 'collection'
+  | 'reflection_folder'
+  | 'swagger_folder'
+  | 'folder'
+  | 'endpoint';
+
+/**
+ * Identifies the exact sidebar type among the 5 canonical types:
  * 1. Collection
  * 2. Reflection Folder
- * 3. Folder
- * 4. Endpoint
+ * 3. Swagger Folder
+ * 4. Folder
+ * 5. Endpoint
  */
 export function getSidebarItemType(
   kind: 'collection' | 'folder' | 'endpoint',
@@ -283,6 +328,9 @@ export function getSidebarItemType(
   if (kind === 'endpoint') return 'endpoint';
   if (folder && isReflectionFolder(folder, collectionSettings)) {
     return 'reflection_folder';
+  }
+  if (folder && isSwaggerFolder(folder, collectionSettings)) {
+    return 'swagger_folder';
   }
   return 'folder';
 }

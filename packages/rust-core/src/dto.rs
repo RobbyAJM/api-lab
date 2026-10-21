@@ -108,6 +108,7 @@ pub struct CreateFolderDto {
     pub name: String,
     pub parent_folder_id: Option<Uuid>,
     pub grpc_url: Option<String>,
+    pub swagger_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +117,7 @@ pub struct UpdateFolderDto {
     pub parent_folder_id: Option<Option<Uuid>>,
     pub sort_order: Option<i32>,
     pub grpc_url: Option<Option<String>>,
+    pub swagger_url: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
