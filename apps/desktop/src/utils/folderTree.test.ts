@@ -7,6 +7,8 @@ import {
   cascadeDeleteFolder,
   isReflectionFolder,
   getFolderGrpcUrl,
+  isSwaggerFolder,
+  getFolderSwaggerUrl,
   getSidebarItemType,
   resolveRootFolderId,
   resolveInheritedGrpcAddress,
@@ -252,6 +254,45 @@ test('isReflectionFolder: returns false for normal folders', () => {
   assert.equal(getSidebarItemType('folder', normalFolder), 'folder');
   assert.equal(getSidebarItemType('collection'), 'collection');
   assert.equal(getSidebarItemType('endpoint'), 'endpoint');
+});
+
+test('isSwaggerFolder and getFolderSwaggerUrl: identifies swagger folder with direct swagger_url', () => {
+  const swaggerFolder: CollectionFolder = {
+    id: 'f-swag-1',
+    collection_id: 'c1',
+    name: 'NuTrade HTTP Services',
+    swagger_url: 'http://localhost:9090/swagger/combined/nutrade.swagger.json',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+
+  assert.equal(isSwaggerFolder(swaggerFolder), true);
+  assert.equal(getFolderSwaggerUrl(swaggerFolder), 'http://localhost:9090/swagger/combined/nutrade.swagger.json');
+  assert.equal(getSidebarItemType('folder', swaggerFolder), 'swagger_folder');
+});
+
+test('isSwaggerFolder and getFolderSwaggerUrl: identifies swagger folder with collection.settings fallback', () => {
+  const legacySwaggerFolder: CollectionFolder = {
+    id: 'f-legacy-swag',
+    collection_id: 'c1',
+    name: 'Connector APIs',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+
+  const settings = {
+    swagger_sources: {
+      'f-legacy-swag': {
+        swagger_url: 'http://localhost:9090/swagger/combined/nuconnector.swagger.json',
+      },
+    },
+  };
+
+  assert.equal(isSwaggerFolder(legacySwaggerFolder, settings), true);
+  assert.equal(getFolderSwaggerUrl(legacySwaggerFolder, settings), 'http://localhost:9090/swagger/combined/nuconnector.swagger.json');
+  assert.equal(getSidebarItemType('folder', legacySwaggerFolder, settings), 'swagger_folder');
 });
 
 test('resolveRootFolderId: resolves root folder for root, child, and grandchild', () => {

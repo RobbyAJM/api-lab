@@ -12,6 +12,7 @@ import { AuthModal } from './components/auth/AuthModal';
 import { EnvironmentModal } from './components/environments/EnvironmentModal';
 import { EditVariableModal } from './components/common/EditVariableModal';
 import { ReflectionFolderSettingsModal } from './components/collections/ReflectionFolderSettingsModal';
+import { SwaggerFolderSettingsModal } from './components/collections/SwaggerFolderSettingsModal';
 import { MembersModal } from './components/members/MembersModal';
 import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSettingsModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
@@ -195,6 +196,7 @@ export const App: React.FC = () => {
       <EnvironmentModal />
       <EditVariableModal />
       <ReflectionFolderSettingsModal />
+      <SwaggerFolderSettingsModal />
       <MembersModal />
       <WorkspaceSettingsModal />
       <CommandPaletteModal />
