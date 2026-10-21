@@ -48,6 +48,7 @@ import {
   filterGrpcServices,
 } from '../../utils/grpcSpecification';
 import { getEffectiveEndpointConfig } from '../../utils/tabManager';
+import { parseJsonWithComments } from '../../utils/jsonComments';
 
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -387,7 +388,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
     let payloadJson = {};
     try {
-      payloadJson = JSON.parse(payloadStr || '{}');
+      payloadJson = parseJsonWithComments(payloadStr || '{}');
     } catch {
       // ignore
     }
@@ -473,7 +474,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   useEffect(() => {
     let parsedPayload: any = {};
     try {
-      parsedPayload = JSON.parse(payloadStr || '{}');
+      parsedPayload = parseJsonWithComments(payloadStr || '{}');
     } catch {
       parsedPayload = payloadStr;
     }
@@ -545,7 +546,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
     let parsedPayload: any = {};
     try {
-      parsedPayload = JSON.parse(payloadStr || '{}');
+      parsedPayload = parseJsonWithComments(payloadStr || '{}');
     } catch (err: any) {
       setLastGrpcResponse({
         status_code: 3,
@@ -661,7 +662,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
     let parsedPayload: any = {};
     try {
-      parsedPayload = JSON.parse(payloadStr || '{}');
+      parsedPayload = parseJsonWithComments(payloadStr || '{}');
     } catch (err: any) {
       setLastGrpcResponse({
         status_code: 3,
@@ -1099,7 +1100,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               type="button"
               onClick={() => {
                 try {
-                  const parsed = JSON.parse(payloadStr || '{}');
+                  const parsed = parseJsonWithComments(payloadStr || '{}');
                   setPayloadStr(JSON.stringify(parsed, null, 2));
                 } catch {}
               }}
@@ -1111,7 +1112,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               type="button"
               onClick={() => {
                 try {
-                  const parsed = JSON.parse(payloadStr || '{}');
+                  const parsed = parseJsonWithComments(payloadStr || '{}');
                   setPayloadStr(JSON.stringify(parsed));
                 } catch {}
               }}
