@@ -18,7 +18,8 @@ import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSetting
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
 import { EmptyWorkspaceView } from './components/common/EmptyWorkspaceView';
-import { matchesShortcut } from './utils/shortcuts';
+import { matchesShortcut, getTabNumberFromEvent } from './utils/shortcuts';
+import { getAdjacentEndpoint } from './utils/tabManager';
 import type { UserSummary, WorkspaceSummary } from '@api-lab/api-types';
 
 interface MeApiResponse {
@@ -31,6 +32,8 @@ export const App: React.FC = () => {
     token,
     setAuth,
     setWorkspaces,
+    openEndpoints,
+    openEndpoint,
     activeEndpoint,
     activeEndpointId,
     closeEndpoint,
@@ -149,7 +152,33 @@ export const App: React.FC = () => {
         e.preventDefault();
         closeAllEndpoints();
       }
-      // 7. Escape closes any active top modal
+      // 7. Tab Navigation: Ctrl + 1..9 (switch tab by number)
+      else if (!e.shiftKey && !e.altKey && (e.ctrlKey || e.metaKey) && getTabNumberFromEvent(e) !== null) {
+        const tabIdx = getTabNumberFromEvent(e)!;
+        if (tabIdx < openEndpoints.length) {
+          e.preventDefault();
+          openEndpoint(openEndpoints[tabIdx]);
+        }
+      }
+      // 8. Tab Navigation: Previous tab (Ctrl + [) / Next tab (Ctrl + ])
+      // Skip tab switching if focused in code editor/textarea (editor handles indentation)
+      else if (matchesShortcut(e, 'prev_tab') || matchesShortcut(e, 'next_tab')) {
+        const target = e.target as HTMLElement | null;
+        const isEditor =
+          target?.tagName === 'TEXTAREA' ||
+          target?.tagName === 'INPUT' ||
+          target?.isContentEditable;
+
+        if (!e.defaultPrevented && !isEditor) {
+          e.preventDefault();
+          const dir = matchesShortcut(e, 'prev_tab') ? 'prev' : 'next';
+          const targetEp = getAdjacentEndpoint(openEndpoints, activeEndpointId, dir);
+          if (targetEp) {
+            openEndpoint(targetEp);
+          }
+        }
+      }
+      // 9. Escape closes any active top modal
       else if (matchesShortcut(e, 'escape')) {
         if (commandPaletteOpen) {
           e.preventDefault();
@@ -178,6 +207,8 @@ export const App: React.FC = () => {
     envModalOpen,
     membersModalOpen,
     workspaceModalOpen,
+    openEndpoints,
+    openEndpoint,
     activeEndpointId,
     setCommandPaletteOpen,
     setShortcutsHelpOpen,

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   getAllShortcuts,
   matchesShortcut,
+  getTabNumberFromEvent,
   searchEndpointsForCommandPalette,
   searchUnifiedCommandPalette,
   navigateListIndex,
@@ -70,6 +71,24 @@ test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
   // escape
   assert.equal(matchesShortcut({ key: 'Escape' }, 'escape'), true);
   assert.equal(matchesShortcut({ key: 'Enter' }, 'escape'), false);
+
+  // prev_tab / next_tab
+  assert.equal(matchesShortcut({ key: '[', ctrlKey: true }, 'prev_tab'), true);
+  assert.equal(matchesShortcut({ key: '[', metaKey: true }, 'prev_tab'), true);
+  assert.equal(matchesShortcut({ key: '[', ctrlKey: true, shiftKey: true }, 'prev_tab'), false);
+  assert.equal(matchesShortcut({ key: ']', ctrlKey: true }, 'next_tab'), true);
+  assert.equal(matchesShortcut({ key: ']', metaKey: true }, 'next_tab'), true);
+  assert.equal(matchesShortcut({ key: ']', ctrlKey: true, altKey: true }, 'next_tab'), false);
+});
+
+test('getTabNumberFromEvent: parses 1-9 to 0-based tab index', () => {
+  assert.equal(getTabNumberFromEvent({ key: '1', ctrlKey: true }), 0);
+  assert.equal(getTabNumberFromEvent({ key: '2', ctrlKey: true }), 1);
+  assert.equal(getTabNumberFromEvent({ key: '9', metaKey: true }), 8);
+  assert.equal(getTabNumberFromEvent({ key: '0', ctrlKey: true }), null);
+  assert.equal(getTabNumberFromEvent({ key: '1' }), null);
+  assert.equal(getTabNumberFromEvent({ key: '1', ctrlKey: true, shiftKey: true }), null);
+  assert.equal(getTabNumberFromEvent({ key: 'a', ctrlKey: true }), null);
 });
 
 test('searchEndpointsForCommandPalette: searches across names, methods, services, collections', () => {

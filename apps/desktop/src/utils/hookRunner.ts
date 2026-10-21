@@ -1,6 +1,8 @@
 export interface HookTestResult {
   name: string;
   passed: boolean;
+  status?: 'pass' | 'fail' | 'warn';
+  warning?: string;
   error?: string;
 }
 
@@ -79,8 +81,9 @@ export async function runBeforeHook<TReq extends HookRequestContext>(
   const varMap = { ...variables };
   const tests: HookTestResult[] = [];
   const logs: string[] = [];
+  const pendingPromises: Promise<void>[] = [];
 
-  const pm = buildPmContext(reqClone, undefined, varMap, tests);
+  const pm = buildPmContext(reqClone, undefined, varMap, tests, pendingPromises);
 
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -99,6 +102,9 @@ export async function runBeforeHook<TReq extends HookRequestContext>(
     };
 
     await runner(pm, reqClone, varMap, safeConsole);
+    if (pendingPromises.length > 0) {
+      await Promise.all(pendingPromises);
+    }
 
     return {
       request: reqClone,
@@ -143,8 +149,9 @@ export async function runAfterHook<
   const varMap = { ...variables };
   const tests: HookTestResult[] = [];
   const logs: string[] = [];
+  const pendingPromises: Promise<void>[] = [];
 
-  const pm = buildPmContext(reqClone, response, varMap, tests);
+  const pm = buildPmContext(reqClone, response, varMap, tests, pendingPromises);
 
   try {
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
@@ -164,6 +171,9 @@ export async function runAfterHook<
     };
 
     await runner(pm, reqClone, response, varMap, safeConsole);
+    if (pendingPromises.length > 0) {
+      await Promise.all(pendingPromises);
+    }
 
     return {
       request: reqClone,
@@ -197,8 +207,11 @@ function buildPmContext(
   req: HookRequestContext,
   res: HookResponseContext | undefined,
   varMap: Record<string, string>,
-  tests: HookTestResult[]
+  tests: HookTestResult[],
+  pendingPromises?: Promise<void>[]
 ) {
+  let currentAssertionCount = 0;
+
   const pmVariables = {
     get: (key: string) => varMap[key],
     set: (key: string, val: any) => {
@@ -261,46 +274,106 @@ function buildPmContext(
     request: pmRequest,
     response: pmResponse,
     test: (name: string, fn: () => void | Promise<void>) => {
+      currentAssertionCount = 0;
       try {
         const ret = fn();
         if (ret && typeof (ret as any).then === 'function') {
-          // If async test, wait for it
-          (ret as Promise<void>)
-            .then(() => tests.push({ name, passed: true }))
-            .catch((err) => tests.push({ name, passed: false, error: err.message }));
+          const promise = (ret as Promise<void>)
+            .then(() => {
+              if (currentAssertionCount === 0) {
+                tests.push({
+                  name,
+                  passed: false,
+                  status: 'warn',
+                  warning: 'zero assertions',
+                });
+              } else {
+                tests.push({ name, passed: true, status: 'pass' });
+              }
+            })
+            .catch((err) => {
+              tests.push({
+                name,
+                passed: false,
+                status: 'fail',
+                error: err.message,
+              });
+            });
+          if (pendingPromises) {
+            pendingPromises.push(promise);
+          }
         } else {
-          tests.push({ name, passed: true });
+          if (currentAssertionCount === 0) {
+            tests.push({
+              name,
+              passed: false,
+              status: 'warn',
+              warning: 'zero assertions',
+            });
+          } else {
+            tests.push({ name, passed: true, status: 'pass' });
+          }
         }
       } catch (err: any) {
-        tests.push({ name, passed: false, error: err.message });
+        tests.push({
+          name,
+          passed: false,
+          status: 'fail',
+          error: err.message,
+        });
       }
     },
-    expect: (val: any) => ({
-      to: {
-        equal: (expected: any) => {
-          if (val !== expected) throw new Error(`Expected ${expected} but got ${val}`);
-        },
-        be: {
+    expect: (val: any) => {
+      currentAssertionCount++;
+      return {
+        to: {
           equal: (expected: any) => {
             if (val !== expected) throw new Error(`Expected ${expected} but got ${val}`);
           },
-          true: () => {
-            if (val !== true) throw new Error(`Expected true but got ${val}`);
+          be: {
+            equal: (expected: any) => {
+              if (val !== expected) throw new Error(`Expected ${expected} but got ${val}`);
+            },
+            true: () => {
+              if (val !== true) throw new Error(`Expected true but got ${val}`);
+            },
+            false: () => {
+              if (val !== false) throw new Error(`Expected false but got ${val}`);
+            },
+            below: (expected: number) => {
+              if (typeof val !== 'number' || val >= expected) {
+                throw new Error(`Expected ${val} to be below ${expected}`);
+              }
+            },
+            above: (expected: number) => {
+              if (typeof val !== 'number' || val <= expected) {
+                throw new Error(`Expected ${val} to be above ${expected}`);
+              }
+            },
+            an: (expectedType: string) => {
+              const actualType = Array.isArray(val) ? 'array' : typeof val;
+              if (actualType !== expectedType) {
+                throw new Error(`Expected type ${expectedType} but got ${actualType}`);
+              }
+            },
+            a: (expectedType: string) => {
+              const actualType = Array.isArray(val) ? 'array' : typeof val;
+              if (actualType !== expectedType) {
+                throw new Error(`Expected type ${expectedType} but got ${actualType}`);
+              }
+            },
           },
-          false: () => {
-            if (val !== false) throw new Error(`Expected false but got ${val}`);
+          include: (needle: any) => {
+            if (typeof val === 'string' && !val.includes(needle)) {
+              throw new Error(`Expected string to include ${needle}`);
+            }
+            if (Array.isArray(val) && !val.includes(needle)) {
+              throw new Error(`Expected array to include ${needle}`);
+            }
           },
         },
-        include: (needle: any) => {
-          if (typeof val === 'string' && !val.includes(needle)) {
-            throw new Error(`Expected string to include ${needle}`);
-          }
-          if (Array.isArray(val) && !val.includes(needle)) {
-            throw new Error(`Expected array to include ${needle}`);
-          }
-        },
-      },
-    }),
+      };
+    },
   };
 
   return pm;

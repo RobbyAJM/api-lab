@@ -11,6 +11,7 @@ import {
   isEndpointDirtyInState,
   isConfigDirty,
   getEffectiveEndpointConfig,
+  getAdjacentEndpoint,
   type TabState,
 } from './tabManager.ts';
 import type { Endpoint } from '@api-lab/api-types';
@@ -329,4 +330,26 @@ test('openEndpointInTabs and closeEndpointInTabs preserve drafts for other tabs'
   assert.equal(state.activeEndpointId, 'ep1');
   assert.equal(isEndpointDirtyInState(state, 'ep1'), true);
   assert.equal(getEffectiveEndpointConfig(ep1, state.endpointDrafts?.['ep1']).url, 'https://tab1-unsaved.com');
+});
+
+test('getAdjacentEndpoint: navigates left and right between tabs', () => {
+  const ep1 = createMockEndpoint('ep1', 'Tab 1');
+  const ep2 = createMockEndpoint('ep2', 'Tab 2');
+  const ep3 = createMockEndpoint('ep3', 'Tab 3');
+  const list = [ep1, ep2, ep3];
+
+  // From middle: left goes to ep1, right goes to ep2
+  assert.equal(getAdjacentEndpoint(list, 'ep2', 'prev')?.id, 'ep1');
+  assert.equal(getAdjacentEndpoint(list, 'ep2', 'next')?.id, 'ep3');
+
+  // At left boundary: prev returns null (cannot go further left)
+  assert.equal(getAdjacentEndpoint(list, 'ep1', 'prev'), null);
+  assert.equal(getAdjacentEndpoint(list, 'ep1', 'next')?.id, 'ep2');
+
+  // At right boundary: next returns null (cannot go further right)
+  assert.equal(getAdjacentEndpoint(list, 'ep3', 'prev')?.id, 'ep2');
+  assert.equal(getAdjacentEndpoint(list, 'ep3', 'next'), null);
+
+  // Empty list returns null
+  assert.equal(getAdjacentEndpoint([], 'ep1', 'prev'), null);
 });
