@@ -18,6 +18,11 @@ import {
   clearEndpointDraftInState,
   isEndpointDirtyInState,
 } from '../utils/tabManager';
+import {
+  recordPaletteAction,
+  loadPaletteRecency,
+  savePaletteRecency,
+} from '../utils/shortcuts';
 
 export interface StreamMessageItem {
   id: string;
@@ -266,6 +271,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openEndpoint: (endpoint) => {
     localStorage.setItem('api_lab_active_endpoint_id', endpoint.id);
+    try {
+      const recency = loadPaletteRecency();
+      const updated = recordPaletteAction(recency, { id: endpoint.id, type: 'endpoint' });
+      savePaletteRecency(updated);
+    } catch {
+      // ignore
+    }
     set((state) => {
       const tabState = openEndpointInTabs(
         {

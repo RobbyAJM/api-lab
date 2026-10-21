@@ -7,6 +7,11 @@ import {
   searchEndpointsForCommandPalette,
   searchUnifiedCommandPalette,
   navigateListIndex,
+  recordPaletteAction,
+  loadPaletteRecency,
+  savePaletteRecency,
+  PALETTE_RECENCY_STORAGE_KEY,
+  type PaletteActionRecord,
 } from './shortcuts.ts';
 import type { Endpoint, Collection } from '@api-lab/api-types';
 
@@ -276,4 +281,108 @@ test('navigateListIndex: wraps correctly for up and down arrow keys', () => {
 
   // Empty
   assert.equal(navigateListIndex(0, 0, 'down'), 0);
+});
+
+test('recordPaletteAction: deduplicates and places most recent action at index 0', () => {
+  const initial: PaletteActionRecord[] = [
+    { id: 'ep1', type: 'endpoint', timestamp: 100 },
+    { id: 'cmd_close_tab', type: 'command', timestamp: 200 },
+  ];
+
+  // 1. Add new action
+  const updated1 = recordPaletteAction(initial, { id: 'ep2', type: 'endpoint' }, 300);
+  assert.equal(updated1.length, 3);
+  assert.equal(updated1[0].id, 'ep2');
+  assert.equal(updated1[0].timestamp, 300);
+
+  // 2. Re-trigger existing action (moves to top with updated timestamp, no duplicates)
+  const updated2 = recordPaletteAction(updated1, { id: 'ep1', type: 'endpoint' }, 400);
+  assert.equal(updated2.length, 3);
+  assert.equal(updated2[0].id, 'ep1');
+  assert.equal(updated2[0].timestamp, 400);
+  assert.equal(updated2[1].id, 'ep2');
+  assert.equal(updated2[2].id, 'cmd_close_tab');
+
+  // 3. Respects max history size
+  const capped = recordPaletteAction(updated2, { id: 'ep3', type: 'endpoint' }, 500, 2);
+  assert.equal(capped.length, 2);
+  assert.equal(capped[0].id, 'ep3');
+  assert.equal(capped[1].id, 'ep1');
+});
+
+test('loadPaletteRecency and savePaletteRecency: roundtrips through storage mock', () => {
+  const store = new Map<string, string>();
+  const mockStorage: Storage = {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, val) => store.set(key, String(val)),
+    removeItem: (key) => store.delete(key),
+    clear: () => store.clear(),
+    key: (index) => Array.from(store.keys())[index] ?? null,
+    length: store.size,
+  };
+
+  assert.deepEqual(loadPaletteRecency(mockStorage), []);
+
+  const history: PaletteActionRecord[] = [
+    { id: 'ep_test', type: 'endpoint', timestamp: 12345 },
+    { id: 'cmd_close_tab', type: 'command', timestamp: 12340 },
+  ];
+  savePaletteRecency(history, mockStorage);
+
+  const loaded = loadPaletteRecency(mockStorage);
+  assert.deepEqual(loaded, history);
+});
+
+test('searchUnifiedCommandPalette: sorts items descending by latest action timestamp', () => {
+  const collections: Collection[] = [
+    { id: 'c1', workspace_id: 'w1', name: 'Users', sort_order: 0, created_at: '', updated_at: '' },
+  ];
+  const endpoints: Endpoint[] = [
+    {
+      id: 'ep1',
+      collection_id: 'c1',
+      name: 'List Users',
+      protocol: 'http',
+      config: { method: 'GET', url: '/users' },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'ep2',
+      collection_id: 'c1',
+      name: 'Create User',
+      protocol: 'http',
+      config: { method: 'POST', url: '/users' },
+      sort_order: 1,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  // Action history: ep2 opened at t=100, cmd_close_all_tabs executed at t=300, ep1 opened at t=200
+  const history: PaletteActionRecord[] = [
+    { id: 'cmd_close_all_tabs', type: 'command', timestamp: 300 },
+    { id: 'ep1', type: 'endpoint', timestamp: 200 },
+    { id: 'ep2', type: 'endpoint', timestamp: 100 },
+  ];
+
+  const results = searchUnifiedCommandPalette(endpoints, collections, '', history);
+
+  // Expected top 3 ordered by descending timestamp:
+  // 1. cmd_close_all_tabs (300)
+  // 2. ep1 (200)
+  // 3. ep2 (100)
+  // 4. other commands that had no actions (cmd_close_tab, cmd_close_other_tabs)
+  assert.equal(results[0].id, 'cmd_close_all_tabs');
+  assert.equal(results[1].id, 'ep1');
+  assert.equal(results[2].id, 'ep2');
+
+  // When filtered by query "user":
+  const userResults = searchUnifiedCommandPalette(endpoints, collections, 'user', history);
+  assert.equal(userResults.length, 2);
+  assert.equal(userResults[0].id, 'ep1'); // ep1 timestamp 200 > ep2 timestamp 100
+  assert.equal(userResults[1].id, 'ep2');
 });

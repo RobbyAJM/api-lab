@@ -48,6 +48,8 @@ import {
   getFolderGrpcUrl,
   isSwaggerFolder,
   getFolderSwaggerUrl,
+  getAncestorFolderIds,
+  isCollectionHighlighted,
   type FolderTreeNode,
 } from '../../utils/folderTree';
 
@@ -501,7 +503,17 @@ const CollectionNode: React.FC<{
     queryFn: () => apiRequest(`/collections/${collection.id}/endpoints`),
   });
 
-  const { activeEndpointId, setActiveEndpoint } = useAppStore();
+  const { activeEndpointId, activeEndpoint, setActiveEndpoint } = useAppStore();
+  const isCollHighlighted = isCollectionHighlighted(collection.id, activeEndpoint);
+  const highlightedFolderIds = isCollHighlighted
+    ? getAncestorFolderIds(folders, activeEndpoint?.folder_id)
+    : new Set<string>();
+
+  useEffect(() => {
+    if (isCollHighlighted) {
+      setIsOpen(true);
+    }
+  }, [isCollHighlighted, activeEndpointId]);
 
   // Auto-restore last active endpoint strictly once on initial boot
   const hasAttemptedRestoreRef = useRef(false);
@@ -599,7 +611,13 @@ const CollectionNode: React.FC<{
         setContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
     >
-      <div className="flex items-center justify-between px-2 py-1 text-xs hover:bg-zinc-900/70 rounded-md group">
+      <div
+        className={`flex items-center justify-between px-2 py-1 text-xs rounded-md group transition ${
+          isCollHighlighted
+            ? 'bg-zinc-900/80 border border-zinc-800/80 text-zinc-100'
+            : 'hover:bg-zinc-900/70 text-zinc-300'
+        }`}
+      >
         {isRenaming ? (
           <div className="flex items-center gap-1 flex-1 py-0.5">
             <input
@@ -630,7 +648,19 @@ const CollectionNode: React.FC<{
             ) : (
               <ChevronRight size={13} className="text-zinc-500 flex-shrink-0" />
             )}
-            <span className="truncate font-semibold text-zinc-100">{collection.name}</span>
+            <span
+              className={`truncate font-semibold ${
+                isCollHighlighted ? 'text-white' : 'text-zinc-100'
+              }`}
+            >
+              {collection.name}
+            </span>
+            {isCollHighlighted && (
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0"
+                title="Contains active endpoint"
+              />
+            )}
             {collection.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
               <span title="Shared Auth configured">
                 <Shield size={11} className="text-secondary flex-shrink-0" />
@@ -924,6 +954,7 @@ const CollectionNode: React.FC<{
               collectionId={collection.id}
               collectionSettings={collection.settings}
               expandedFolderIds={matchedFolderIds}
+              highlightedFolderIds={highlightedFolderIds}
               collapseSignal={collapseSignal}
               level={0}
               onSyncReflection={(folderId) => {
@@ -948,6 +979,7 @@ const FolderTreeNodeComponent: React.FC<{
   collectionId: string;
   collectionSettings?: Record<string, any>;
   expandedFolderIds: Set<string>;
+  highlightedFolderIds?: Set<string>;
   collapseSignal?: number;
   level?: number;
   onSyncReflection?: (folderId: string) => void;
@@ -957,6 +989,7 @@ const FolderTreeNodeComponent: React.FC<{
   collectionId,
   collectionSettings,
   expandedFolderIds,
+  highlightedFolderIds,
   collapseSignal = 0,
   level = 0,
   onSyncReflection,
@@ -972,11 +1005,18 @@ const FolderTreeNodeComponent: React.FC<{
   const [subEndpointProtocol, setSubEndpointProtocol] = useState<'http' | 'grpc'>('http');
   const [folderContextMenuPos, setFolderContextMenuPos] = useState<{ x: number; y: number } | null>(null);
 
+  const isFolderHighlighted = Boolean(highlightedFolderIds?.has(node.folder.id));
   const isAutoExpanded = expandedFolderIds.has(node.folder.id) || isOpen;
   const isReflection = isReflectionFolder(node.folder, collectionSettings);
   const grpcUrl = getFolderGrpcUrl(node.folder, collectionSettings);
   const isSwagger = isSwaggerFolder(node.folder, collectionSettings);
   const swaggerUrl = getFolderSwaggerUrl(node.folder, collectionSettings);
+
+  useEffect(() => {
+    if (isFolderHighlighted) {
+      setIsOpen(true);
+    }
+  }, [isFolderHighlighted]);
 
   // Close context menu on outside click or global close event
   useEffect(() => {
@@ -1058,15 +1098,27 @@ const FolderTreeNodeComponent: React.FC<{
         setFolderContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
     >
-      <div className="flex items-center justify-between w-full py-1 text-xs text-zinc-400 hover:text-zinc-200 group rounded-md hover:bg-zinc-900/50 px-1.5">
+      <div
+        className={`flex items-center justify-between w-full py-1 text-xs group rounded-md px-1.5 transition ${
+          isFolderHighlighted
+            ? 'bg-zinc-900/80 text-zinc-100 border border-zinc-800/80 font-medium'
+            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'
+        }`}
+      >
         <button
           onClick={() => setIsOpen(!isOpen)}
           className="flex items-center gap-1.5 truncate flex-1 text-left"
         >
           {isAutoExpanded ? (
-            <ChevronDown size={12} className="text-zinc-500 flex-shrink-0" />
+            <ChevronDown
+              size={12}
+              className={isFolderHighlighted ? 'text-zinc-300 flex-shrink-0' : 'text-zinc-500 flex-shrink-0'}
+            />
           ) : (
-            <ChevronRight size={12} className="text-zinc-500 flex-shrink-0" />
+            <ChevronRight
+              size={12}
+              className={isFolderHighlighted ? 'text-zinc-300 flex-shrink-0' : 'text-zinc-500 flex-shrink-0'}
+            />
           )}
           {isReflection ? (
             <span
@@ -1083,9 +1135,18 @@ const FolderTreeNodeComponent: React.FC<{
               <FolderSync size={13} className="text-emerald-400 flex-shrink-0" />
             </span>
           ) : (
-            <Folder size={13} className="text-amber-400/80 flex-shrink-0" />
+            <Folder
+              size={13}
+              className={`${isFolderHighlighted ? 'text-amber-300' : 'text-amber-400/80'} flex-shrink-0`}
+            />
           )}
           <span className="truncate">{node.folder.name}</span>
+          {isFolderHighlighted && (
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0 ml-auto mr-1"
+              title="Contains active endpoint"
+            />
+          )}
         </button>
 
         <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition">
@@ -1278,6 +1339,7 @@ const FolderTreeNodeComponent: React.FC<{
               collectionId={collectionId}
               collectionSettings={collectionSettings}
               expandedFolderIds={expandedFolderIds}
+              highlightedFolderIds={highlightedFolderIds}
               collapseSignal={collapseSignal}
               level={level + 1}
               onSyncReflection={onSyncReflection}

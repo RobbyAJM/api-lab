@@ -12,6 +12,8 @@ import {
   getSidebarItemType,
   resolveRootFolderId,
   resolveInheritedGrpcAddress,
+  getAncestorFolderIds,
+  isCollectionHighlighted,
 } from './folderTree.ts';
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
 
@@ -398,6 +400,45 @@ test('resolveInheritedGrpcAddress: inherits gRPC address for direct child and de
   assert.equal(resLegacy.isInherited, true);
   assert.equal(resLegacy.inheritedAddress, 'grpc.internal:50051');
   assert.equal(resLegacy.folderId, 'f-legacy-root');
+});
+
+test('getAncestorFolderIds: collects full ancestor folder path up to root', () => {
+  // mockFolders has:
+  // f-root-1 (root) -> f-child-auth -> f-grandchild-sub
+  // f-root-2 (root)
+
+  // 1. Grandchild folder has grandchild, child, and root in ancestor set
+  const grandchildAncestors = getAncestorFolderIds(mockFolders, 'f-grandchild-sub');
+  assert.equal(grandchildAncestors.size, 3);
+  assert.ok(grandchildAncestors.has('f-grandchild-sub'));
+  assert.ok(grandchildAncestors.has('f-child-auth'));
+  assert.ok(grandchildAncestors.has('f-root-1'));
+  assert.ok(!grandchildAncestors.has('f-root-2'));
+
+  // 2. Child folder has child and root
+  const childAncestors = getAncestorFolderIds(mockFolders, 'f-child-auth');
+  assert.equal(childAncestors.size, 2);
+  assert.ok(childAncestors.has('f-child-auth'));
+  assert.ok(childAncestors.has('f-root-1'));
+
+  // 3. Root folder has only itself
+  const rootAncestors = getAncestorFolderIds(mockFolders, 'f-root-1');
+  assert.equal(rootAncestors.size, 1);
+  assert.ok(rootAncestors.has('f-root-1'));
+
+  // 4. Null or undefined or unknown folder
+  assert.equal(getAncestorFolderIds(mockFolders, null).size, 0);
+  assert.equal(getAncestorFolderIds(mockFolders, undefined).size, 0);
+  assert.equal(getAncestorFolderIds(mockFolders, 'unknown-id').size, 1); // just itself, safely stops
+});
+
+test('isCollectionHighlighted: matches collection containing active endpoint', () => {
+  const activeEp = { id: 'ep-1', collection_id: 'col-1', folder_id: 'f-child-auth' };
+
+  assert.equal(isCollectionHighlighted('col-1', activeEp), true);
+  assert.equal(isCollectionHighlighted('col-2', activeEp), false);
+  assert.equal(isCollectionHighlighted('col-1', null), false);
+  assert.equal(isCollectionHighlighted('col-1', undefined), false);
 });
 
 
