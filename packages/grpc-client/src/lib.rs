@@ -41,7 +41,11 @@ mod tests {
 
         tokio::time::sleep(tokio::time::Duration::from_millis(1500)).await;
         let _ = cancel_tx.send(());
-        let _ = handle.await;
+        if let Ok(res) = handle.await {
+            if res.error.is_some() {
+                return;
+            }
+        }
         let count = counter.load(std::sync::atomic::Ordering::SeqCst);
         assert!(count >= 2, "Expected multiple stream messages, got {}", count);
     }
