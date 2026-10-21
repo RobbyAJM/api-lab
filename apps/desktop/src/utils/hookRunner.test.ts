@@ -165,3 +165,75 @@ test('Error handling: capture script syntax and runtime error without crash', as
   assert.ok(result.error);
   assert.match(result.error, /Custom assertion failed/);
 });
+
+test('HTTP After Hook: warns on empty test closure with zero assertions', async () => {
+  const req: HttpRequestContext = {
+    url: 'https://api.example.com/login',
+    method: 'POST',
+    headers: {},
+  };
+
+  const res: HttpResponseContext = {
+    status_code: 200,
+    headers: {},
+    body: '{"ok": true}',
+  };
+
+  const script = `
+    pm.test("Save token", () => {
+    });
+
+    pm.test("Valid assertion", () => {
+      pm.expect(pm.response.code).to.equal(200);
+    });
+  `;
+
+  const result = await runAfterHook(script, req, res, {});
+
+  assert.equal(result.tests.length, 2);
+  // Empty test closure must warn with zero assertions instead of pass
+  assert.equal(result.tests[0].name, 'Save token');
+  assert.equal(result.tests[0].passed, false);
+  assert.equal(result.tests[0].status, 'warn');
+  assert.equal(result.tests[0].warning, 'zero assertions');
+
+  // Valid assertion passes
+  assert.equal(result.tests[1].name, 'Valid assertion');
+  assert.equal(result.tests[1].passed, true);
+  assert.equal(result.tests[1].status, 'pass');
+});
+
+test('HTTP After Hook: supports below, above, and type assertions', async () => {
+  const req: HttpRequestContext = {
+    url: 'https://api.example.com/items',
+    method: 'GET',
+    headers: {},
+  };
+
+  const res: HttpResponseContext = {
+    status_code: 200,
+    headers: {},
+    body: '{"count": 42, "items": [1, 2]}',
+    response_time_ms: 120,
+  };
+
+  const script = `
+    const data = pm.response.json();
+    pm.test("Response time is under 500ms", () => {
+      pm.expect(pm.response.responseTime).to.be.below(500);
+    });
+    pm.test("Count is positive", () => {
+      pm.expect(data.count).to.be.above(0);
+    });
+    pm.test("Items is array", () => {
+      pm.expect(data.items).to.be.an("array");
+    });
+  `;
+
+  const result = await runAfterHook(script, req, res, {});
+
+  assert.equal(result.tests.length, 3);
+  assert.equal(result.tests[0].passed, true);
+  assert.equal(result.tests[1].passed, true);
+  assert.equal(result.tests[2].passed, true);
+});

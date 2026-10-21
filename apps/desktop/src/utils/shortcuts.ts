@@ -66,6 +66,27 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     category: 'Navigation',
   },
   {
+    id: 'prev_tab',
+    keyLabel: 'Ctrl + [',
+    macKeyLabel: '⌘ + [',
+    description: 'Switch to previous tab',
+    category: 'Navigation',
+  },
+  {
+    id: 'next_tab',
+    keyLabel: 'Ctrl + ]',
+    macKeyLabel: '⌘ + ]',
+    description: 'Switch to next tab',
+    category: 'Navigation',
+  },
+  {
+    id: 'switch_tab_number',
+    keyLabel: 'Ctrl + 1-9',
+    macKeyLabel: '⌘ + 1-9',
+    description: 'Switch to tab 1-9',
+    category: 'Navigation',
+  },
+  {
     id: 'escape',
     keyLabel: 'Esc',
     macKeyLabel: 'Esc',
@@ -111,11 +132,30 @@ export function matchesShortcut(event: KeyboardEventLike, shortcutId: string): b
       return isMod && !!event.altKey && (key === 't' || key === 'T');
     case 'close_all_tabs':
       return isMod && !!event.shiftKey && (key === 'w' || key === 'W');
+    case 'prev_tab':
+      return isMod && !event.shiftKey && !event.altKey && key === '[';
+    case 'next_tab':
+      return isMod && !event.shiftKey && !event.altKey && key === ']';
     case 'escape':
       return key === 'Escape';
     default:
       return false;
   }
+}
+
+/**
+ * Resolves 0-based tab index if event is Ctrl+1..9 / Cmd+1..9.
+ * Returns null if event is not a numeric tab shortcut.
+ * ponytail: 1-9 direct indexing covers typical tabs; add overflow switcher if 10+ open tabs common.
+ */
+export function getTabNumberFromEvent(event: KeyboardEventLike): number | null {
+  const isMod = !!(event.ctrlKey || event.metaKey);
+  if (!isMod || event.shiftKey || event.altKey) return null;
+  const num = parseInt(event.key, 10);
+  if (num >= 1 && num <= 9) {
+    return num - 1;
+  }
+  return null;
 }
 
 export interface CommandPaletteItem {
