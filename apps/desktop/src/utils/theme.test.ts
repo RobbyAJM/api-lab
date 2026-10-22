@@ -99,7 +99,28 @@ test('THEMES list contains popular Opencode themes and light themes', () => {
   assert.ok(ids.includes('nord-light'));
   assert.ok(ids.includes('solarized-light'));
   assert.ok(ids.includes('vesper-light'));
-  assert.ok(THEMES.length >= 25);
+  assert.ok(ids.includes('solar-dark'));
+  assert.ok(ids.includes('solar-light'));
+  assert.ok(THEMES.length >= 27);
+});
+
+test('resolveThemeVariables: resolves sampled solar-dark and solar-light themes', () => {
+  const workbenchDark = getThemeById('solar-dark');
+  assert.equal(workbenchDark.id, 'solar-dark');
+  const darkVars = resolveThemeVariables(workbenchDark);
+  assert.equal(darkVars['--color-zinc-950'], '24 24 24'); // #181818
+  assert.equal(darkVars['--color-zinc-900'], '33 33 33'); // #212121
+  assert.equal(darkVars['--color-primary'], '2 101 220'); // #0265dc
+  assert.equal(darkVars['--color-secondary'], '255 108 55'); // #ff6c37
+
+  const workbenchLight = getThemeById('solar-light');
+  assert.equal(workbenchLight.id, 'solar-light');
+  assert.equal(workbenchLight.isLight, true);
+  const lightVars = resolveThemeVariables(workbenchLight);
+  assert.equal(lightVars['--color-zinc-950'], '255 255 255'); // #ffffff
+  assert.equal(lightVars['--color-zinc-900'], '247 247 247'); // #f7f7f7
+  assert.equal(lightVars['--color-primary'], '2 101 220'); // #0265dc
+  assert.equal(lightVars['--color-secondary'], '255 108 55'); // #ff6c37
 });
 
 test('resolveThemeVariables: handles light themes with inverted surface scale', () => {
