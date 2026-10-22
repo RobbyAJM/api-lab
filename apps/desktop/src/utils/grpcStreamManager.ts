@@ -4,8 +4,10 @@ export interface StreamActionInfo {
   canInvoke: boolean;
   canStartStream: boolean;
   canStopStream: boolean;
+  canSendStreamMessage: boolean;
   isStreaming: boolean;
   isOtherEndpointStreaming: boolean;
+  isBidiStream: boolean;
   buttonLabel: 'Invoke' | 'Start Stream' | 'Stop Stream';
 }
 
@@ -24,6 +26,7 @@ export function getEndpointStreamActionInfo(
   const isGrpc = endpoint.protocol === 'grpc';
   const streamType = endpoint.config?.stream_type || 'unary';
   const isStreamType = isGrpc && streamType !== 'unary';
+  const isBidiStream = isGrpc && streamType === 'bidi_stream';
   const isThisEndpointStreaming =
     activeStreaming.isStreaming && activeStreaming.streamingEndpointId === endpoint.id;
   const isOtherEndpointStreaming =
@@ -42,20 +45,26 @@ export function getEndpointStreamActionInfo(
       canInvoke,
       canStartStream: false,
       canStopStream: false,
+      canSendStreamMessage: false,
       isStreaming: false,
       isOtherEndpointStreaming,
+      isBidiStream: false,
       buttonLabel: 'Invoke',
     };
   }
 
   // Streaming gRPC
+  const canSendStreamMessage = isBidiStream && isThisEndpointStreaming && !activeStreaming.isSending;
+
   if (isThisEndpointStreaming) {
     return {
       canInvoke: false,
       canStartStream: false,
       canStopStream: true,
+      canSendStreamMessage,
       isStreaming: true,
       isOtherEndpointStreaming: false,
+      isBidiStream,
       buttonLabel: 'Stop Stream',
     };
   }
@@ -64,8 +73,10 @@ export function getEndpointStreamActionInfo(
     canInvoke: false,
     canStartStream: !activeStreaming.isSending && hasMethod,
     canStopStream: false,
+    canSendStreamMessage: false,
     isStreaming: false,
     isOtherEndpointStreaming,
+    isBidiStream,
     buttonLabel: 'Start Stream',
   };
 }
