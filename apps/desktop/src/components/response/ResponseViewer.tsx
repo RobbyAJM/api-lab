@@ -10,13 +10,14 @@ import {
   Trash2,
   Search,
   X,
-  ArrowDownUp,
-  RotateCcw,
   Copy,
   Check,
   Square,
-  ArrowUpRight,
-  ArrowDownLeft,
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronUp,
+  Info,
   AlertTriangle,
 } from 'lucide-react';
 import {
@@ -24,6 +25,13 @@ import {
   formatResponseBody,
 } from '../../utils/responseDetector';
 import { getGrpcStatusLabel, formatExecutionError } from '../../utils/grpcSpecification';
+import {
+  formatStreamTimestamp,
+  getCompactPayloadPreview,
+  filterStreamMessages,
+  isLifecyclePayload,
+  type MessageDirectionFilter,
+} from '../../utils/streamViewer';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
@@ -38,29 +46,75 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     stopStreaming,
   } = useAppStore();
 
+  const isGrpc = endpoint.protocol === 'grpc';
+  const isStreamRpc =
+    isGrpc &&
+    Boolean(endpoint.config?.stream_type && endpoint.config.stream_type !== 'unary');
+
   const [activeTab, setActiveTab] = useState<'body' | 'stream' | 'headers' | 'saved'>('body');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [streamSearchQuery, setStreamSearchQuery] = useState('');
+  const [directionFilter, setDirectionFilter] = useState<MessageDirectionFilter>('all');
+  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
+  const [showNewMessagesPill, setShowNewMessagesPill] = useState(false);
+  const userScrolledUpRef = useRef(false);
+  const streamScrollRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [copiedSaved, setCopiedSaved] = useState(false);
   const [copiedMsgId, setCopiedMsgId] = useState<string | null>(null);
   const [copiedError, setCopiedError] = useState(false);
   const streamBottomRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
 
-  // Auto switch to stream tab when streaming begins or stream messages exist
+  // Auto switch to stream tab when streaming begins or stream messages exist on stream RPC
   useEffect(() => {
-    if (isStreaming || (streamMessages.length > 0 && endpoint.protocol === 'grpc')) {
+    if (isStreamRpc && (isStreaming || streamMessages.length > 0)) {
       setActiveTab('stream');
     }
-  }, [isStreaming, streamMessages.length, endpoint.protocol]);
+  }, [isStreaming, streamMessages.length, isStreamRpc]);
 
-  // Auto-scroll stream messages
+  // If not a stream RPC and activeTab is stream, fall back to body
   useEffect(() => {
-    if (autoScroll && activeTab === 'stream') {
+    if (!isStreamRpc && activeTab === 'stream') {
+      setActiveTab('body');
+    }
+  }, [isStreamRpc, activeTab]);
+
+  // Reset tab state on endpoint switch
+  useEffect(() => {
+    setExpandedMessageIds(new Set());
+    setShowNewMessagesPill(false);
+    userScrolledUpRef.current = false;
+  }, [endpoint.id]);
+
+  // Auto-scroll stream messages or show new message pill
+  useEffect(() => {
+    if (activeTab !== 'stream') return;
+    if (userScrolledUpRef.current) {
+      setShowNewMessagesPill(true);
+    } else {
       streamBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [streamMessages.length, autoScroll, activeTab]);
+  }, [streamMessages.length, activeTab]);
+
+  const handleStreamScroll = () => {
+    const el = streamScrollRef.current;
+    if (!el) return;
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 40;
+    userScrolledUpRef.current = !isAtBottom;
+    if (isAtBottom && showNewMessagesPill) {
+      setShowNewMessagesPill(false);
+    }
+  };
+
+  const toggleExpand = (id: string) => {
+    setExpandedMessageIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // Fetch current saved response from server
   const { data: savedResponse } = useQuery<SavedResponse | null>({
@@ -194,18 +248,13 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     setTimeout(() => setCopiedMsgId(null), 2000);
   }
 
-  // Filter stream messages by search query
+  // Filter stream messages by stream search query & direction filter
   const q = searchQuery.trim().toLowerCase();
-  const filteredStreamMessages = streamMessages.filter((msg) => {
-    if (!q) return true;
-    const msgText =
-      typeof msg.payload === 'string'
-        ? msg.payload
-        : typeof msg.payload === 'object' && msg.payload !== null
-        ? JSON.stringify(msg.payload)
-        : String(msg.payload ?? '');
-    return msgText.toLowerCase().includes(q);
-  });
+  const filteredStreamMessages = filterStreamMessages(
+    streamMessages,
+    streamSearchQuery,
+    directionFilter
+  );
 
   // Match count in unary body
   const bodyMatchesCount =
@@ -392,7 +441,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
             <span>Body</span>
           </button>
 
-          {!isHttp && (
+          {isStreamRpc && (
             <button
               onClick={() => setActiveTab('stream')}
               className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
@@ -401,7 +450,6 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <ArrowDownUp size={11} />
               <span>Stream</span>
               {streamMessages.length > 0 && (
                 <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-amber-300 rounded border border-zinc-800">
@@ -465,7 +513,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-3 text-xs font-mono">
+      <div className={`flex-1 ${activeTab === 'stream' ? 'overflow-hidden p-0' : 'overflow-y-auto p-3'} text-xs font-mono`}>
         {/* Unary Body Tab */}
         {activeTab === 'body' && (
           <div className="space-y-2">
@@ -530,127 +578,193 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           </div>
         )}
 
-        {/* Scrollable Stream Messages List */}
+        {/* Stream Messages Tab (High-Density Compact Style) */}
         {activeTab === 'stream' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between pb-1 text-[11px] text-zinc-400 border-b border-zinc-800/80 select-none">
-              <div className="flex items-center gap-1.5">
-                <span className="font-semibold text-zinc-300">
-                  {streamMessages.length} Messages
-                </span>
-                {q && (
-                  <span className="text-cyan-400 font-mono text-[10px]">
-                    ({filteredStreamMessages.length} matching)
-                  </span>
-                )}
+          <div className="relative flex flex-col h-full">
+            {/* Sticky Stream Toolbar */}
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-zinc-950 border-b border-zinc-800/80 text-xs flex-shrink-0 select-none">
+              <div className="flex items-center gap-2">
+                <div className="relative flex items-center w-44">
+                  <Search size={11} className="absolute left-2 text-zinc-500 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={streamSearchQuery}
+                    onChange={(e) => setStreamSearchQuery(e.target.value)}
+                    placeholder="Search"
+                    className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 pl-6 pr-6 py-0.5 rounded text-xs focus:outline-none focus:border-zinc-700 placeholder-zinc-500"
+                  />
+                  {streamSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setStreamSearchQuery('')}
+                      className="absolute right-1.5 text-zinc-500 hover:text-zinc-300"
+                    >
+                      <X size={10} />
+                    </button>
+                  )}
+                </div>
+
+                <select
+                  value={directionFilter}
+                  onChange={(e) => setDirectionFilter(e.target.value as MessageDirectionFilter)}
+                  className="bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-0.5 rounded text-xs focus:outline-none cursor-pointer"
+                >
+                  <option value="all">All Messages</option>
+                  <option value="in">Inbound (↓)</option>
+                  <option value="out">Outbound (↑)</option>
+                </select>
               </div>
+
               <div className="flex items-center gap-2">
                 {isStreaming && (
                   <button
                     onClick={stopStreaming}
-                    className="px-2 py-0.5 bg-red-600 hover:bg-red-500 text-white rounded text-[10px] font-semibold flex items-center gap-1 transition shadow-sm"
+                    className="px-2 py-0.5 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 rounded text-xs font-medium flex items-center gap-1 transition"
                     title="Stop gRPC Stream"
                   >
                     <Square size={9} fill="currentColor" />
-                    <span>Stop Stream</span>
+                    <span>Stop</span>
                   </button>
                 )}
-                <label className="flex items-center gap-1 cursor-pointer select-none text-[10px]">
-                  <input
-                    type="checkbox"
-                    checked={autoScroll}
-                    onChange={(e) => setAutoScroll(e.target.checked)}
-                    className="rounded bg-zinc-900 border-zinc-700"
-                  />
-                  <span>Auto-scroll</span>
-                </label>
                 {streamMessages.length > 0 && (
                   <button
                     onClick={clearStreamMessages}
-                    className="text-zinc-400 hover:text-red-400 p-0.5"
+                    className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200 text-xs transition px-2 py-0.5 rounded hover:bg-zinc-900 border border-transparent hover:border-zinc-800"
                     title="Clear stream messages"
                   >
-                    <RotateCcw size={11} />
+                    <Trash2 size={12} />
+                    <span>Clear Messages</span>
                   </button>
                 )}
               </div>
             </div>
 
-            {filteredStreamMessages.length === 0 ? (
-              <div className="text-center py-8 text-zinc-500 text-[11px] select-none">
-                {isStreaming
-                  ? 'Waiting for stream messages...'
-                  : streamMessages.length > 0
-                  ? 'No stream messages match search'
-                  : 'Stream idle. Click Start Stream to begin receiving messages.'}
+            {/* Floating New Messages Pill */}
+            {showNewMessagesPill && (
+              <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20">
+                <button
+                  onClick={() => {
+                    streamBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    setShowNewMessagesPill(false);
+                    userScrolledUpRef.current = false;
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-full shadow-lg transition select-none"
+                >
+                  <ArrowUp size={12} />
+                  <span>New messages</span>
+                </button>
               </div>
-            ) : (
-              filteredStreamMessages.map((msg, idx) => {
-                const msgFormat = detectResponseFormat(msg.payload);
-                const formattedMsg = formatResponseBody(msg.payload, msgFormat);
-                const isCopied = copiedMsgId === msg.id;
-                const isOut = msg.direction === 'out';
-
-                return (
-                  <div
-                    key={msg.id}
-                    className={`p-2.5 rounded space-y-1.5 transition select-text border ${
-                      isOut
-                        ? 'bg-blue-950/20 border-blue-900/40 hover:border-blue-700/60'
-                        : 'bg-zinc-900/90 border-zinc-800 hover:border-zinc-700'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-[10px] text-zinc-500 border-b border-zinc-800/60 pb-1 select-none">
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          className={`font-bold font-mono ${
-                            isOut ? 'text-blue-400' : 'text-emerald-400'
-                          }`}
-                        >
-                          #{idx + 1}
-                        </span>
-                        {isOut ? (
-                          <span className="flex items-center gap-1 text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                            <ArrowUpRight size={10} className="text-blue-400" />
-                            OUT (SENT)
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
-                            <ArrowDownLeft size={10} className="text-emerald-400" />
-                            IN (RECV)
-                          </span>
-                        )}
-                        <span className="uppercase text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-800 text-zinc-300 font-semibold">
-                          {msgFormat}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span>{msg.timestamp}</span>
-                        <button
-                          onClick={() => handleCopyStreamMsg(msg.id, formattedMsg)}
-                          className="hover:text-zinc-300 transition p-0.5"
-                          title="Copy message payload"
-                        >
-                          {isCopied ? (
-                            <Check size={11} className="text-emerald-400" />
-                          ) : (
-                            <Copy size={11} />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="bg-zinc-950/80 py-2 rounded border border-zinc-800/50 overflow-x-auto">
-                      <FormattedBodyViewer
-                        content={formattedMsg}
-                        format={msgFormat}
-                        searchQuery={searchQuery}
-                      />
-                    </div>
-                  </div>
-                );
-              })
             )}
-            <div ref={streamBottomRef} />
+
+            {/* High Density Flat Messages List */}
+            <div
+              ref={streamScrollRef}
+              onScroll={handleStreamScroll}
+              className="flex-1 overflow-y-auto select-text font-mono text-xs"
+            >
+              {filteredStreamMessages.length === 0 ? (
+                <div className="text-center py-12 text-zinc-500 text-xs select-none">
+                  {isStreaming
+                    ? 'Waiting for stream messages...'
+                    : streamMessages.length > 0
+                    ? 'No stream messages match search'
+                    : 'Stream idle. Click Stream to begin receiving messages.'}
+                </div>
+              ) : (
+                filteredStreamMessages.map((msg, idx) => {
+                  const isOut = msg.direction === 'out';
+                  const isLifecycle = isLifecyclePayload(msg.payload);
+                  const isExpanded = expandedMessageIds.has(msg.id);
+                  const compactText = getCompactPayloadPreview(msg.payload);
+                  const msgFormat = detectResponseFormat(msg.payload);
+                  const formattedMsg = formatResponseBody(msg.payload, msgFormat);
+                  const isCopied = copiedMsgId === msg.id;
+
+                  return (
+                    <div key={msg.id} className="border-b border-zinc-800/60 last:border-b-0">
+                      <div
+                        onClick={() => !isLifecycle && toggleExpand(msg.id)}
+                        className={`flex items-center gap-2.5 py-1.5 px-3 hover:bg-zinc-900/60 transition-colors ${
+                          isLifecycle ? 'cursor-default' : 'cursor-pointer select-none group'
+                        }`}
+                      >
+                        {/* Direction / Lifecycle Icon */}
+                        {isLifecycle ? (
+                          <Info size={13} className="text-zinc-400 flex-shrink-0" />
+                        ) : isOut ? (
+                          <ArrowUp size={13} className="text-amber-400 flex-shrink-0" />
+                        ) : (
+                          <ArrowDown size={13} className="text-sky-400 flex-shrink-0" />
+                        )}
+
+                        {/* Message Preview */}
+                        <div className="flex-1 min-w-0 truncate font-mono text-xs">
+                          {isLifecycle ? (
+                            <span className="text-zinc-300 font-sans">{compactText}</span>
+                          ) : (
+                            <span className="text-zinc-300">{compactText}</span>
+                          )}
+                        </div>
+
+                        {/* Timestamp */}
+                        <span className="text-zinc-500 font-mono text-[11px] whitespace-nowrap flex-shrink-0">
+                          {formatStreamTimestamp(msg.timestamp)}
+                        </span>
+
+                        {/* Expand Chevron */}
+                        {!isLifecycle && (
+                          <div className="text-zinc-500 group-hover:text-zinc-300 p-0.5 flex-shrink-0">
+                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Expanded View */}
+                      {isExpanded && !isLifecycle && (
+                        <div className="bg-zinc-950 px-3 py-2 border-t border-zinc-800/60 select-text">
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 pb-1.5 mb-1.5 border-b border-zinc-900">
+                            <div className="flex items-center gap-2">
+                              <span className="uppercase font-mono px-1.5 py-0.2 rounded bg-zinc-900 text-zinc-400 font-medium border border-zinc-800">
+                                {msgFormat}
+                              </span>
+                              <span className="font-mono text-zinc-500">#{idx + 1}</span>
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyStreamMsg(msg.id, formattedMsg);
+                              }}
+                              className="flex items-center gap-1 text-zinc-400 hover:text-zinc-200 transition px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-850 border border-zinc-800"
+                              title="Copy message payload"
+                            >
+                              {isCopied ? (
+                                <>
+                                  <Check size={11} className="text-emerald-400" />
+                                  <span className="text-emerald-400">Copied</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={11} />
+                                  <span>Copy</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="py-1">
+                            <FormattedBodyViewer
+                              content={formattedMsg}
+                              format={msgFormat}
+                              searchQuery={streamSearchQuery}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+              <div ref={streamBottomRef} />
+            </div>
           </div>
         )}
 
