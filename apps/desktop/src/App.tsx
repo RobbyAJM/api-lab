@@ -231,7 +231,7 @@ export const App: React.FC = () => {
   ]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans selection:bg-zinc-700 selection:text-white">
+    <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
       {/* Modals */}
       <AuthModal />
       <EnvironmentModal />

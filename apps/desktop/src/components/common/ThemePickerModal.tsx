@@ -8,13 +8,7 @@ export const ThemePickerModal: React.FC = () => {
   const { themeModalOpen, setThemeModalOpen, activeThemeId, setTheme } = useAppStore();
   const [query, setQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (themeModalOpen) {
-      setQuery('');
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [themeModalOpen]);
+  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const filteredThemes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -22,18 +16,57 @@ export const ThemePickerModal: React.FC = () => {
     return THEMES.filter(
       (t) =>
         t.name.toLowerCase().includes(q) ||
-        t.id.toLowerCase().includes(q)
+        t.id.toLowerCase().includes(q) ||
+        (t.isLight ? 'light' : 'dark').includes(q)
     );
   }, [query]);
+
+  useEffect(() => {
+    if (themeModalOpen) {
+      setQuery('');
+      setTimeout(() => {
+        inputRef.current?.focus();
+        itemRefs.current[activeThemeId]?.scrollIntoView({ block: 'nearest' });
+      }, 50);
+    }
+  }, [themeModalOpen, activeThemeId]);
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (filteredThemes.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const currentIndex = filteredThemes.findIndex((t) => t.id === activeThemeId);
+      const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % filteredThemes.length;
+      const nextTheme = filteredThemes[nextIndex];
+      setTheme(nextTheme.id);
+      itemRefs.current[nextTheme.id]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const currentIndex = filteredThemes.findIndex((t) => t.id === activeThemeId);
+      const prevIndex =
+        currentIndex <= 0 ? filteredThemes.length - 1 : (currentIndex - 1) % filteredThemes.length;
+      const prevTheme = filteredThemes[prevIndex];
+      setTheme(prevTheme.id);
+      itemRefs.current[prevTheme.id]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      setThemeModalOpen(false);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setThemeModalOpen(false);
+    }
+  }
 
   if (!themeModalOpen) return null;
 
   return (
     <div
       onClick={createBackdropClickHandler(() => setThemeModalOpen(false))}
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-start p-4 select-none"
+      className="fixed inset-0 z-50 bg-black/15 flex items-end sm:items-center justify-start p-4 select-none"
     >
       <div
+        onKeyDown={handleKeyDown}
         className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl flex flex-col max-h-[500px] overflow-hidden text-zinc-100"
       >
         {/* Header */}
@@ -47,7 +80,7 @@ export const ThemePickerModal: React.FC = () => {
           <button
             onClick={() => setThemeModalOpen(false)}
             className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
-            title="Close"
+            title="Close (Escape)"
           >
             <X size={13} />
           </button>
@@ -62,7 +95,7 @@ export const ThemePickerModal: React.FC = () => {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search themes (e.g. Dracula, Nord, One Dark)..."
+              placeholder="Search (use ↑/↓ keys for live preview)..."
               className="bg-transparent text-xs text-zinc-100 placeholder:text-zinc-500 outline-none w-full font-sans"
             />
           </div>
@@ -75,13 +108,16 @@ export const ThemePickerModal: React.FC = () => {
             return (
               <button
                 key={theme.id}
+                ref={(el) => {
+                  itemRefs.current[theme.id] = el;
+                }}
                 onClick={() => {
                   setTheme(theme.id);
                   setThemeModalOpen(false);
                 }}
                 className={`w-full flex items-center justify-between px-2.5 py-2 rounded text-xs transition group text-left ${
                   isSelected
-                    ? 'bg-zinc-800/80 text-zinc-100 border border-zinc-700/80'
+                    ? 'bg-zinc-850 text-zinc-100 border border-zinc-700'
                     : 'text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100 border border-transparent'
                 }`}
               >
@@ -107,9 +143,18 @@ export const ThemePickerModal: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="truncate">
+                  <div className="truncate flex items-center gap-1.5">
                     <span className="font-medium text-xs truncate">
                       {theme.name}
+                    </span>
+                    <span
+                      className={`text-[9px] font-mono px-1 py-0.2 rounded border ${
+                        theme.isLight
+                          ? 'border-amber-500/40 text-amber-300 bg-amber-950/30'
+                          : 'border-zinc-700/60 text-zinc-400 bg-zinc-900/60'
+                      }`}
+                    >
+                      {theme.isLight ? 'Light' : 'Dark'}
                     </span>
                   </div>
                 </div>
@@ -132,7 +177,9 @@ export const ThemePickerModal: React.FC = () => {
 
         {/* Footer info */}
         <div className="px-3 py-1.5 border-t border-zinc-800 bg-zinc-900/40 text-[10px] text-zinc-500 flex items-center justify-between">
-          <span>{THEMES.length} themes available</span>
+          <span>
+            {THEMES.length} themes • Navigate with ↑/↓
+          </span>
           <span className="font-mono text-zinc-400">
             Active: {getThemeById(activeThemeId).name}
           </span>

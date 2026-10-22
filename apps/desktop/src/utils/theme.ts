@@ -12,6 +12,7 @@ export interface ThemePalette {
 export interface ThemeDefinition {
   id: string;
   name: string;
+  isLight?: boolean;
   palette: ThemePalette;
   overrides?: Record<string, string>;
 }
@@ -376,6 +377,81 @@ export const THEMES: ThemeDefinition[] = [
       info: '#06b6d4',
     },
   },
+  {
+    id: 'github-light',
+    name: 'GitHub Light',
+    isLight: true,
+    palette: {
+      neutral: '#ffffff',
+      ink: '#1f2328',
+      primary: '#0969da',
+      accent: '#8250df',
+      success: '#1a7f37',
+      warning: '#9a6700',
+      error: '#cf222e',
+      info: '#0969da',
+    },
+  },
+  {
+    id: 'one-light',
+    name: 'One Light',
+    isLight: true,
+    palette: {
+      neutral: '#fafafa',
+      ink: '#383a42',
+      primary: '#4078f2',
+      accent: '#0184bc',
+      success: '#50a14f',
+      warning: '#c18401',
+      error: '#e45649',
+      info: '#a626a4',
+    },
+  },
+  {
+    id: 'nord-light',
+    name: 'Nord Snow',
+    isLight: true,
+    palette: {
+      neutral: '#eceff4',
+      ink: '#2e3440',
+      primary: '#5e81ac',
+      accent: '#88c0d0',
+      success: '#8fbcbb',
+      warning: '#d08770',
+      error: '#bf616a',
+      info: '#81a1c1',
+    },
+  },
+  {
+    id: 'solarized-light',
+    name: 'Solarized Light',
+    isLight: true,
+    palette: {
+      neutral: '#fdf6e3',
+      ink: '#657b83',
+      primary: '#268bd2',
+      accent: '#2aa198',
+      success: '#859900',
+      warning: '#b58900',
+      error: '#dc322f',
+      info: '#6c71c4',
+    },
+  },
+  {
+    id: 'vesper-light',
+    name: 'Vesper Light',
+    isLight: true,
+    palette: {
+      neutral: '#f5f5f3',
+      ink: '#1b1b1b',
+      primary: '#b45309',
+      accent: '#7c3aed',
+      success: '#059669',
+      warning: '#d97706',
+      error: '#dc2626',
+      info: '#2563eb',
+    },
+  },
 ];
 
 export const DEFAULT_THEME_ID = 'api-lab';
@@ -400,17 +476,19 @@ export function resolveThemeVariables(theme: ThemeDefinition): Record<string, st
     return fallback;
   };
 
-  const cZinc950 = getRgb('zinc-950', blendRgb(neutral, black, 0.35));
-  const cZinc900 = getRgb('zinc-900', neutral);
-  const cZinc850 = getRgb('zinc-850', blendRgb(neutral, ink, 0.05));
-  const cZinc800 = getRgb('zinc-800', blendRgb(neutral, ink, 0.1));
-  const cZinc750 = getRgb('zinc-750', blendRgb(neutral, ink, 0.16));
-  const cZinc700 = getRgb('zinc-700', blendRgb(neutral, ink, 0.23));
-  const cZinc600 = getRgb('zinc-600', blendRgb(neutral, ink, 0.38));
-  const cZinc500 = getRgb('zinc-500', blendRgb(neutral, ink, 0.52));
-  const cZinc400 = getRgb('zinc-400', blendRgb(neutral, ink, 0.68));
-  const cZinc300 = getRgb('zinc-300', blendRgb(neutral, ink, 0.82));
-  const cZinc200 = getRgb('zinc-200', blendRgb(neutral, ink, 0.92));
+  const isLight = Boolean(theme.isLight);
+
+  const cZinc950 = getRgb('zinc-950', isLight ? neutral : blendRgb(neutral, black, 0.35));
+  const cZinc900 = getRgb('zinc-900', isLight ? blendRgb(neutral, ink, 0.04) : neutral);
+  const cZinc850 = getRgb('zinc-850', isLight ? blendRgb(neutral, ink, 0.07) : blendRgb(neutral, ink, 0.05));
+  const cZinc800 = getRgb('zinc-800', isLight ? blendRgb(neutral, ink, 0.14) : blendRgb(neutral, ink, 0.1));
+  const cZinc750 = getRgb('zinc-750', isLight ? blendRgb(neutral, ink, 0.22) : blendRgb(neutral, ink, 0.16));
+  const cZinc700 = getRgb('zinc-700', isLight ? blendRgb(neutral, ink, 0.32) : blendRgb(neutral, ink, 0.23));
+  const cZinc600 = getRgb('zinc-600', isLight ? blendRgb(neutral, ink, 0.50) : blendRgb(neutral, ink, 0.38));
+  const cZinc500 = getRgb('zinc-500', isLight ? blendRgb(neutral, ink, 0.62) : blendRgb(neutral, ink, 0.52));
+  const cZinc400 = getRgb('zinc-400', isLight ? blendRgb(neutral, ink, 0.75) : blendRgb(neutral, ink, 0.68));
+  const cZinc300 = getRgb('zinc-300', isLight ? blendRgb(neutral, ink, 0.85) : blendRgb(neutral, ink, 0.82));
+  const cZinc200 = getRgb('zinc-200', isLight ? blendRgb(neutral, ink, 0.94) : blendRgb(neutral, ink, 0.92));
   const cZinc100 = getRgb('zinc-100', ink);
 
   const cPrimary = getRgb('primary', primary);
@@ -443,7 +521,8 @@ export function generateThemeCss(theme: ThemeDefinition): string {
   const rules = Object.entries(vars)
     .map(([k, v]) => `  ${k}: ${v};`)
     .join('\n');
-  return `:root {\n${rules}\n}\nbody {\n  background-color: rgb(var(--color-zinc-950));\n  color: rgb(var(--color-zinc-200));\n}\n::selection {\n  background: rgb(var(--color-primary) / 0.35);\n  color: #ffffff;\n}\ninput, textarea, select {\n  caret-color: rgb(var(--color-primary));\n}\n::-webkit-scrollbar-thumb {\n  background: rgb(var(--color-zinc-800));\n}\n::-webkit-scrollbar-thumb:hover {\n  background: rgb(var(--color-zinc-700));\n}`;
+  const colorScheme = theme.isLight ? 'light' : 'dark';
+  return `:root {\n  color-scheme: ${colorScheme};\n${rules}\n}\nbody {\n  background-color: rgb(var(--color-zinc-950));\n  color: rgb(var(--color-zinc-200));\n}\n::selection {\n  background: rgb(var(--color-primary) / 0.35);\n}\ninput, textarea, select {\n  caret-color: rgb(var(--color-primary));\n}\n::-webkit-scrollbar-thumb {\n  background: rgb(var(--color-zinc-800));\n}\n::-webkit-scrollbar-thumb:hover {\n  background: rgb(var(--color-zinc-700));\n}`;
 }
 
 export const THEME_STYLE_ID = 'api-lab-theme-vars';
