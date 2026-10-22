@@ -112,3 +112,33 @@ test('applyInheritedGrpcAuth: does not overwrite existing metadata authorization
   const result = applyInheritedGrpcAuth(req, settings, {});
   assert.equal(result.metadata['authorization'], 'Bearer existing-manual-token');
 });
+
+test('applyInheritedGrpcAuth: request No Auth disables collection auth', () => {
+  const req: GrpcExecutionRequest = {
+    server_address: 'localhost:9091',
+    service: 'example.Service',
+    method: 'Get',
+    metadata: {},
+    payload: {},
+    auth: { auth_type: 'none' },
+  };
+  const result = applyInheritedGrpcAuth(req, {
+    auth: { auth_type: 'bearer', token: 'collection-token' },
+  });
+  assert.deepEqual(result.metadata, {});
+});
+
+test('applyInheritedGrpcAuth: request explicit auth remains separate from collection auth', () => {
+  const req: GrpcExecutionRequest = {
+    server_address: 'localhost:9091',
+    service: 'example.Service',
+    method: 'Get',
+    metadata: { authorization: 'Bearer request-token' },
+    payload: {},
+    auth: { auth_type: 'bearer', token: 'request-token' },
+  };
+  const result = applyInheritedGrpcAuth(req, {
+    auth: { auth_type: 'bearer', token: 'collection-token' },
+  });
+  assert.equal(result.metadata.authorization, 'Bearer request-token');
+});

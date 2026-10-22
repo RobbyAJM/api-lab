@@ -213,6 +213,119 @@ pub async fn run_http(
                     .header("content-type", "application/x-www-form-urlencoded")
                     .body(body);
             }
+            "multipart" => {
+                let fields: Vec<serde_json::Value> = match serde_json::from_str(&body) {
+                    Ok(fields) => fields,
+                    Err(e) => {
+                        return HttpExecutionResponse {
+                            status_code: 0,
+                            status_text: "Invalid Multipart Body".into(),
+                            response_time_ms: start.elapsed().as_millis() as u64,
+                            response_size_bytes: 0,
+                            headers: HashMap::new(),
+                            body: String::new(),
+                            error: Some(format!("Multipart body must be valid JSON: {e}")),
+                        };
+                    }
+                };
+                let mut form = reqwest::multipart::Form::new();
+                for field in fields {
+                    let Some(name) = field.get("name").and_then(|v| v.as_str()) else {
+                        return HttpExecutionResponse {
+                            status_code: 0,
+                            status_text: "Invalid Multipart Body".into(),
+                            response_time_ms: start.elapsed().as_millis() as u64,
+                            response_size_bytes: 0,
+                            headers: HashMap::new(),
+                            body: String::new(),
+                            error: Some("Each multipart field must have string name and value".into()),
+                        };
+                    };
+                    if let Some(data) = field.get("data").and_then(|v| v.as_str()) {
+                        let bytes = match base64::Engine::decode(
+                            &base64::engine::general_purpose::STANDARD,
+                            data.as_bytes(),
+                        ) {
+                            Ok(bytes) => bytes,
+                            Err(e) => {
+                                return HttpExecutionResponse {
+                                    status_code: 0,
+                                    status_text: "Invalid Multipart Body".into(),
+                                    response_time_ms: start.elapsed().as_millis() as u64,
+                                    response_size_bytes: 0,
+                                    headers: HashMap::new(),
+                                    body: String::new(),
+                                    error: Some(format!("Multipart file must be valid Base64: {e}")),
+                                };
+                            }
+                        };
+                        let mut part = reqwest::multipart::Part::bytes(bytes);
+                        if let Some(filename) = field.get("filename").and_then(|v| v.as_str()) {
+                            part = part.file_name(filename.to_string());
+                        }
+                        if let Some(content_type) = field.get("content_type").and_then(|v| v.as_str()) {
+                            part = match part.mime_str(content_type) {
+                                Ok(with_mime) => with_mime,
+                                Err(_) => {
+                                    return HttpExecutionResponse {
+                                        status_code: 0,
+                                        status_text: "Invalid Multipart Body".into(),
+                                        response_time_ms: start.elapsed().as_millis() as u64,
+                                        response_size_bytes: 0,
+                                        headers: HashMap::new(),
+                                        body: String::new(),
+                                        error: Some(format!("Invalid multipart content type: {content_type}")),
+                                    };
+                                }
+                            };
+                        }
+                        form = form.part(name.to_string(), part);
+                    } else if let Some(value) = field.get("value").and_then(|v| v.as_str()) {
+                        form = form.text(name.to_string(), value.to_string());
+                    } else {
+                        return HttpExecutionResponse {
+                            status_code: 0,
+                            status_text: "Invalid Multipart Body".into(),
+                            response_time_ms: start.elapsed().as_millis() as u64,
+                            response_size_bytes: 0,
+                            headers: HashMap::new(),
+                            body: String::new(),
+                            error: Some("Each multipart field must have string value or file data".into()),
+                        };
+                    }
+                }
+                request_builder = request_builder.multipart(form);
+            }
+            "binary" => {
+                let (encoded, content_type) = match serde_json::from_str::<serde_json::Value>(&body) {
+                    Ok(file) if file.get("data").is_some() => (
+                        file.get("data").and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                        file.get("content_type").and_then(|v| v.as_str()).map(str::to_string),
+                    ),
+                    _ => (body, None),
+                };
+                let bytes = match base64::Engine::decode(
+                    &base64::engine::general_purpose::STANDARD,
+                    encoded.as_bytes(),
+                ) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        return HttpExecutionResponse {
+                            status_code: 0,
+                            status_text: "Invalid Binary Body".into(),
+                            response_time_ms: start.elapsed().as_millis() as u64,
+                            response_size_bytes: 0,
+                            headers: HashMap::new(),
+                            body: String::new(),
+                            error: Some(format!("Binary body must be valid Base64: {e}")),
+                        };
+                    }
+                };
+                if let Some(content_type) = content_type {
+                    request_builder = request_builder.header("content-type", content_type);
+                }
+                request_builder = request_builder.body(bytes);
+            }
             _ => {
                 request_builder = request_builder.body(body);
             }

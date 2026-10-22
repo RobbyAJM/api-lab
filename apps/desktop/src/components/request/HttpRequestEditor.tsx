@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
-import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection } from '@api-lab/api-types';
+import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection, CollectionFolder } from '@api-lab/api-types';
 import { Save, Shield, Globe } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
@@ -15,6 +15,8 @@ import { applyCollectionSettingsToHttp } from '../../utils/collectionSettings';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { getEffectiveEndpointConfig } from '../../utils/tabManager';
 import { stripJsonComments } from '../../utils/jsonComments';
+import { splitUrlQuery, type HttpBodyType } from '../../utils/httpRequest';
+import { mergeFolderSettings } from '../../utils/folderSettings';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -51,12 +53,22 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   });
 
   // Body & Auth state
-  const [bodyType, setBodyType] = useState<'none' | 'json' | 'text' | 'form'>(
+  const [bodyType, setBodyType] = useState<HttpBodyType>(
     initialConfig.body_type || 'json'
   );
   const [body, setBody] = useState<string>(
     initialConfig.body !== undefined ? initialConfig.body : ''
   );
+  const [multipartFields, setMultipartFields] = useState<
+    { name: string; value: string; filename?: string; data?: string; content_type?: string }[]
+  >(() => {
+    try {
+      const parsed = JSON.parse(initialConfig.body || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
   const [auth, setAuth] = useState<HttpAuth>(
     initialConfig.auth || { auth_type: 'none' }
   );
@@ -72,6 +84,14 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
   const [hookLogs, setHookLogs] = useState<string[]>([]);
 
+  useEffect(() => {
+    const parsed = splitUrlQuery(url);
+    if (parsed.params.length > 0 && queryParams.length === 0) {
+      setUrl(parsed.url);
+      setQueryParams(parsed.params);
+    }
+  }, []);
+
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -80,6 +100,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const { data: collection } = useQuery<Collection>({
     queryKey: ['collection', endpoint.collection_id],
     queryFn: () => apiRequest<Collection>(`/collections/${endpoint.collection_id}`),
+    enabled: !!endpoint.collection_id,
+  });
+  const { data: folders = [] } = useQuery<CollectionFolder[]>({
+    queryKey: ['folders', endpoint.collection_id],
+    queryFn: () => apiRequest<CollectionFolder[]>(`/collections/${endpoint.collection_id}/folders`),
     enabled: !!endpoint.collection_id,
   });
 
@@ -124,8 +149,14 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       setQueryParams(cfg.query_params || []);
       setHeaders(Object.entries(cfg.headers || {}));
       setBodyType(cfg.body_type || 'json');
-      setBody(cfg.body || '');
-      setAuth(cfg.auth || { auth_type: 'none' });
+       setBody(cfg.body || '');
+       try {
+         const parsedBody = JSON.parse(cfg.body || '[]');
+         setMultipartFields(Array.isArray(parsedBody) ? parsedBody : []);
+       } catch {
+         setMultipartFields([]);
+       }
+       setAuth(cfg.auth || { auth_type: 'none' });
       setPreRequestScript(cfg.pre_request_script || '');
       setPostResponseScript(
         cfg.post_request_script || cfg.post_response_script || ''
@@ -146,7 +177,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       query_params: queryParams.filter(([k]) => k.trim()),
       headers: headerMap,
       body_type: bodyType,
-      body,
+      body: bodyType === 'multipart' ? JSON.stringify(multipartFields) : body,
       auth,
       pre_request_script: preRequestScript,
       post_request_script: postResponseScript,
@@ -225,7 +256,8 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     headers,
     bodyType,
     body,
-    auth,
+     multipartFields,
+     auth,
     preRequestScript,
     postResponseScript,
   ]);
@@ -255,7 +287,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       if (k.trim()) headerMap[k.trim()] = v;
     }
 
-    const cleanBody = bodyType === 'json' && body ? stripJsonComments(body) : body;
+    const cleanBody = bodyType === 'multipart'
+      ? JSON.stringify(multipartFields)
+      : bodyType === 'json' && body ? stripJsonComments(body) : body;
 
     const execReq: HttpExecutionRequest = {
       url,
@@ -264,7 +298,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       query_params: queryParams.filter(([k]) => k.trim()),
       body: bodyType === 'none' ? undefined : cleanBody,
       body_type: bodyType,
-      auth,
+       auth,
       timeout_ms: 30000,
     };
 
@@ -293,13 +327,13 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       const finalReq = applyCollectionSettingsToHttp(
         beforeResult.request,
-        currentColl?.settings,
+         mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id),
         beforeResult.variables
       );
 
       // 3. Execute HTTP Request
       const resp = await executeNativeHttp(finalReq, beforeResult.variables);
-      setLastHttpResponse(resp);
+       setLastHttpResponse(resp, endpoint.id);
 
       // 4. Run Post-response Hook (After)
       const afterResult = await runAfterHook(
@@ -331,17 +365,27 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         setStatusMessage(afterResult.error);
       }
     } catch (err: any) {
-      setLastHttpResponse({
+       setLastHttpResponse({
         status_code: 0,
         status_text: 'Execution Failed',
         response_time_ms: 0,
         response_size_bytes: 0,
         headers: {},
         body: '',
-        error: err.message,
-      });
+         error: err.message,
+       }, endpoint.id);
     } finally {
       setSending(false);
+    }
+  }
+
+  let binaryFile: { filename?: string; content_type?: string; data?: string } | null = null;
+  if (bodyType === 'binary' && body) {
+    try {
+      const parsed = JSON.parse(body);
+      if (parsed && typeof parsed === 'object') binaryFile = parsed;
+    } catch {
+      // Keep empty-file placeholder for legacy or invalid body state.
     }
   }
 
@@ -406,7 +450,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           <div className="flex-1 h-full flex items-center px-1 min-w-0">
             <VariableInput
               value={url}
-              onChange={setUrl}
+              onChange={(next) => {
+                const parsed = splitUrlQuery(next);
+                setUrl(parsed.params.length ? parsed.url : next);
+                setQueryParams(parsed.params);
+              }}
               variables={activeVariables}
               placeholder="https://api.example.com/v1/users/{{USER_ID}}"
               className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
@@ -554,7 +602,15 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   checked={bodyType === 'form'}
                   onChange={() => setBodyType('form')}
                 />
-                <span>Form URL-Encoded</span>
+                  <span>Form URL-Encoded</span>
+                </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="bodyType" checked={bodyType === 'multipart'} onChange={() => setBodyType('multipart')} />
+                <span>Multipart</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input type="radio" name="bodyType" checked={bodyType === 'binary'} onChange={() => setBodyType('binary')} />
+                <span>Binary</span>
               </label>
             </div>
 
@@ -567,6 +623,87 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   placeholder='{\n  "userId": "{{USER_ID}}",\n  "name": "Jane"\n}'
                 />
               </div>
+            ) : bodyType === 'multipart' ? (
+              <div className="space-y-2">
+                {multipartFields.map((field, index) => (
+                  <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
+                    <input
+                      value={field.name}
+                      onChange={(e) => setMultipartFields((fields) => fields.map((item, i) => i === index ? { ...item, name: e.target.value } : item))}
+                      placeholder="field name"
+                      className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 font-mono"
+                    />
+                    {field.filename ? (
+                      <span className="truncate text-zinc-300 bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5" title={field.filename}>{field.filename}</span>
+                    ) : (
+                      <input
+                        value={field.value}
+                        onChange={(e) => setMultipartFields((fields) => fields.map((item, i) => i === index ? { ...item, value: e.target.value } : item))}
+                        placeholder="value"
+                        className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 font-mono"
+                      />
+                    )}
+                    <div className="flex gap-1">
+                      <label className="cursor-pointer px-2 py-1.5 border border-zinc-800 rounded text-zinc-400 hover:text-white">
+                        File
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => setMultipartFields((fields) => fields.map((item, i) => i === index ? {
+                              ...item,
+                              filename: file.name,
+                              data: String(reader.result).split(',', 2)[1] || '',
+                              content_type: file.type || 'application/octet-stream',
+                            } : item));
+                            reader.readAsDataURL(file);
+                          }}
+                        />
+                      </label>
+                      <button type="button" onClick={() => setMultipartFields((fields) => fields.filter((_, i) => i !== index))} className="px-2 text-zinc-500 hover:text-rose-400">×</button>
+                    </div>
+                  </div>
+                ))}
+                <button type="button" onClick={() => setMultipartFields((fields) => [...fields, { name: '', value: '' }])} className="text-primary hover:text-white">+ Add field</button>
+              </div>
+            ) : bodyType === 'binary' ? (
+              <label className="flex items-center justify-between gap-3 p-4 border border-dashed border-zinc-700 rounded text-zinc-400 cursor-pointer hover:border-zinc-500 hover:text-zinc-200">
+                <span className="min-w-0">
+                  {binaryFile?.filename ? (
+                    <>
+                      <span className="block truncate text-zinc-100">{binaryFile.filename}</span>
+                      <span className="block mt-1 text-[11px] text-zinc-500">
+                        {binaryFile.content_type || 'application/octet-stream'}
+                        {binaryFile.data ? ` · ${Math.round((binaryFile.data.length * 3) / 4).toLocaleString()} bytes` : ''}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="block text-zinc-300">Choose binary file</span>
+                      <span className="block mt-1 text-[11px] text-zinc-500">No file selected</span>
+                    </>
+                  )}
+                </span>
+                <span className="flex-shrink-0 text-[11px] text-primary">{binaryFile?.filename ? 'Change file' : 'Browse'}</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => setBody(JSON.stringify({
+                      filename: file.name,
+                      content_type: file.type || 'application/octet-stream',
+                      data: String(reader.result).split(',', 2)[1] || '',
+                    }));
+                    reader.readAsDataURL(file);
+                  }}
+                />
+              </label>
             ) : bodyType !== 'none' ? (
               <textarea
                 value={body}
@@ -582,18 +719,18 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         {activeTab === 'auth' && (
           <div className="space-y-4 max-w-md">
             <div>
-              <label className="block text-zinc-400 mb-1">Authentication Type</label>
+              <label className="block text-zinc-400 mb-1">Auth Type</label>
               <Select
                 value={auth.auth_type}
                 onChange={(val) =>
-                  setAuth({ ...auth, auth_type: val as any })
+                  setAuth({ ...auth, auth_type: val as HttpAuth['auth_type'] })
                 }
                 options={[
                   { value: 'inherit', label: 'Inherit auth from collection' },
-                  { value: 'none', label: 'No Auth' },
-                  { value: 'bearer', label: 'Bearer Token' },
-                  { value: 'basic', label: 'Basic Auth' },
-                  { value: 'custom', label: 'Custom Header' },
+                  { value: 'none', label: 'No Auth (Inherit Disabled)' },
+                  { value: 'bearer', label: 'Bearer Token (JWT / API Token)' },
+                  { value: 'basic', label: 'Basic Auth (Username & Password)' },
+                  { value: 'custom', label: 'Custom Header (API Key)' },
                 ]}
                 fontMono
               />
@@ -619,13 +756,13 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
             {auth.auth_type === 'bearer' && (
               <div>
-                <label className="block text-zinc-400 mb-1">Token</label>
+                <label className="block text-zinc-400 mb-1">Bearer Token</label>
                 <div className="bg-zinc-900 border border-zinc-800 rounded focus-within:border-zinc-700 h-8">
                   <VariableInput
                     value={auth.token || ''}
                     onChange={(newVal) => setAuth({ ...auth, token: newVal })}
                     variables={activeVariables}
-                    placeholder="{{API_TOKEN}} or raw-token"
+                    placeholder="{{TOKEN}} or raw-token"
                     className="w-full h-full"
                   />
                 </div>
@@ -658,12 +795,12 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             {auth.auth_type === 'custom' && (
               <div className="space-y-2">
                 <div>
-                  <label className="block text-zinc-400 mb-1">Header Name</label>
+                    <label className="block text-zinc-400 mb-1">Header / Metadata Name</label>
                   <input
                     type="text"
                     value={auth.header_name || ''}
                     onChange={(e) => setAuth({ ...auth, header_name: e.target.value })}
-                    placeholder="X-API-Key"
+                    placeholder="e.g. X-API-Key or Authorization"
                     className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs focus:outline-none focus:border-zinc-700"
                   />
                 </div>
