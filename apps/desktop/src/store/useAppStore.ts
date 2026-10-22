@@ -169,7 +169,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const targetEpId = state.streamingEndpointId || state.activeEndpointId;
       const newMsg: StreamMessageItem = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        timestamp: new Date().toLocaleTimeString(),
+        timestamp: new Date().toISOString(),
         direction,
         payload: msg,
       };
@@ -178,14 +178,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         const epResp = nextResponses[targetEpId] || {};
         nextResponses[targetEpId] = {
           ...epResp,
-          streamMessages: [...(epResp.streamMessages || []), newMsg],
+          streamMessages: [newMsg, ...(epResp.streamMessages || [])],
         };
       }
       return {
         endpointResponses: nextResponses,
         streamMessages:
           !targetEpId || targetEpId === state.activeEndpointId
-            ? [...state.streamMessages, newMsg]
+            ? [newMsg, ...state.streamMessages]
             : state.streamMessages,
       };
     }),

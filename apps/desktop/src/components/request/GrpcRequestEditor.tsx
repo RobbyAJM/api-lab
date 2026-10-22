@@ -29,7 +29,6 @@ import {
   Radio,
   ArrowDownUp,
   ArrowLeftRight,
-  Send,
   Shield,
   Search,
   X,
@@ -1172,36 +1171,26 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           </div>
         </div>
 
-        {/* Invoke Primary Button */}
+        {/* Action Button: Cancel when streaming, Invoke when idle */}
         <button
           type="button"
           onClick={isStreamingRpc ? (isCurrentEndpointStreaming ? handleStopStream : handleStartStream) : handleSend}
           disabled={sending || (!isCurrentEndpointStreaming && (!selectedService || !selectedMethod))}
-          className={`px-4 py-2 text-xs font-semibold rounded transition flex items-center gap-1.5 h-9 flex-shrink-0 cursor-pointer shadow-sm ${
+          className={`px-4 py-2 text-xs font-semibold rounded transition flex items-center justify-center gap-1.5 h-9 flex-shrink-0 cursor-pointer shadow-sm ${
             isStreamingRpc && isCurrentEndpointStreaming
-              ? 'bg-red-600 hover:bg-red-500 text-white'
+              ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700'
               : 'bg-primary hover:bg-primary-hover active:bg-blue-700 disabled:opacity-50 text-white'
           }`}
-          title="Invoke method (Ctrl+Enter)"
+          title={isStreamingRpc && isCurrentEndpointStreaming ? "Cancel stream" : "Invoke method (Ctrl+Enter)"}
         >
           <span>
-            {sending ? 'Calling...' : isStreamingRpc ? (isCurrentEndpointStreaming ? 'Stop' : 'Stream') : 'Invoke'}
+            {sending
+              ? 'Calling...'
+              : isStreamingRpc && isCurrentEndpointStreaming
+              ? 'Cancel'
+              : 'Invoke'}
           </span>
         </button>
-
-        {/* Send message on Bidirectional Stream */}
-        {streamType === 'bidi_stream' && (
-          <button
-            type="button"
-            onClick={handleSendStreamMessage}
-            disabled={!isCurrentEndpointStreaming}
-            className="px-3.5 py-2 text-xs font-semibold rounded transition flex items-center gap-1.5 h-9 flex-shrink-0 cursor-pointer shadow-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white"
-            title={isCurrentEndpointStreaming ? "Send message to stream (Ctrl+Enter)" : "Start stream first to send messages"}
-          >
-            <Send size={12} />
-            <span>Send</span>
-          </button>
-        )}
       </div>
 
       {/* Tabs Bar */}
@@ -1298,31 +1287,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               <Wand2 size={11} className={generatingPayload ? 'animate-spin text-zinc-300' : 'text-zinc-400'} />
               <span>{generatingPayload ? 'Generating...' : 'Generate Example'}</span>
             </button>
-            <div className="h-3 w-px bg-zinc-800 mx-0.5" />
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  const parsed = parseJsonWithComments(payloadStr || '{}');
-                  setPayloadStr(JSON.stringify(parsed, null, 2));
-                } catch {}
-              }}
-              className="text-[11px] text-zinc-400 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-900 transition"
-            >
-              Beautify
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  const parsed = parseJsonWithComments(payloadStr || '{}');
-                  setPayloadStr(JSON.stringify(parsed));
-                } catch {}
-              }}
-              className="text-[11px] text-zinc-400 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-900 transition"
-            >
-              Minify
-            </button>
           </div>
         )}
       </div>
@@ -1340,6 +1304,28 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 placeholder="{\n  \n}"
               />
             </div>
+            {isStreamingRpc && (
+              <div className="flex items-center justify-end gap-2 pt-1 flex-shrink-0 select-none">
+                <button
+                  type="button"
+                  onClick={handleStopStream}
+                  disabled={!isCurrentEndpointStreaming}
+                  className="px-3.5 py-1.5 text-xs font-medium rounded transition bg-zinc-900 hover:bg-zinc-850 text-zinc-300 hover:text-white border border-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                  title={isCurrentEndpointStreaming ? "End active gRPC stream" : "Stream is not currently running"}
+                >
+                  End Streaming
+                </button>
+                <button
+                  type="button"
+                  onClick={isCurrentEndpointStreaming ? handleSendStreamMessage : handleStartStream}
+                  disabled={sending || (!isCurrentEndpointStreaming && (!selectedService || !selectedMethod))}
+                  className="px-4 py-1.5 text-xs font-semibold rounded transition bg-primary hover:bg-primary-hover active:bg-blue-700 text-white disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                  title={isCurrentEndpointStreaming ? "Send message to stream (Ctrl+Enter)" : "Start stream with message (Ctrl+Enter)"}
+                >
+                  Send
+                </button>
+              </div>
+            )}
           </div>
         )}
 
