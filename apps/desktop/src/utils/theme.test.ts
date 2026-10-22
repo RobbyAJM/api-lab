@@ -99,7 +99,28 @@ test('THEMES list contains popular Opencode themes and light themes', () => {
   assert.ok(ids.includes('nord-light'));
   assert.ok(ids.includes('solarized-light'));
   assert.ok(ids.includes('vesper-light'));
-  assert.ok(THEMES.length >= 25);
+  assert.ok(ids.includes('postman-dark'));
+  assert.ok(ids.includes('postman-light'));
+  assert.ok(THEMES.length >= 27);
+});
+
+test('resolveThemeVariables: resolves sampled postman-dark and postman-light themes', () => {
+  const postmanDark = getThemeById('postman-dark');
+  assert.equal(postmanDark.id, 'postman-dark');
+  const darkVars = resolveThemeVariables(postmanDark);
+  assert.equal(darkVars['--color-zinc-950'], '24 24 24'); // #181818
+  assert.equal(darkVars['--color-zinc-900'], '33 33 33'); // #212121
+  assert.equal(darkVars['--color-primary'], '2 101 220'); // #0265dc
+  assert.equal(darkVars['--color-secondary'], '255 108 55'); // #ff6c37
+
+  const postmanLight = getThemeById('postman-light');
+  assert.equal(postmanLight.id, 'postman-light');
+  assert.equal(postmanLight.isLight, true);
+  const lightVars = resolveThemeVariables(postmanLight);
+  assert.equal(lightVars['--color-zinc-950'], '255 255 255'); // #ffffff
+  assert.equal(lightVars['--color-zinc-900'], '247 247 247'); // #f7f7f7
+  assert.equal(lightVars['--color-primary'], '2 101 220'); // #0265dc
+  assert.equal(lightVars['--color-secondary'], '255 108 55'); // #ff6c37
 });
 
 test('resolveThemeVariables: handles light themes with inverted surface scale', () => {
