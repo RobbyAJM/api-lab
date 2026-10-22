@@ -118,12 +118,12 @@ jobs:
           - name: macOS Intel
             os: macos-13
             target: x86_64-apple-darwin
-            bundles: dmg
+            bundles: app
             artifact: macos-x86_64
           - name: macOS Apple Silicon
             os: macos-14
             target: aarch64-apple-darwin
-            bundles: dmg
+            bundles: app
             artifact: macos-aarch64
     runs-on: ${{ matrix.os }}
     permissions:
@@ -180,7 +180,28 @@ jobs:
             --target "${{ matrix.target }}" \
             --bundles "${{ matrix.bundles }}" \
             --features desktop \
+            --verbose \
             --config "{\"version\":\"${VERSION}\",\"build\":{\"beforeBuildCommand\":\"\"}}"
+
+      - name: Create macOS DMG
+        if: runner.os == 'macOS'
+        working-directory: apps/desktop
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          VERSION="${RELEASE_VERSION#v}"
+          APP="../../target/${{ matrix.target }}/release/bundle/macos/API Lab.app"
+          DMG_DIR="../../target/${{ matrix.target }}/release/bundle/dmg"
+          mkdir -p "${DMG_DIR}"
+          test -d "${APP}"
+          hdiutil create \
+            -volname "API Lab" \
+            -srcfolder "${APP}" \
+            -ov \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "${DMG_DIR}/API Lab_${VERSION}_${{ matrix.target }}.dmg"
 
       - name: Create Linux tar.gz
         if: runner.os == 'Linux'
@@ -188,9 +209,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          find . -type f \
+          find ../../target -type f \
             \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
-          APPIMAGE=$(find . -type f -name '*.AppImage' -print -quit)
+          APPIMAGE=$(find ../../target -type f -name '*.AppImage' -print -quit)
           test -n "${APPIMAGE}"
           tar -czf "release/api-lab-${{ matrix.artifact }}.tar.gz" -C "$(dirname "${APPIMAGE}")" "$(basename "${APPIMAGE}")"
           test -n "$(find release -type f -print -quit)"
@@ -205,7 +226,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
-          $bundles = Get-ChildItem -Path . -Recurse -File |
+          $bundles = Get-ChildItem -Path ..\..\target -Recurse -File |
             Where-Object { $_.Extension -in '.msi', '.exe' }
           if (-not $bundles) { throw 'No Windows bundles found' }
           foreach ($bundle in $bundles) {
@@ -218,7 +239,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          find . -type f -iname '*.dmg' -exec cp {} release/ \;
+          find ../../target -type f -iname '*.dmg' -exec cp {} release/ \;
           test -n "$(find release -type f -print -quit)"
           for file in release/*; do
             base=$(basename "${file}")
