@@ -116,7 +116,7 @@ jobs:
             bundles: msi,nsis
             artifact: windows-x86_64
           - name: macOS Universal
-            os: macos-14
+            os: macos-latest
             target: universal-apple-darwin
             bundles: app
             artifact: macos-universal
@@ -175,7 +175,6 @@ jobs:
             --target "${{ matrix.target }}" \
             --bundles "${{ matrix.bundles }}" \
             --features desktop \
-            --verbose \
             --config "{\"version\":\"${VERSION}\",\"build\":{\"beforeBuildCommand\":\"\"}}"
 
       - name: Create macOS DMG
