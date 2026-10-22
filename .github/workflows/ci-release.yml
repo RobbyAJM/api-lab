@@ -188,9 +188,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          find src-tauri/target -type f \
+          find . -type f \
             \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
-          APPIMAGE=$(find src-tauri/target -type f -name '*.AppImage' -print -quit)
+          APPIMAGE=$(find . -type f -name '*.AppImage' -print -quit)
           test -n "${APPIMAGE}"
           tar -czf "release/api-lab-${{ matrix.artifact }}.tar.gz" -C "$(dirname "${APPIMAGE}")" "$(basename "${APPIMAGE}")"
           test -n "$(find release -type f -print -quit)"
@@ -205,7 +205,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force release | Out-Null
-          $bundles = Get-ChildItem -Path src-tauri/target -Recurse -File |
+          $bundles = Get-ChildItem -Path . -Recurse -File |
             Where-Object { $_.Extension -in '.msi', '.exe' }
           if (-not $bundles) { throw 'No Windows bundles found' }
           foreach ($bundle in $bundles) {
@@ -218,7 +218,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          find src-tauri/target -type f -iname '*.dmg' -exec cp {} release/ \;
+          find . -type f -iname '*.dmg' -exec cp {} release/ \;
           test -n "$(find release -type f -print -quit)"
           for file in release/*; do
             base=$(basename "${file}")
