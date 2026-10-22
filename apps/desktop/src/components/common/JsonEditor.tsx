@@ -23,6 +23,7 @@ interface JsonEditorProps {
   placeholder?: string;
   className?: string;
   variables?: VariableSource;
+  suggestions?: string[];
 }
 
 export const JsonEditor: React.FC<JsonEditorProps> = ({
@@ -31,12 +32,19 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   placeholder,
   className = '',
   variables,
+  suggestions = [],
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<EditorHistory | null>(null);
   const [formatError, setFormatError] = useState<string | null>(null);
+  const [completion, setCompletion] = useState<{
+    items: string[];
+    start: number;
+    selected: number;
+    hasOpeningQuote: boolean;
+  } | null>(null);
   const clearTimerRef = useRef<any>(null);
 
   // Set of folded original startLine indices
@@ -189,8 +197,54 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     const textarea = textareaRef.current;
     if (!textarea) return;
 
+    if (e.altKey && e.key === 'Enter' && suggestions.length > 0) {
+      e.preventDefault();
+      const beforeCursor = value.slice(0, textarea.selectionStart);
+      const keyMatch = beforeCursor.match(/(?:\{|,)\s*"([^"\n]*)$/);
+      const query = keyMatch?.[1].toLowerCase() || '';
+      const items = suggestions.filter((item) => item.toLowerCase().includes(query)).slice(0, 8);
+      if (items.length > 0) {
+        setCompletion({
+          items,
+          start: keyMatch ? textarea.selectionStart - keyMatch[1].length : textarea.selectionStart,
+          selected: 0,
+          hasOpeningQuote: Boolean(keyMatch),
+        });
+      }
+      return;
+    }
+
     // Ignore Ctrl+Enter / Cmd+Enter: parent shortcut runner executes request
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      return;
+    }
+
+    if (completion && e.key === 'Escape') {
+      e.preventDefault();
+      setCompletion(null);
+      return;
+    }
+
+    if (completion && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Tab')) {
+      e.preventDefault();
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        const delta = e.key === 'ArrowDown' ? 1 : -1;
+        setCompletion((prev) => prev && {
+          ...prev,
+          selected: (prev.selected + delta + prev.items.length) % prev.items.length,
+        });
+        return;
+      }
+      const item = completion.items[completion.selected];
+      const before = value.slice(0, completion.start);
+      const after = value.slice(textarea.selectionStart);
+      const inserted = `${completion.hasOpeningQuote ? '' : '"'}${item}": `;
+      setCompletion(null);
+      onChange(`${before}${inserted}${after}`);
+      requestAnimationFrame(() => {
+        const next = completion.start + inserted.length;
+        textareaRef.current?.setSelectionRange(next, next);
+      });
       return;
     }
 
@@ -253,6 +307,22 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
       false
     );
     onChange(fullText);
+
+    const keyMatch = fullText.slice(0, e.target.selectionStart).match(/(?:\{|,)\s*"([^"\n]*)$/);
+    if (suggestions.length > 0 && keyMatch) {
+      const query = keyMatch[1].toLowerCase();
+      const items = suggestions.filter((item) => item.toLowerCase().includes(query)).slice(0, 8);
+      if (items.length > 0) {
+        setCompletion({
+          items,
+          start: e.target.selectionStart - keyMatch[1].length,
+          selected: 0,
+          hasOpeningQuote: true,
+        });
+        return;
+      }
+    }
+    setCompletion(null);
   }
 
   // Highlight syntax tokens: keys, strings, numbers, booleans, variables {{VAR}}
@@ -435,6 +505,36 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
             spellCheck={false}
             className="absolute inset-0 w-full h-full m-0 py-3 px-3 font-mono text-xs leading-5 bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-primary/40 whitespace-pre"
           />
+
+          {completion && (
+            <div className="absolute z-20 left-3 top-3 min-w-44 max-w-64 border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden">
+              {completion.items.map((item, index) => (
+                <button
+                  key={item}
+                  type="button"
+          onMouseDown={(e) => {
+                    e.preventDefault();
+                    const textarea = textareaRef.current;
+                    if (!textarea) return;
+                    const before = value.slice(0, completion.start);
+                    const after = value.slice(textarea.selectionStart);
+                    const inserted = `${completion.hasOpeningQuote ? '' : '"'}${item}": `;
+                    setCompletion(null);
+                    onChange(`${before}${inserted}${after}`);
+                    requestAnimationFrame(() => {
+                      const next = completion.start + inserted.length;
+                      textarea.setSelectionRange(next, next);
+                      textarea.focus();
+                    });
+                  }}
+                  className={`block w-full text-left px-2.5 py-1.5 font-mono text-[11px] ${index === completion.selected ? 'bg-primary/20 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+                >
+                  {item}
+                </button>
+              ))}
+              <div className="border-t border-zinc-800 px-2 py-1 text-[10px] text-zinc-500">Enter / Tab to insert</div>
+            </div>
+          )}
 
           {/* Variable Hover Card */}
           {hoverState && (

@@ -56,6 +56,8 @@ interface AppState {
 
   lastHttpResponse: HttpExecutionResponse | null;
   lastGrpcResponse: GrpcExecutionResponse | null;
+  httpResponses: Record<string, HttpExecutionResponse>;
+  grpcResponses: Record<string, GrpcExecutionResponse>;
 
   // Streaming state
   isStreaming: boolean;
@@ -105,8 +107,10 @@ interface AppState {
   setActiveWorkspaceId: (id: string | null) => void;
   setActiveEnvironmentId: (id: string | null) => void;
   setActiveEndpoint: (endpoint: Endpoint | null) => void;
-  setLastHttpResponse: (res: HttpExecutionResponse | null) => void;
-  setLastGrpcResponse: (res: GrpcExecutionResponse | null) => void;
+  setLastHttpResponse: (res: HttpExecutionResponse | null, endpointId?: string) => void;
+  setLastGrpcResponse: (res: GrpcExecutionResponse | null, endpointId?: string) => void;
+  getHttpResponse: (endpointId: string) => HttpExecutionResponse | null;
+  getGrpcResponse: (endpointId: string) => GrpcExecutionResponse | null;
 
   openAuthModal: (tab?: 'login' | 'register' | 'forgot' | 'reset') => void;
   closeAuthModal: () => void;
@@ -147,6 +151,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   lastHttpResponse: null,
   lastGrpcResponse: null,
+  httpResponses: {},
+  grpcResponses: {},
 
   isStreaming: false,
   activeStreamId: null,
@@ -471,37 +477,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     state.openEndpoint(endpoint);
   },
 
-  setLastHttpResponse: (res) =>
-    set((state) => {
-      const activeId = state.activeEndpointId;
-      const nextResponses = { ...(state.endpointResponses || {}) };
-      if (activeId) {
-        nextResponses[activeId] = {
-          ...(nextResponses[activeId] || {}),
-          http: res,
-        };
-      }
-      return {
-        endpointResponses: nextResponses,
-        lastHttpResponse: res,
-      };
-    }),
-
-  setLastGrpcResponse: (res) =>
-    set((state) => {
-      const activeId = state.activeEndpointId;
-      const nextResponses = { ...(state.endpointResponses || {}) };
-      if (activeId) {
-        nextResponses[activeId] = {
-          ...(nextResponses[activeId] || {}),
-          grpc: res,
-        };
-      }
-      return {
-        endpointResponses: nextResponses,
-        lastGrpcResponse: res,
-      };
-    }),
+  setLastHttpResponse: (res, endpointId = get().activeEndpointId || '') => set((state) => ({
+    lastHttpResponse: res,
+    httpResponses: endpointId ? { ...state.httpResponses, ...(res ? { [endpointId]: res } : {}) } : state.httpResponses,
+  })),
+  setLastGrpcResponse: (res, endpointId = get().activeEndpointId || '') => set((state) => ({
+    lastGrpcResponse: res,
+    grpcResponses: endpointId ? { ...state.grpcResponses, ...(res ? { [endpointId]: res } : {}) } : state.grpcResponses,
+  })),
+  getHttpResponse: (endpointId) => get().httpResponses[endpointId] || null,
+  getGrpcResponse: (endpointId) => get().grpcResponses[endpointId] || null,
 
   openAuthModal: (tab = 'login') => set({ authModalOpen: true, authModalTab: tab }),
   closeAuthModal: () => set({ authModalOpen: false }),

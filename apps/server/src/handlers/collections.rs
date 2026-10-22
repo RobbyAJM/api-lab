@@ -199,7 +199,7 @@ pub async fn list_folders(
     let rows = sqlx::query_as!(
         CollectionFolder,
         r#"
-        SELECT id, collection_id, parent_folder_id, name, grpc_url, swagger_url, sort_order, created_at, updated_at
+        SELECT id, collection_id, parent_folder_id, name, grpc_url, swagger_url, settings, sort_order, created_at, updated_at
         FROM collection_folders
         WHERE collection_id = $1
         ORDER BY sort_order ASC, name ASC
@@ -240,16 +240,17 @@ pub async fn create_folder(
     let row = sqlx::query_as!(
         CollectionFolder,
         r#"
-        INSERT INTO collection_folders (id, collection_id, parent_folder_id, name, grpc_url, swagger_url)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, collection_id, parent_folder_id, name, grpc_url, swagger_url, sort_order, created_at, updated_at
+        INSERT INTO collection_folders (id, collection_id, parent_folder_id, name, grpc_url, swagger_url, settings)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, collection_id, parent_folder_id, name, grpc_url, swagger_url, settings, sort_order, created_at, updated_at
         "#,
         folder_id,
         collection_id,
         dto.parent_folder_id,
         name,
         grpc_url,
-        swagger_url
+        swagger_url,
+        dto.settings.unwrap_or_else(|| json!({}))
     )
     .fetch_one(&state.pool)
     .await
@@ -272,7 +273,7 @@ pub async fn update_folder(
     Json(dto): Json<UpdateFolderDto>,
 ) -> Result<Json<CollectionFolder>, ApiError> {
     let folder = sqlx::query!(
-        "SELECT collection_id, parent_folder_id, name, grpc_url, swagger_url, sort_order FROM collection_folders WHERE id = $1",
+        "SELECT collection_id, parent_folder_id, name, grpc_url, swagger_url, settings, sort_order FROM collection_folders WHERE id = $1",
         id
     )
     .fetch_optional(&state.pool)
@@ -297,20 +298,22 @@ pub async fn update_folder(
         Some(opt) => opt.map(|u| u.trim().to_string()).filter(|u| !u.is_empty()),
         None => folder.swagger_url,
     };
+    let new_settings = dto.settings.unwrap_or(folder.settings);
 
     let updated = sqlx::query_as!(
         CollectionFolder,
         r#"
         UPDATE collection_folders
-        SET name = $1, parent_folder_id = $2, sort_order = $3, grpc_url = $4, swagger_url = $5, updated_at = NOW()
-        WHERE id = $6
-        RETURNING id, collection_id, parent_folder_id, name, grpc_url, swagger_url, sort_order, created_at, updated_at
+        SET name = $1, parent_folder_id = $2, sort_order = $3, grpc_url = $4, swagger_url = $5, settings = $6, updated_at = NOW()
+        WHERE id = $7
+        RETURNING id, collection_id, parent_folder_id, name, grpc_url, swagger_url, settings, sort_order, created_at, updated_at
         "#,
         new_name,
         new_parent,
         new_sort,
         new_grpc_url,
         new_swagger_url,
+        new_settings,
         id
     )
     .fetch_one(&state.pool)

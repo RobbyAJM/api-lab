@@ -23,6 +23,7 @@ mod tests {
             }),
             timeout_ms: Some(2000),
             use_tls: Some(false),
+            auth: None,
         };
 
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
@@ -140,6 +141,7 @@ mod tests {
             payload: serde_json::json!({}),
             timeout_ms: Some(5000),
             use_tls: Some(false),
+            auth: None,
         };
         let exec_res = client::execute_unary(exec_false).await;
         assert!(exec_res.error.is_none(), "execute_unary with use_tls: Some(false) should recover via TLS fallback: {:?}", exec_res.error);
@@ -182,5 +184,4 @@ mod tests {
         assert_eq!(t6.use_tls, true);
     }
 }
-
 
