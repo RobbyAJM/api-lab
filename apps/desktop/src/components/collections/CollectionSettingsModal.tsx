@@ -136,6 +136,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
           key: h.key.trim(),
           value: h.value || '',
           enabled: h.enabled !== false,
+          description: h.description?.trim() || undefined,
         }));
 
       const parsedTimeout = timeoutMs.trim() ? parseInt(timeoutMs.trim(), 10) : undefined;
@@ -168,7 +169,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
   });
 
   const handleAddHeader = () => {
-    setHeaders((prev) => [...prev, { key: '', value: '', enabled: true }]);
+    setHeaders((prev) => [...prev, { key: '', value: '', enabled: true, description: '' }]);
   };
 
   const handleHeaderChange = (index: number, field: keyof CollectionHeaderSetting, val: any) => {
@@ -451,17 +452,18 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <div className="grid grid-cols-[24px_1fr_1fr_28px] gap-2 px-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
+                  <div className="grid grid-cols-[24px_1fr_1fr_1fr_28px] gap-2 px-1 text-[10px] font-mono text-zinc-500 uppercase tracking-wider">
                     <span></span>
                     <span>Header Key</span>
                     <span>Header Value</span>
+                    <span>Description</span>
                     <span></span>
                   </div>
 
                   {headers.map((h, idx) => (
                     <div
                       key={idx}
-                      className="grid grid-cols-[24px_1fr_1fr_28px] gap-2 items-center bg-zinc-950/60 p-1 rounded border border-zinc-800/80"
+                      className="grid grid-cols-[24px_1fr_1fr_1fr_28px] gap-2 items-center bg-zinc-950/60 p-1 rounded border border-zinc-800/80"
                     >
                       <input
                         type="checkbox"
@@ -486,6 +488,13 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
                           className="w-full h-full text-xs"
                         />
                       </div>
+                      <input
+                        type="text"
+                        value={h.description || ''}
+                        onChange={(e) => handleHeaderChange(idx, 'description', e.target.value)}
+                        placeholder="Description (optional)"
+                        className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700"
+                      />
                       <button
                         type="button"
                         onClick={() => handleRemoveHeader(idx)}

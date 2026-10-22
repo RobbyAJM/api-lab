@@ -46,10 +46,19 @@ export function isConfigDirty(
       headers: Object.entries(cfg.headers || {})
         .filter(([k]) => k.trim())
         .sort(([k1], [k2]) => k1.localeCompare(k2)),
+      header_descriptions: Object.entries(cfg.header_descriptions || {})
+        .filter(([k]) => k.trim())
+        .sort(([k1], [k2]) => k1.localeCompare(k2)),
       metadata: Object.entries(cfg.metadata || {})
         .filter(([k]) => k.trim())
         .sort(([k1], [k2]) => k1.localeCompare(k2)),
+      metadata_descriptions: Object.entries(cfg.metadata_descriptions || {})
+        .filter(([k]) => k.trim())
+        .sort(([k1], [k2]) => k1.localeCompare(k2)),
       query_params: (cfg.query_params || [])
+        .filter(([k]: [string, string]) => k && k.trim())
+        .sort(([k1]: [string, string], [k2]: [string, string]) => k1.localeCompare(k2)),
+      path_variables: (cfg.path_variables || [])
         .filter(([k]: [string, string]) => k && k.trim())
         .sort(([k1]: [string, string], [k2]: [string, string]) => k1.localeCompare(k2)),
       auth: cfg.auth || { auth_type: 'none' },
