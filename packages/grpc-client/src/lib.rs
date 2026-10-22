@@ -93,6 +93,43 @@ mod tests {
         let exec_res = client::execute_unary(exec_false).await;
         assert!(exec_res.error.is_none(), "execute_unary with use_tls: Some(false) should recover via TLS fallback: {:?}", exec_res.error);
     }
+
+    #[test]
+    fn test_parse_target_address_schemes() {
+        // grpc:// prefix
+        let t1 = client::parse_target_address("grpc://localhost:50051", None);
+        assert_eq!(t1.host_port, "localhost:50051");
+        assert_eq!(t1.use_tls, false);
+        assert_eq!(t1.scheme_locked, false);
+
+        let t2 = client::parse_target_address("grpc://nu-trade.dev.dxtr.asia:443", None);
+        assert_eq!(t2.host_port, "nu-trade.dev.dxtr.asia:443");
+        assert_eq!(t2.use_tls, true);
+        assert_eq!(t2.scheme_locked, false);
+
+        // grpcs:// prefix forces TLS
+        let t3 = client::parse_target_address("grpcs://localhost:50051", None);
+        assert_eq!(t3.host_port, "localhost:50051");
+        assert_eq!(t3.use_tls, true);
+        assert_eq!(t3.scheme_locked, true);
+
+        // http:// prefix forces plaintext
+        let t4 = client::parse_target_address("http://nu-trade.dev.dxtr.asia", None);
+        assert_eq!(t4.host_port, "nu-trade.dev.dxtr.asia");
+        assert_eq!(t4.use_tls, false);
+        assert_eq!(t4.scheme_locked, true);
+
+        // https:// prefix forces TLS
+        let t5 = client::parse_target_address("https://nu-trade.dev.dxtr.asia", None);
+        assert_eq!(t5.host_port, "nu-trade.dev.dxtr.asia");
+        assert_eq!(t5.use_tls, true);
+        assert_eq!(t5.scheme_locked, true);
+
+        // explicit override takes precedence
+        let t6 = client::parse_target_address("grpc://localhost:50051", Some(true));
+        assert_eq!(t6.host_port, "localhost:50051");
+        assert_eq!(t6.use_tls, true);
+    }
 }
 
 
