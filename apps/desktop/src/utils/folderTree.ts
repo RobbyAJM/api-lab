@@ -135,15 +135,15 @@ export function filterCollectionTree(
       matchedFolderIds.add(node.folder.id);
     }
 
-    const filteredEndpoints = node.endpoints.filter((ep) => {
+    const filteredEndpoints = (folderMatches ? node.endpoints : node.endpoints.filter((ep) => {
       const match = matchesEndpoint(ep);
       if (match) totalMatches++;
       return match;
-    });
+    }));
 
     const filteredChildren: FolderTreeNode[] = [];
     for (const child of node.children) {
-      const filteredChild = filterNode(child);
+      const filteredChild = folderMatches ? child : filterNode(child);
       if (filteredChild) {
         filteredChildren.push(filteredChild);
       }
@@ -457,7 +457,6 @@ export function isCollectionHighlighted(
 ): boolean {
   return Boolean(activeEndpoint && activeEndpoint.collection_id === collectionId);
 }
-
 
 
 
