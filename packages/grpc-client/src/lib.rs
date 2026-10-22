@@ -67,6 +67,7 @@ mod tests {
             }),
             timeout_ms: Some(3000),
             use_tls: Some(false),
+            auth: None,
         };
 
         let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
