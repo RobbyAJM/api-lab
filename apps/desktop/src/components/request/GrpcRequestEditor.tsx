@@ -226,7 +226,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookLogs, setHookLogs] = useState<string[]>([]);
 
   const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'authorization' | 'scripts' | 'options' | 'specification'>('payload');
-  const [auth, setAuth] = useState(() => initialConfig.auth || { auth_type: 'inherit' as const });
   const [copiedSpec, setCopiedSpec] = useState<'signature' | 'input' | 'output' | 'sample' | null>(null);
   const [sampleSpecLoading, setSampleSpecLoading] = useState(false);
   const [specSamplePayload, setSpecSamplePayload] = useState<any>(null);
@@ -482,7 +481,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       metadata: metaMap,
       auth,
       payload: payloadJson,
-      auth,
       pre_request_script: preRequestScript,
       post_request_script: postResponseScript,
       post_response_script: postResponseScript,
@@ -1233,20 +1231,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
                 {metadata.filter(([k]) => k.trim()).length}
               </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab('auth')}
-            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
-              activeTab === 'auth'
-                ? 'border-primary text-zinc-100'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <span>Auth</span>
-            {auth.auth_type !== 'none' && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             )}
           </button>
 
