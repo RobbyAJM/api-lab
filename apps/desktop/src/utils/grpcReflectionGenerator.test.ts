@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {
   planGrpcHierarchy,
   executeGrpcHierarchyCreation,
+  splitServiceName,
   shouldAutoDetectTls,
   generateSamplePayloadsBatch,
   generateGrpcCollection,
   GrpcGenerationError,
   type PlannedHierarchy,
+  type PlannedFolderNode,
 } from './grpcReflectionGenerator.ts';
 import type { GrpcServiceSummary } from '@api-lab/api-types';
 
@@ -31,50 +33,88 @@ const mockServices: GrpcServiceSummary[] = [
   },
 ];
 
-test('planGrpcHierarchy: correctly builds {folderName} -> {service} -> {method} tree', () => {
-  const planned = planGrpcHierarchy({
-    folderName: 'NuTradeServices',
-    serverAddress: 'localhost:9091',
-    services: mockServices,
-    samplePayloads: {
-      'nutrade.manager.AuthAPI/Login': { login: '200010', password: 'secret_password' },
-    },
-  });
-
-  assert.equal(planned.rootFolderName, 'NuTradeServices');
-  assert.equal(planned.serviceFolders.length, 2);
-  assert.equal(planned.totalEndpoints, 3);
-
-  // Folder 1: nutrade.manager.AuthAPI
-  const authFolder = planned.serviceFolders[0];
-  assert.equal(authFolder.name, 'nutrade.manager.AuthAPI');
-  assert.equal(authFolder.endpoints.length, 2);
-
-  // Method: Login
-  const loginEp = authFolder.endpoints[0];
-  assert.equal(loginEp.name, 'Login');
-  assert.equal(loginEp.protocol, 'grpc');
-  assert.equal(loginEp.config.server_address, 'localhost:9091');
-  assert.equal(loginEp.config.service, 'nutrade.manager.AuthAPI');
-  assert.equal(loginEp.config.method, 'Login');
-  assert.deepEqual(loginEp.config.payload, {
-    login: '200010',
-    password: 'secret_password',
-  });
-
-  // Method: Profile
-  const profileEp = authFolder.endpoints[1];
-  assert.equal(profileEp.name, 'Profile');
-  assert.deepEqual(profileEp.config.payload, {});
-
-  // Folder 2: nuconnector.PriceStreamAPI
-  const streamFolder = planned.serviceFolders[1];
-  assert.equal(streamFolder.name, 'nuconnector.PriceStreamAPI');
-  assert.equal(streamFolder.endpoints.length, 1);
-  assert.equal(streamFolder.endpoints[0].name, 'SubscribePrice');
+test('splitServiceName: splits by dots case-sensitively and trims whitespace', () => {
+  assert.deepEqual(splitServiceName('grpc.Health.v1.Health'), ['grpc', 'Health', 'v1', 'Health']);
+  assert.deepEqual(splitServiceName('nutrade.Client.ClientAccountAPI'), ['nutrade', 'Client', 'ClientAccountAPI']);
+  assert.deepEqual(splitServiceName('Greeter'), ['Greeter']);
+  assert.deepEqual(splitServiceName('  foo.Bar  '), ['foo', 'Bar']);
+  assert.deepEqual(splitServiceName(''), []);
 });
 
-test('executeGrpcHierarchyCreation: creates root folder, service subfolders, and child endpoints', async () => {
+test('planGrpcHierarchy: correctly builds nested folder structure case-sensitively (user case)', () => {
+  const userServices: GrpcServiceSummary[] = [
+    {
+      name: 'grpc.Health.v1.Health',
+      methods: [
+        { name: 'Check', input_type: 'HealthCheckRequest', output_type: 'HealthCheckResponse' },
+        { name: 'Watch', input_type: 'HealthCheckRequest', output_type: 'HealthCheckResponse' },
+      ],
+    },
+    {
+      name: 'nutrade.Client.ClientAccountAPI',
+      methods: [
+        { name: 'GetAccount', input_type: 'GetAccountRequest', output_type: 'GetAccountResponse' },
+      ],
+    },
+    {
+      name: 'nutrade.Client.ClientAuthAPI',
+      methods: [
+        { name: 'Login', input_type: 'LoginRequest', output_type: 'LoginResponse' },
+      ],
+    },
+  ];
+
+  const planned = planGrpcHierarchy({
+    folderName: 'NuTrade',
+    serverAddress: 'nu-trade.dev.dxtr.asia:443',
+    services: userServices,
+  });
+
+  assert.equal(planned.rootFolderName, 'NuTrade');
+  assert.equal(planned.totalEndpoints, 4);
+
+  // Top level folders under root: 'grpc' and 'nutrade'
+  assert.equal(planned.serviceFolders.length, 2);
+  const grpcFolder = planned.serviceFolders.find((f) => f.name === 'grpc')!;
+  const nutradeFolder = planned.serviceFolders.find((f) => f.name === 'nutrade')!;
+  assert.ok(grpcFolder);
+  assert.ok(nutradeFolder);
+
+  // grpc -> Health -> v1 -> Health
+  assert.equal(grpcFolder.children.length, 1);
+  const healthFolder = grpcFolder.children[0];
+  assert.equal(healthFolder.name, 'Health');
+  assert.equal(healthFolder.children.length, 1);
+  const v1Folder = healthFolder.children[0];
+  assert.equal(v1Folder.name, 'v1');
+  assert.equal(v1Folder.children.length, 1);
+  const leafHealth = v1Folder.children[0];
+  assert.equal(leafHealth.name, 'Health');
+  assert.equal(leafHealth.endpoints.length, 2);
+  assert.equal(leafHealth.endpoints[0].name, 'Check');
+  assert.equal(leafHealth.endpoints[0].config.service, 'grpc.Health.v1.Health');
+  assert.equal(leafHealth.endpoints[1].name, 'Watch');
+
+  // nutrade -> Client (shared by ClientAccountAPI and ClientAuthAPI)
+  assert.equal(nutradeFolder.children.length, 1);
+  const clientFolder = nutradeFolder.children[0];
+  assert.equal(clientFolder.name, 'Client'); // Exact case preserved
+  assert.equal(clientFolder.children.length, 2);
+
+  const accountApiFolder = clientFolder.children.find((f) => f.name === 'ClientAccountAPI')!;
+  assert.ok(accountApiFolder);
+  assert.equal(accountApiFolder.endpoints.length, 1);
+  assert.equal(accountApiFolder.endpoints[0].name, 'GetAccount');
+  assert.equal(accountApiFolder.endpoints[0].config.service, 'nutrade.Client.ClientAccountAPI');
+
+  const authApiFolder = clientFolder.children.find((f) => f.name === 'ClientAuthAPI')!;
+  assert.ok(authApiFolder);
+  assert.equal(authApiFolder.endpoints.length, 1);
+  assert.equal(authApiFolder.endpoints[0].name, 'Login');
+  assert.equal(authApiFolder.endpoints[0].config.service, 'nutrade.Client.ClientAuthAPI');
+});
+
+test('executeGrpcHierarchyCreation: recursively creates nested folders and child endpoints', async () => {
   const calls: { path: string; body: any }[] = [];
   let folderIdCounter = 1;
   let endpointIdCounter = 1;
@@ -101,10 +141,11 @@ test('executeGrpcHierarchyCreation: creates root folder, service subfolders, and
   const res = await executeGrpcHierarchyCreation('coll-123', planned, mockApi);
 
   assert.equal(res.rootFolderId, 'folder-1');
-  assert.equal(res.createdServiceFoldersCount, 2);
+  // mockServices: nutrade.manager.AuthAPI (3 folders) + nuconnector.PriceStreamAPI (2 folders) = 5
+  assert.equal(res.createdServiceFoldersCount, 5);
   assert.equal(res.createdEndpointsCount, 3);
 
-  // Check call 1: Root folder created with grpc_url
+  // Call 1: Root folder created with grpc_url
   assert.equal(calls[0].path, '/collections/coll-123/folders');
   assert.deepEqual(calls[0].body, {
     name: 'TestFolder',
@@ -112,33 +153,54 @@ test('executeGrpcHierarchyCreation: creates root folder, service subfolders, and
     grpc_url: 'localhost:9091',
   });
 
-  // Check call 2: First service folder created with parent_folder_id = folder-1
+  // Call 2: Folder 'nutrade' under root 'folder-1'
   assert.equal(calls[1].path, '/collections/coll-123/folders');
   assert.deepEqual(calls[1].body, {
-    name: 'nutrade.manager.AuthAPI',
+    name: 'nutrade',
     parent_folder_id: 'folder-1',
   });
 
-  // Check call 3 & 4: Endpoints under folder-2
-  assert.equal(calls[2].path, '/collections/coll-123/endpoints');
-  assert.equal(calls[2].body.folder_id, 'folder-2');
-  assert.equal(calls[2].body.name, 'Login');
-
-  assert.equal(calls[3].path, '/collections/coll-123/endpoints');
-  assert.equal(calls[3].body.folder_id, 'folder-2');
-  assert.equal(calls[3].body.name, 'Profile');
-
-  // Check call 5: Second service folder created with parent_folder_id = folder-1
-  assert.equal(calls[4].path, '/collections/coll-123/folders');
-  assert.deepEqual(calls[4].body, {
-    name: 'nuconnector.PriceStreamAPI',
-    parent_folder_id: 'folder-1',
+  // Call 3: Folder 'manager' under 'folder-2' ('nutrade')
+  assert.equal(calls[2].path, '/collections/coll-123/folders');
+  assert.deepEqual(calls[2].body, {
+    name: 'manager',
+    parent_folder_id: 'folder-2',
   });
 
-  // Check call 6: Endpoint under folder-3
+  // Call 4: Folder 'AuthAPI' under 'folder-3' ('manager')
+  assert.equal(calls[3].path, '/collections/coll-123/folders');
+  assert.deepEqual(calls[3].body, {
+    name: 'AuthAPI',
+    parent_folder_id: 'folder-3',
+  });
+
+  // Call 5 & 6: Endpoints under 'folder-4' ('AuthAPI')
+  assert.equal(calls[4].path, '/collections/coll-123/endpoints');
+  assert.equal(calls[4].body.folder_id, 'folder-4');
+  assert.equal(calls[4].body.name, 'Login');
+
   assert.equal(calls[5].path, '/collections/coll-123/endpoints');
-  assert.equal(calls[5].body.folder_id, 'folder-3');
-  assert.equal(calls[5].body.name, 'SubscribePrice');
+  assert.equal(calls[5].body.folder_id, 'folder-4');
+  assert.equal(calls[5].body.name, 'Profile');
+
+  // Call 7: Folder 'nuconnector' under root 'folder-1'
+  assert.equal(calls[6].path, '/collections/coll-123/folders');
+  assert.deepEqual(calls[6].body, {
+    name: 'nuconnector',
+    parent_folder_id: 'folder-1',
+  });
+
+  // Call 8: Folder 'PriceStreamAPI' under 'folder-5' ('nuconnector')
+  assert.equal(calls[7].path, '/collections/coll-123/folders');
+  assert.deepEqual(calls[7].body, {
+    name: 'PriceStreamAPI',
+    parent_folder_id: 'folder-5',
+  });
+
+  // Call 9: Endpoint under 'folder-6' ('PriceStreamAPI')
+  assert.equal(calls[8].path, '/collections/coll-123/endpoints');
+  assert.equal(calls[8].body.folder_id, 'folder-6');
+  assert.equal(calls[8].body.name, 'SubscribePrice');
 });
 
 test('shouldAutoDetectTls: accurately detects remote domains vs local', () => {
@@ -165,7 +227,8 @@ test('planGrpcHierarchy: preserves useTls setting for remote endpoints', () => {
     services: mockServices,
   });
 
-  assert.equal(planned.serviceFolders[0].endpoints[0].config.use_tls, true);
+  const authApiFolder = planned.serviceFolders[0].children[0].children[0];
+  assert.equal(authApiFolder.endpoints[0].config.use_tls, true);
 });
 
 test('generateSamplePayloadsBatch: concurrent execution with fallback on individual failure', async () => {
@@ -217,7 +280,7 @@ test('generateGrpcCollection: complete end-to-end success with mock reflection a
   });
 
   assert.equal(res.rootFolderId, 'id-1');
-  assert.equal(res.createdServiceFoldersCount, 2);
+  assert.equal(res.createdServiceFoldersCount, 5);
   assert.equal(res.createdEndpointsCount, 3);
   assert.equal(res.samplePayloadsCount, 3);
   assert.equal(res.effectiveTls, true);

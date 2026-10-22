@@ -11,7 +11,7 @@ import {
   type SyncPlan,
 } from '../../utils/grpcReflectionSync';
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
-import { resolveRootFolderId } from '../../utils/folderTree';
+import { resolveRootFolderId, getDescendantFolderIds } from '../../utils/folderTree';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
@@ -144,10 +144,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
     }
 
     // Fallback: inspect any gRPC endpoint inside this root folder hierarchy
-    const childFolderIds = new Set(
-      folders.filter((f) => f.parent_folder_id === selectedRootFolderId).map((f) => f.id)
-    );
-    childFolderIds.add(selectedRootFolderId);
+    const childFolderIds = getDescendantFolderIds(folders, selectedRootFolderId);
 
     const matchEp = endpoints.find(
       (e) => e.folder_id && childFolderIds.has(e.folder_id) && e.config?.server_address
@@ -257,7 +254,8 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         serverAddress.trim(),
         plan,
         freshPayloads,
-        apiCaller
+        apiCaller,
+        folders
       );
 
       // Save/update root folder gRPC server address in folder and collection.settings
