@@ -1,14 +1,17 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { THEMES, getThemeById } from '../../utils/theme';
 import { createBackdropClickHandler } from '../../utils/modalDismiss';
-import { Check, Palette, Search, X } from 'lucide-react';
+import { Check, GripHorizontal, Palette, Search, X } from 'lucide-react';
 
 export const ThemePickerModal: React.FC = () => {
   const { themeModalOpen, setThemeModalOpen, activeThemeId, setTheme } = useAppStore();
   const [query, setQuery] = useState('');
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const isDraggingRef = useRef(false);
 
   const filteredThemes = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -30,6 +33,40 @@ export const ThemePickerModal: React.FC = () => {
       }, 50);
     }
   }, [themeModalOpen, activeThemeId]);
+
+  const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    if (!dialogRef.current) return;
+
+    e.preventDefault();
+    isDraggingRef.current = true;
+    const rect = dialogRef.current.getBoundingClientRect();
+    const offsetX = e.clientX - rect.left;
+    const offsetY = e.clientY - rect.top;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isDraggingRef.current) return;
+      const width = rect.width;
+      const height = rect.height;
+      const minX = 8;
+      const maxX = Math.max(minX, window.innerWidth - width - 8);
+      const minY = 8;
+      const maxY = Math.max(minY, window.innerHeight - height - 8);
+
+      const targetX = Math.max(minX, Math.min(maxX, moveEvent.clientX - offsetX));
+      const targetY = Math.max(minY, Math.min(maxY, moveEvent.clientY - offsetY));
+      setPosition({ x: targetX, y: targetY });
+    };
+
+    const onMouseUp = () => {
+      isDraggingRef.current = false;
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }, []);
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (filteredThemes.length === 0) return;
@@ -66,20 +103,38 @@ export const ThemePickerModal: React.FC = () => {
       className="fixed inset-0 z-50 bg-black/15 flex items-end sm:items-center justify-start p-4 select-none"
     >
       <div
+        ref={dialogRef}
         onKeyDown={handleKeyDown}
+        style={
+          position
+            ? {
+                position: 'fixed',
+                left: `${position.x}px`,
+                top: `${position.y}px`,
+                margin: 0,
+                bottom: 'auto',
+                right: 'auto',
+              }
+            : undefined
+        }
         className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl flex flex-col max-h-[500px] overflow-hidden text-zinc-100"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2.5 border-b border-zinc-800 bg-zinc-900/60">
-          <div className="flex items-center gap-2">
-            <Palette size={14} className="text-primary" />
-            <span className="font-semibold text-xs tracking-tight text-zinc-100">
+        {/* Header - Draggable */}
+        <div
+          onMouseDown={handleHeaderMouseDown}
+          className="flex items-center justify-between px-3 py-2.5 border-b border-zinc-800 bg-zinc-900/60 cursor-grab active:cursor-grabbing select-none"
+          title="Drag to reposition dialog"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Palette size={14} className="text-primary flex-shrink-0" />
+            <span className="font-semibold text-xs tracking-tight text-zinc-100 truncate">
               Workbench Themes
             </span>
+            <GripHorizontal size={14} className="text-zinc-500 opacity-60 flex-shrink-0" />
           </div>
           <button
             onClick={() => setThemeModalOpen(false)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition"
+            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition flex-shrink-0 cursor-pointer"
             title="Close (Escape)"
           >
             <X size={13} />
