@@ -61,6 +61,14 @@ mod commands {
     pub fn cancel_grpc_stream(stream_id: String) -> bool {
         grpc_runner::cancel_stream(&stream_id)
     }
+
+    #[tauri::command]
+    pub async fn send_grpc_stream_message(
+        stream_id: String,
+        payload: serde_json::Value,
+    ) -> Result<(), String> {
+        grpc_runner::send_stream_message(&stream_id, payload).await
+    }
 }
 
 #[cfg(not(feature = "desktop"))]
@@ -106,6 +114,13 @@ mod commands {
     pub fn cancel_grpc_stream(stream_id: String) -> bool {
         grpc_runner::cancel_stream(&stream_id)
     }
+
+    pub async fn send_grpc_stream_message(
+        stream_id: String,
+        payload: serde_json::Value,
+    ) -> Result<(), String> {
+        grpc_runner::send_stream_message(&stream_id, payload).await
+    }
 }
 
 pub use commands::*;
@@ -120,7 +135,8 @@ pub fn run() {
             discover_grpc_services,
             generate_grpc_sample_payload,
             execute_grpc_stream,
-            cancel_grpc_stream
+            cancel_grpc_stream,
+            send_grpc_stream_message
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
