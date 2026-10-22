@@ -427,6 +427,7 @@ export async function executeReflectionSync(
           stream_type: m.stream_type || 'unary',
           metadata: {},
           payload,
+          auth: { auth_type: 'inherit' },
         },
       });
       methodsCreated++;
@@ -447,6 +448,7 @@ export async function executeReflectionSync(
         stream_type: m.streamType || 'unary',
         metadata: {},
         payload,
+        auth: { auth_type: 'inherit' },
       },
     });
     methodsCreated++;

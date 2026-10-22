@@ -42,7 +42,7 @@ export interface InvitationResponse {
 }
 
 export interface CollectionAuthSettings {
-  auth_type: 'none' | 'bearer' | 'basic' | 'custom';
+  auth_type: 'inherit' | 'none' | 'bearer' | 'basic' | 'custom';
   token?: string;
   username?: string;
   password?: string;
