@@ -14,13 +14,65 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetAddressInfo {
+    pub host_port: String,
+    pub use_tls: bool,
+    pub scheme_locked: bool,
+}
+
+pub fn parse_target_address(addr: &str, explicit_tls: Option<bool>) -> TargetAddressInfo {
+    let raw = addr.trim();
+    let (clean, scheme_locked, scheme_tls) = if let Some(rest) = raw.strip_prefix("grpcs://") {
+        (rest, true, Some(true))
+    } else if let Some(rest) = raw.strip_prefix("https://") {
+        (rest, true, Some(true))
+    } else if let Some(rest) = raw.strip_prefix("grpc://") {
+        (rest, false, None)
+    } else if let Some(rest) = raw.strip_prefix("http://") {
+        (rest, true, Some(false))
+    } else {
+        (raw, false, None)
+    };
+
+    let host_port = clean.trim_end_matches('/').to_string();
+    let host_part = host_port.split(':').next().unwrap_or(&host_port);
+    let is_local = host_part == "localhost"
+        || host_part == "127.0.0.1"
+        || host_part == "0.0.0.0"
+        || host_part == "::1";
+
+    let use_tls = if let Some(tls) = explicit_tls {
+        tls
+    } else if let Some(tls) = scheme_tls {
+        tls
+    } else if host_port.ends_with(":443") {
+        true
+    } else if !is_local && host_part.contains('.') {
+        true
+    } else {
+        false
+    };
+
+    TargetAddressInfo {
+        host_port,
+        use_tls,
+        scheme_locked,
+    }
+}
+
 async fn create_channel_direct(addr: &str, use_tls: bool) -> Result<Channel, String> {
     let mut clean = addr.trim().to_string();
-    if clean.starts_with("http://") {
-        clean = clean.trim_start_matches("http://").to_string();
-    } else if clean.starts_with("https://") {
-        clean = clean.trim_start_matches("https://").to_string();
+    if let Some(rest) = clean.strip_prefix("grpcs://") {
+        clean = rest.to_string();
+    } else if let Some(rest) = clean.strip_prefix("https://") {
+        clean = rest.to_string();
+    } else if let Some(rest) = clean.strip_prefix("grpc://") {
+        clean = rest.to_string();
+    } else if let Some(rest) = clean.strip_prefix("http://") {
+        clean = rest.to_string();
     }
+    clean = clean.trim_end_matches('/').to_string();
 
     let endpoint_str = if use_tls {
         if clean.ends_with(":80") {
@@ -67,34 +119,14 @@ pub async fn create_channel(addr: &str, use_tls: bool) -> Result<Channel, String
 }
 
 pub async fn create_channel_smart(addr: &str, explicit_tls: Option<bool>) -> Result<(Channel, bool), String> {
-    let clean = addr.trim();
-    let has_https = clean.starts_with("https://") || clean.ends_with(":443");
-    let has_http = clean.starts_with("http://");
+    let target = parse_target_address(addr, explicit_tls);
 
-    let initial_tls = if has_https {
-        true
-    } else if has_http {
-        false
-    } else {
-        let host_part = clean.split(':').next().unwrap_or(clean);
-        let is_local = host_part == "localhost"
-            || host_part == "127.0.0.1"
-            || host_part == "0.0.0.0"
-            || host_part == "::1";
-
-        if !is_local && host_part.contains('.') {
-            explicit_tls.unwrap_or(true)
-        } else {
-            explicit_tls.unwrap_or(false)
-        }
-    };
-
-    match create_channel_direct(clean, initial_tls).await {
-        Ok(c) => Ok((c, initial_tls)),
+    match create_channel_direct(&target.host_port, target.use_tls).await {
+        Ok(c) => Ok((c, target.use_tls)),
         Err(e) => {
-            if !has_https && !has_http {
-                let fallback_tls = !initial_tls;
-                if let Ok(c) = create_channel_direct(clean, fallback_tls).await {
+            if !target.scheme_locked {
+                let fallback_tls = !target.use_tls;
+                if let Ok(c) = create_channel_direct(&target.host_port, fallback_tls).await {
                     return Ok((c, fallback_tls));
                 }
             }
@@ -118,28 +150,10 @@ async fn try_discover_all_versions(channel: Channel) -> Result<GrpcReflectionRes
 pub async fn discover_services(
     req: GrpcReflectionRequest,
 ) -> GrpcReflectionResponse {
-    let clean = req.server_address.trim();
-    let has_https = clean.starts_with("https://") || clean.ends_with(":443");
-    let has_http = clean.starts_with("http://");
-
-    let host_part = clean.split(':').next().unwrap_or(clean);
-    let is_local = host_part == "localhost"
-        || host_part == "127.0.0.1"
-        || host_part == "0.0.0.0"
-        || host_part == "::1";
-
-    let initial_tls = if has_https {
-        true
-    } else if has_http {
-        false
-    } else if !is_local && host_part.contains('.') {
-        req.use_tls.unwrap_or(true)
-    } else {
-        req.use_tls.unwrap_or(false)
-    };
+    let target = parse_target_address(&req.server_address, req.use_tls);
 
     // 1. Try initial connection & discovery
-    let first_res = match create_channel_direct(clean, initial_tls).await {
+    let first_res = match create_channel_direct(&target.host_port, target.use_tls).await {
         Ok(c) => try_discover_all_versions(c).await,
         Err(e) => Err(e),
     };
@@ -151,9 +165,9 @@ pub async fn discover_services(
     }
 
     // 2. If initial attempt failed and scheme wasn't locked, try fallback
-    if !has_https && !has_http {
-        let fallback_tls = !initial_tls;
-        if let Ok(c) = create_channel_direct(clean, fallback_tls).await {
+    if !target.scheme_locked {
+        let fallback_tls = !target.use_tls;
+        if let Ok(c) = create_channel_direct(&target.host_port, fallback_tls).await {
             if let Ok(res) = try_discover_all_versions(c).await {
                 if !res.services.is_empty() {
                     return res;
@@ -385,27 +399,9 @@ async fn connect_and_fetch_pool(
     service: &str,
     explicit_tls: Option<bool>,
 ) -> Result<(Channel, DescriptorPool), String> {
-    let clean = addr.trim();
-    let has_https = clean.starts_with("https://") || clean.ends_with(":443");
-    let has_http = clean.starts_with("http://");
+    let target = parse_target_address(addr, explicit_tls);
 
-    let host_part = clean.split(':').next().unwrap_or(clean);
-    let is_local = host_part == "localhost"
-        || host_part == "127.0.0.1"
-        || host_part == "0.0.0.0"
-        || host_part == "::1";
-
-    let initial_tls = if has_https {
-        true
-    } else if has_http {
-        false
-    } else if !is_local && host_part.contains('.') {
-        explicit_tls.unwrap_or(true)
-    } else {
-        explicit_tls.unwrap_or(false)
-    };
-
-    let first_res = match create_channel_direct(clean, initial_tls).await {
+    let first_res = match create_channel_direct(&target.host_port, target.use_tls).await {
         Ok(c) => match fetch_pool_for_symbol(c.clone(), service).await {
             Ok(pool) => return Ok((c, pool)),
             Err(e) => Err(e),
@@ -413,9 +409,9 @@ async fn connect_and_fetch_pool(
         Err(e) => Err(e),
     };
 
-    if !has_https && !has_http {
-        let fallback_tls = !initial_tls;
-        if let Ok(c) = create_channel_direct(clean, fallback_tls).await {
+    if !target.scheme_locked {
+        let fallback_tls = !target.use_tls;
+        if let Ok(c) = create_channel_direct(&target.host_port, fallback_tls).await {
             if let Ok(pool) = fetch_pool_for_symbol(c.clone(), service).await {
                 return Ok((c, pool));
             }

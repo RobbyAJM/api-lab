@@ -146,11 +146,15 @@ test('shouldAutoDetectTls: accurately detects remote domains vs local', () => {
   assert.equal(shouldAutoDetectTls('nu-trade.dev.dxtr.asia:443'), true);
   assert.equal(shouldAutoDetectTls('https://my-service.com'), true);
   assert.equal(shouldAutoDetectTls('http://my-service.com'), false);
+  assert.equal(shouldAutoDetectTls('grpc://localhost:50051'), false);
+  assert.equal(shouldAutoDetectTls('grpc://nu-trade.dev.dxtr.asia:443'), true);
+  assert.equal(shouldAutoDetectTls('grpc://nu-trade.dev.dxtr.asia'), true);
+  assert.equal(shouldAutoDetectTls('grpcs://localhost:50051'), true);
   assert.equal(shouldAutoDetectTls('localhost:50051'), false);
   assert.equal(shouldAutoDetectTls('127.0.0.1:3100'), false);
   // Variables resolution support
-  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'nu-trade.dev.dxtr.asia' }), true);
-  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'localhost:9091' }), false);
+  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'grpc://nu-trade.dev.dxtr.asia' }), true);
+  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'grpc://localhost:9091' }), false);
   assert.equal(shouldAutoDetectTls('{{URL}}', { url: 'https://custom.rpc.io' }), true);
 });
 
