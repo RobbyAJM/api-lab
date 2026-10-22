@@ -53,6 +53,7 @@ import {
 } from '../../utils/grpcSpecification';
 import { getEffectiveEndpointConfig } from '../../utils/tabManager';
 import { parseJsonWithComments } from '../../utils/jsonComments';
+import { mergeFolderSettings } from '../../utils/folderSettings';
 
 function substituteVars(obj: any, vars: Record<string, string>): any {
   if (!obj || !vars) return obj;
@@ -224,10 +225,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
   const [hookLogs, setHookLogs] = useState<string[]>([]);
 
-  const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'auth' | 'scripts' | 'options' | 'specification'>('payload');
+  const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'authorization' | 'scripts' | 'options' | 'specification'>('payload');
+  const [auth, setAuth] = useState(() => initialConfig.auth || { auth_type: 'inherit' as const });
   const [copiedSpec, setCopiedSpec] = useState<'signature' | 'input' | 'output' | 'sample' | null>(null);
   const [sampleSpecLoading, setSampleSpecLoading] = useState(false);
   const [specSamplePayload, setSpecSamplePayload] = useState<any>(null);
+  const [schemaSamplePayload, setSchemaSamplePayload] = useState<any>(null);
   const [generatingPayload, setGeneratingPayload] = useState(false);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -254,6 +257,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       );
       setSelectedService(cfg.service || '');
       setSelectedMethod(cfg.method || '');
+      setSchemaSamplePayload(null);
       setAuthorityOverride(cfg.authority_override || '');
       setAuth(cfg.auth || { auth_type: 'inherit' });
       setTimeoutSeconds(cfg.timeout_seconds !== undefined ? String(cfg.timeout_seconds) : '30');
@@ -261,6 +265,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       setShowReqSchemaPreview(false);
       setShowResSchemaPreview(false);
       setMetadata(Object.entries(cfg.metadata || {}));
+       setAuth(cfg.auth || { auth_type: 'inherit' });
       setPayloadStr(
         cfg.payload !== undefined && cfg.payload !== null
           ? typeof cfg.payload === 'string'
@@ -338,6 +343,38 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     ? selectedService.split('.').pop() || selectedService
     : '';
 
+  const schemaFieldNames = schemaSamplePayload && typeof schemaSamplePayload === 'object'
+    ? Object.keys(schemaSamplePayload)
+    : [];
+
+  useEffect(() => {
+    if (!selectedService || !selectedMethod) {
+      setSchemaSamplePayload(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const activeVars = await resolveVariables();
+        const res = await generateNativeGrpcSamplePayload(
+          {
+            server_address: effectiveServerAddress,
+            service: selectedService,
+            method: selectedMethod,
+            use_tls: effectiveTls,
+          },
+          activeVars
+        );
+        if (!cancelled && res.payload) setSchemaSamplePayload(res.payload);
+      } catch {
+        if (!cancelled) setSchemaSamplePayload(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedService, selectedMethod, effectiveServerAddress, effectiveTls]);
+
   // Focus search input when dropdown opens
   useEffect(() => {
     if (isMethodPickerOpen) {
@@ -405,11 +442,26 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const isStreamingRpc = streamType !== 'unary';
   const isCurrentEndpointStreaming = isStreaming && streamingEndpointId === endpoint.id;
 
+  function applyRequestAuth(metaMap: Record<string, string>) {
+    if (auth.auth_type === 'inherit') return;
+    Object.keys(metaMap).forEach((key) => {
+      if (key.toLowerCase() === 'authorization') delete metaMap[key];
+    });
+    if (auth.auth_type === 'none') return;
+    if (auth.auth_type === 'bearer' && auth.token?.trim()) {
+      const token = auth.token.trim();
+      metaMap.authorization = token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}`;
+    } else if (auth.auth_type === 'custom' && auth.header_name?.trim() && auth.header_value?.trim()) {
+      metaMap[auth.header_name.trim()] = auth.header_value.trim();
+    }
+  }
+
   function buildConfig() {
     const metaMap: Record<string, string> = {};
     for (const [k, v] of metadata) {
       if (k.trim()) metaMap[k.trim()] = v;
     }
+    applyRequestAuth(metaMap);
 
     let payloadJson = {};
     try {
@@ -428,6 +480,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
       max_msg_size_mb: maxMsgSizeMb ? Number(maxMsgSizeMb) : 4,
       metadata: metaMap,
+      auth,
       payload: payloadJson,
       auth,
       pre_request_script: preRequestScript,
@@ -508,6 +561,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     for (const [k, v] of metadata) {
       if (k.trim()) metaMap[k.trim()] = v;
     }
+    applyRequestAuth(metaMap);
     const cfg = {
       server_address: serverAddress,
       use_tls: useTls,
@@ -518,6 +572,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
       max_msg_size_mb: maxMsgSizeMb ? Number(maxMsgSizeMb) : 4,
       metadata: metaMap,
+      auth,
       payload: parsedPayload,
       pre_request_script: preRequestScript,
       post_request_script: postResponseScript,
@@ -534,6 +589,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     timeoutSeconds,
     maxMsgSizeMb,
     metadata,
+    auth,
     payloadStr,
     preRequestScript,
     postResponseScript,
@@ -574,20 +630,21 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     for (const [k, v] of metadata) {
       if (k.trim()) metaMap[k.trim()] = v;
     }
+    applyRequestAuth(metaMap);
 
     let parsedPayload: any = {};
     try {
       parsedPayload = parseJsonWithComments(payloadStr || '{}');
     } catch (err: any) {
-      setLastGrpcResponse({
+       setLastGrpcResponse({
         status_code: 3,
         status_message: 'Invalid JSON',
         response_time_ms: 0,
         response_size_bytes: 0,
         metadata: {},
         body: null,
-        error: `Payload is not valid JSON: ${err.message}`,
-      });
+         error: `Payload is not valid JSON: ${err.message}`,
+       }, endpoint.id);
       setSending(false);
       return;
     }
@@ -596,10 +653,11 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       server_address: effectiveServerAddress,
       service: selectedService,
       method: selectedMethod,
-      metadata: metaMap,
+       metadata: metaMap,
       payload: parsedPayload,
       use_tls: effectiveTls,
       timeout_ms: 30000,
+      auth,
     };
 
     try {
@@ -627,7 +685,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       let finalReq = applyCollectionSettingsToGrpc(
         beforeResult.request,
-        auth.auth_type === 'inherit' ? currentColl?.settings : undefined,
+         auth.auth_type === 'inherit' ? mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id) : undefined,
         beforeResult.variables
       );
 
@@ -654,7 +712,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       // 3. Execute gRPC Request
       const resp = await executeNativeGrpc(finalReq, beforeResult.variables);
-      setLastGrpcResponse(resp);
+      setLastGrpcResponse(resp, endpoint.id);
 
       // 4. Run Post-response Hook (After)
       const afterResult = await runAfterHook(
@@ -686,15 +744,15 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         setStatusMessage(afterResult.error);
       }
     } catch (err: any) {
-      setLastGrpcResponse({
+       setLastGrpcResponse({
         status_code: 14,
         status_message: 'Execution Failed',
         response_time_ms: 0,
         response_size_bytes: 0,
         metadata: {},
         body: null,
-        error: err.message,
-      });
+         error: err.message,
+       }, endpoint.id);
     } finally {
       setSending(false);
     }
@@ -711,6 +769,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     for (const [k, v] of metadata) {
       if (k.trim()) metaMap[k.trim()] = v;
     }
+    applyRequestAuth(metaMap);
 
     let parsedPayload: any = {};
     try {
@@ -724,7 +783,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         metadata: {},
         body: null,
         error: `Payload is not valid JSON: ${err.message}`,
-      });
+      }, endpoint.id);
       setSending(false);
       return;
     }
@@ -734,6 +793,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       service: selectedService,
       method: selectedMethod,
       metadata: metaMap,
+      auth,
       payload: parsedPayload,
       use_tls: effectiveTls,
       timeout_ms: 60000,
@@ -762,7 +822,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       let finalReq = applyCollectionSettingsToGrpc(
         beforeResult.request,
-        auth.auth_type === 'inherit' ? currentColl?.settings : undefined,
+         auth.auth_type === 'inherit' ? mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id) : undefined,
         beforeResult.variables
       );
 
@@ -795,7 +855,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           addStreamMessage(msg, 'in');
         }
       );
-      setLastGrpcResponse(resp);
+      setLastGrpcResponse(resp, endpoint.id);
 
       const afterResult = await runAfterHook(
         postResponseScript,
@@ -834,7 +894,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         metadata: {},
         body: null,
         error: err.message,
-      });
+      }, endpoint.id);
     } finally {
       setIsStreaming(false, null, null);
       setSending(false);
@@ -1191,6 +1251,18 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           </button>
 
           <button
+            onClick={() => setActiveTab('authorization')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'authorization'
+                ? 'border-primary text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Authorization</span>
+            {auth.auth_type !== 'inherit' && auth.auth_type !== 'none' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
+          </button>
+
+          <button
             onClick={() => setActiveTab('scripts')}
             className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'scripts'
@@ -1280,6 +1352,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 value={payloadStr}
                 onChange={setPayloadStr}
                 variables={activeVariables}
+                suggestions={schemaFieldNames}
                 placeholder="{\n  \n}"
               />
             </div>
@@ -1299,7 +1372,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         )}
 
         {/* Auth Panel */}
-        {activeTab === 'auth' && (
+        {activeTab === 'authorization' && (
           <div className="space-y-4 max-w-md">
             <div>
               <label className="block text-zinc-400 mb-1">Authentication Type</label>
@@ -1315,7 +1388,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 fontMono
               />
             </div>
-
             {auth.auth_type === 'inherit' && (
               <div className="p-3 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-1">
                 <div className="text-zinc-200 font-medium flex items-center gap-1.5">

@@ -14,6 +14,46 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
+fn apply_request_metadata<T>(request: &mut tonic::Request<T>, req: &GrpcExecutionRequest) {
+    for (k, v) in &req.metadata {
+        let key_lower = k.to_lowercase();
+        if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key_lower.as_bytes()) {
+            if let Ok(val) = tonic::metadata::MetadataValue::try_from(v.trim()) {
+                request.metadata_mut().insert(key, val);
+            }
+        }
+    }
+
+    let Some(auth) = &req.auth else { return };
+    match auth.auth_type.to_lowercase().as_str() {
+        "bearer" => {
+            let Some(token) = auth.token.as_deref().map(str::trim).filter(|v| !v.is_empty()) else { return };
+            if request.metadata().get("authorization").is_none() {
+                let value = if token.to_lowercase().starts_with("bearer ") {
+                    token.to_string()
+                } else {
+                    format!("Bearer {token}")
+                };
+                if let Ok(value) = tonic::metadata::MetadataValue::try_from(value) {
+                    request.metadata_mut().insert("authorization", value);
+                }
+            }
+        }
+        "custom" => {
+            let (Some(name), Some(value)) = (&auth.header_name, &auth.header_value) else { return };
+            let name = name.trim().to_lowercase();
+            if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(name.as_bytes()) {
+                if request.metadata().get(&key).is_none() {
+                    if let Ok(value) = tonic::metadata::MetadataValue::try_from(value.trim()) {
+                        request.metadata_mut().insert(key, value);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TargetAddressInfo {
     pub host_port: String,
@@ -474,7 +514,7 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
     };
 
     let input_desc = method_desc.input();
-    let dynamic_input: DynamicMessage = match input_desc.deserialize(req.payload) {
+    let dynamic_input: DynamicMessage = match input_desc.clone().deserialize(req.payload.clone()) {
         Ok(msg) => msg,
         Err(e) => {
             return GrpcExecutionResponse {
@@ -521,14 +561,7 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
     };
 
     let mut tonic_req = tonic::Request::new(buf);
-    for (k, v) in req.metadata {
-        let key_lower = k.to_lowercase();
-        if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key_lower.as_bytes()) {
-            if let Ok(val) = tonic::metadata::MetadataValue::try_from(v.trim()) {
-                tonic_req.metadata_mut().insert(key, val);
-            }
-        }
-    }
+    apply_request_metadata(&mut tonic_req, &req);
 
     let timeout_ms = req.timeout_ms.unwrap_or(30_000);
     let codec = DynamicRawCodec;
@@ -702,7 +735,7 @@ where
     };
 
     let input_desc = method_desc.input();
-    let dynamic_input: DynamicMessage = match input_desc.clone().deserialize(req.payload) {
+    let dynamic_input: DynamicMessage = match input_desc.clone().deserialize(req.payload.clone()) {
         Ok(msg) => msg,
         Err(e) => {
             return GrpcExecutionResponse {
@@ -788,26 +821,12 @@ where
         }
 
         let mut tonic_req = tonic::Request::new(outbound);
-        for (k, v) in req.metadata {
-            let key_lower = k.to_lowercase();
-            if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key_lower.as_bytes()) {
-                if let Ok(val) = tonic::metadata::MetadataValue::try_from(v.trim()) {
-                    tonic_req.metadata_mut().insert(key, val);
-                }
-            }
-        }
+        apply_request_metadata(&mut tonic_req, &req);
         let res = grpc_client.streaming(tonic_req, http_path, codec).await;
         (Some(tx), res)
     } else {
         let mut tonic_req = tonic::Request::new(buf);
-        for (k, v) in req.metadata {
-            let key_lower = k.to_lowercase();
-            if let Ok(key) = tonic::metadata::MetadataKey::from_bytes(key_lower.as_bytes()) {
-                if let Ok(val) = tonic::metadata::MetadataValue::try_from(v.trim()) {
-                    tonic_req.metadata_mut().insert(key, val);
-                }
-            }
-        }
+        apply_request_metadata(&mut tonic_req, &req);
         let res = grpc_client.server_streaming(tonic_req, http_path, codec).await;
         (None, res)
     };

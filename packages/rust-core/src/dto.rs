@@ -109,6 +109,7 @@ pub struct CreateFolderDto {
     pub parent_folder_id: Option<Uuid>,
     pub grpc_url: Option<String>,
     pub swagger_url: Option<String>,
+    pub settings: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +119,7 @@ pub struct UpdateFolderDto {
     pub sort_order: Option<i32>,
     pub grpc_url: Option<Option<String>>,
     pub swagger_url: Option<Option<String>>,
+    pub settings: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -201,7 +203,7 @@ pub struct HttpExecutionRequest {
     pub headers: HashMap<String, String>,
     pub query_params: Vec<(String, String)>,
     pub body: Option<String>,
-    pub body_type: Option<String>, // "none", "json", "text", "form", "multipart"
+    pub body_type: Option<String>, // "none", "json", "text", "form", "multipart", "binary"
     pub auth: Option<HttpAuth>,
     pub timeout_ms: Option<u64>,
 }
@@ -226,6 +228,15 @@ pub struct GrpcExecutionRequest {
     pub payload: serde_json::Value,
     pub timeout_ms: Option<u64>,
     pub use_tls: Option<bool>,
+    pub auth: Option<GrpcAuth>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrpcAuth {
+    pub auth_type: String,
+    pub token: Option<String>,
+    pub header_name: Option<String>,
+    pub header_value: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

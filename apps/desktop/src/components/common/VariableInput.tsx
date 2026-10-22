@@ -36,6 +36,11 @@ export const VariableInput: React.FC<VariableInputProps> = ({
     varName: string;
     rect: BoundingBox;
   } | null>(null);
+  const [variableCompletion, setVariableCompletion] = useState<{
+    items: string[];
+    start: number;
+    selected: number;
+  } | null>(null);
 
   // Fetch active environment variables for rich metadata (is_sensitive, id, etc.)
   const { data: envVars = [] } = useQuery<VariableResponse[]>({
@@ -60,6 +65,46 @@ export const VariableInput: React.FC<VariableInputProps> = ({
 
   // Prefer provided variables if explicitly given; otherwise use envVars
   const effectiveVars = variables !== undefined ? variables : envVars;
+
+  function getVariableNames(): string[] {
+    if (Array.isArray(effectiveVars)) return effectiveVars.map((v) => v.key);
+    if (effectiveVars instanceof Set) return Array.from(effectiveVars);
+    if (effectiveVars instanceof Map) return Array.from(effectiveVars.keys());
+    return effectiveVars ? Object.keys(effectiveVars) : [];
+  }
+
+  function updateVariableCompletion(nextValue: string, cursor: number) {
+    const match = nextValue.slice(0, cursor).match(/\{\{([A-Za-z0-9_]*)$/);
+    if (!match) {
+      setVariableCompletion(null);
+      return;
+    }
+    const query = match[1].toLowerCase();
+    const items = getVariableNames()
+      .filter((name) => name.toLowerCase().includes(query))
+      .slice(0, 8);
+    setVariableCompletion(items.length > 0 ? {
+      items,
+      start: cursor - match[1].length,
+      selected: 0,
+    } : null);
+  }
+
+  function insertVariable(name: string) {
+    const input = inputRef.current;
+    if (!input || !variableCompletion) return;
+    const before = value.slice(0, variableCompletion.start);
+    const after = value.slice(input.selectionStart ?? value.length);
+    const inserted = `${name}}}`;
+    const nextValue = `${before}${inserted}${after}`;
+    const nextCursor = variableCompletion.start + inserted.length;
+    setVariableCompletion(null);
+    onChange(nextValue);
+    requestAnimationFrame(() => {
+      input.setSelectionRange(nextCursor, nextCursor);
+      input.focus();
+    });
+  }
 
   function handleScroll(e: React.UIEvent<HTMLInputElement>) {
     if (backdropRef.current) {
@@ -107,7 +152,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
   return (
     <div
       onClick={() => inputRef.current?.focus()}
-      className={`relative flex items-center overflow-hidden font-mono text-xs cursor-text ${className}`}
+      className={`relative flex items-center overflow-visible font-mono text-xs cursor-text ${className}`}
     >
       {/* Syntax Highlight Backdrop */}
       <div
@@ -158,12 +203,28 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         type="text"
         value={value}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onChange(e.target.value);
+          updateVariableCompletion(e.target.value, e.target.selectionStart ?? e.target.value.length);
+        }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         onKeyDown={(e) => {
           if (hoverState && (e.key === 'Escape' || e.key === 'Enter')) {
             setHoverState(null);
+          }
+          if (variableCompletion && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault();
+            const delta = e.key === 'ArrowDown' ? 1 : -1;
+            setVariableCompletion((prev) => prev && {
+              ...prev,
+              selected: (prev.selected + delta + prev.items.length) % prev.items.length,
+            });
+          } else if (variableCompletion && (e.key === 'Enter' || e.key === 'Tab')) {
+            e.preventDefault();
+            insertVariable(variableCompletion.items[variableCompletion.selected]);
+          } else if (e.key === 'Escape') {
+            setVariableCompletion(null);
           }
         }}
         onScroll={handleScroll}
@@ -171,6 +232,25 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         spellCheck={false}
         className={`w-full h-full px-3 py-1.5 font-mono text-xs bg-transparent text-transparent caret-zinc-100 focus:outline-none placeholder-transparent selection:bg-primary/40 ${inputClassName}`}
       />
+
+      {variableCompletion && (
+        <div className="absolute z-30 left-0 top-full mt-1 min-w-48 max-w-72 border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden">
+          {variableCompletion.items.map((name, index) => (
+            <button
+              key={name}
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                insertVariable(name);
+              }}
+              className={`block w-full text-left px-2.5 py-1.5 font-mono text-[11px] ${index === variableCompletion.selected ? 'bg-primary/20 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+            >
+              {`{{${name}}}`}
+            </button>
+          ))}
+          <div className="border-t border-zinc-800 px-2 py-1 text-[10px] text-zinc-500">Enter / Tab to insert</div>
+        </div>
+      )}
 
       {/* Variable Hover Card */}
       {hoverState && (

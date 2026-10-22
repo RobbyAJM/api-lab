@@ -38,13 +38,15 @@ import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
   const {
-    lastHttpResponse,
-    lastGrpcResponse,
+    getHttpResponse,
+    getGrpcResponse,
     isStreaming,
     streamMessages,
     clearStreamMessages,
     stopStreaming,
   } = useAppStore();
+  const lastHttpResponse = getHttpResponse(endpoint.id);
+  const lastGrpcResponse = getGrpcResponse(endpoint.id);
 
   const isGrpc = endpoint.protocol === 'grpc';
   const isStreamRpc =
