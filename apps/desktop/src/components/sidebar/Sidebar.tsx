@@ -31,6 +31,7 @@ import {
   ChevronsDownUp,
   RefreshCw,
   Keyboard,
+  Palette,
   Globe,
 } from 'lucide-react';
 import { GenerateGrpcModal } from './GenerateGrpcModal';
@@ -67,6 +68,7 @@ export const Sidebar: React.FC = () => {
     setWorkspaceModalOpen,
     setCommandPaletteOpen,
     setShortcutsHelpOpen,
+    setThemeModalOpen,
   } = useAppStore();
 
   const [newCollectionName, setNewCollectionName] = useState('');
@@ -393,6 +395,13 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-0.5 text-zinc-400 flex-shrink-0">
+          <button
+            onClick={() => setThemeModalOpen(true)}
+            className="p-1 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
+            title="Themes (Colors)"
+          >
+            <Palette size={13} />
+          </button>
           <button
             onClick={() => setShortcutsHelpOpen(true)}
             className="p-1 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"

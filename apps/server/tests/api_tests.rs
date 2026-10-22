@@ -69,6 +69,7 @@ async fn test_auth_and_password_reset_flow() {
     assert_eq!(res.status(), StatusCode::OK);
     let auth_res: AuthResponse = parse_body(res.into_body()).await;
     assert_eq!(auth_res.user.email, email);
+    assert_eq!(auth_res.user.theme, "api-lab");
     let token = auth_res.token;
 
     // 2. /auth/me with Bearer token
@@ -816,4 +817,55 @@ async fn test_create_and_retrieve_swagger_folder_with_swagger_url() {
     assert_eq!(res.status(), StatusCode::OK);
     let updated: Value = parse_body(res.into_body()).await;
     assert_eq!(updated["swagger_url"].as_str().unwrap(), "http://localhost:9090/swagger/combined/nuconnector.swagger.json");
+}
+
+#[tokio::test]
+async fn test_user_theme_persistence() {
+    let app = setup_app().await;
+    let email = format!("theme_user_{}@example.com", Uuid::new_v4());
+
+    // 1. Register user
+    let reg_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email,
+                "name": "Theme Tester",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let auth: AuthResponse = parse_body(res.into_body()).await;
+    assert_eq!(auth.user.theme, "api-lab");
+    let token = auth.token;
+
+    // 2. Update theme to "dracula"
+    let update_theme_req = Request::builder()
+        .method("PATCH")
+        .uri("/api/v1/auth/theme")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "theme": "dracula" }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(update_theme_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let updated_user: UserSummary = parse_body(res.into_body()).await;
+    assert_eq!(updated_user.theme, "dracula");
+
+    // 3. Verify /auth/me returns persisted theme
+    let me_req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/auth/me")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(me_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let me: Value = parse_body(res.into_body()).await;
+    assert_eq!(me["user"]["theme"].as_str().unwrap(), "dracula");
 }

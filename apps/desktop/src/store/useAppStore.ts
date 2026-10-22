@@ -6,7 +6,8 @@ import type {
   HttpExecutionResponse,
   GrpcExecutionResponse,
 } from '@api-lab/api-types';
-import { getAuthToken, setAuthToken } from '../api/client';
+import { getAuthToken, setAuthToken, apiRequest } from '../api/client';
+import { applyTheme, getThemeById, DEFAULT_THEME_ID } from '../utils/theme';
 import { cancelNativeGrpcStream } from '../api/native';
 import {
   openEndpointInTabs,
@@ -81,6 +82,10 @@ interface AppState {
   workspaceModalOpen: boolean;
   commandPaletteOpen: boolean;
   shortcutsHelpOpen: boolean;
+  themeModalOpen: boolean;
+  activeThemeId: string;
+  setThemeModalOpen: (open: boolean) => void;
+  setTheme: (themeId: string) => void;
   editVariableModal: {
     isOpen: boolean;
     key: string;
@@ -149,9 +154,40 @@ interface AppState {
   closeCollectionSettingsModal: () => void;
 }
 
+const initialTheme =
+  typeof window !== 'undefined'
+    ? localStorage.getItem('api-lab-theme') || DEFAULT_THEME_ID
+    : DEFAULT_THEME_ID;
+
+if (typeof window !== 'undefined') {
+  applyTheme(getThemeById(initialTheme));
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   token: getAuthToken(),
   user: null,
+  activeThemeId: initialTheme,
+  themeModalOpen: false,
+  setThemeModalOpen: (open: boolean) => set({ themeModalOpen: open }),
+  setTheme: (themeId: string) => {
+    applyTheme(getThemeById(themeId));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('api-lab-theme', themeId);
+    }
+    set((state) => ({
+      activeThemeId: themeId,
+      user: state.user ? { ...state.user, theme: themeId } : null,
+    }));
+    const token = get().token;
+    if (token) {
+      apiRequest('/auth/theme', {
+        method: 'PATCH',
+        body: JSON.stringify({ theme: themeId }),
+      }).catch((err) => {
+        console.error('Failed to sync theme with backend:', err);
+      });
+    }
+  },
   workspaces: [],
   activeWorkspaceId: null,
   activeWorkspaceRole: null,
@@ -239,12 +275,19 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setAuth: (token, user, workspace) => {
     setAuthToken(token);
+    if (user.theme) {
+      applyTheme(getThemeById(user.theme));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('api-lab-theme', user.theme);
+      }
+    }
     set((state) => {
       let activeWs = workspace?.id || state.activeWorkspaceId;
       let role = workspace?.role || state.activeWorkspaceRole;
       return {
         token,
         user,
+        activeThemeId: user.theme || state.activeThemeId,
         activeWorkspaceId: activeWs,
         activeWorkspaceRole: role,
         authModalOpen: false,

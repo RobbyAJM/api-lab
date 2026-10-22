@@ -5,8 +5,8 @@ use rust_core::crypto::{
     generate_token_hex, hash_password, hash_token_sha256, verify_password,
 };
 use rust_core::dto::{
-    AuthResponse, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, UserSummary,
-    WorkspaceSummary,
+    AuthResponse, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, UpdateThemeDto,
+    UserSummary, WorkspaceSummary,
 };
 use rust_core::models::{Role, User};
 use serde::{Deserialize, Serialize};
@@ -129,6 +129,7 @@ pub async fn register(
             email,
             name: dto.name.trim().to_string(),
             role: "admin".into(),
+            theme: "api-lab".into(),
         },
         workspace: Some(WorkspaceSummary {
             id: workspace_id,
@@ -266,6 +267,7 @@ pub async fn accept_invitation(
             email,
             name: dto.name.trim().to_string(),
             role: assigned_role.as_str().into(),
+            theme: "api-lab".into(),
         },
         workspace: Some(WorkspaceSummary {
             id: invite.workspace_id,
@@ -283,7 +285,7 @@ pub async fn login(
     let user = sqlx::query_as!(
         User,
         r#"
-        SELECT id, email, name, password_hash, role, created_at, updated_at
+        SELECT id, email, name, password_hash, role, theme, created_at, updated_at
         FROM users
         WHERE email = $1
         "#,
@@ -347,6 +349,7 @@ pub async fn login(
             email: user.email,
             name: user.name,
             role: user.role,
+            theme: user.theme,
         },
         workspace: workspace_summary,
     }))
@@ -521,7 +524,41 @@ pub async fn get_me(
             email: auth.user.email,
             name: auth.user.name,
             role: auth.user.role,
+            theme: auth.user.theme,
         },
         workspaces,
+    }))
+}
+
+pub async fn update_theme(
+    auth: AuthUser,
+    State(state): State<SharedState>,
+    Json(dto): Json<UpdateThemeDto>,
+) -> Result<Json<UserSummary>, ApiError> {
+    let theme = dto.theme.trim();
+    if theme.is_empty() || theme.len() > 64 {
+        return Err(ApiError::BadRequest("invalid theme identifier".into()));
+    }
+
+    let updated = sqlx::query!(
+        r#"
+        UPDATE users
+        SET theme = $1, updated_at = NOW()
+        WHERE id = $2
+        RETURNING id, email, name, role, theme
+        "#,
+        theme,
+        auth.user.id
+    )
+    .fetch_one(&state.pool)
+    .await
+    .map_err(ApiError::Database)?;
+
+    Ok(Json(UserSummary {
+        id: updated.id,
+        email: updated.email,
+        name: updated.name,
+        role: updated.role,
+        theme: updated.theme,
     }))
 }

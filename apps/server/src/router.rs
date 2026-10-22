@@ -24,6 +24,7 @@ pub fn create_router(state: SharedState) -> Router {
         .route("/auth/forgot-password", post(auth::forgot_password))
         .route("/auth/reset-password", post(auth::reset_password))
         .route("/auth/me", get(auth::get_me))
+        .route("/auth/theme", patch(auth::update_theme))
         // Workspaces
         .route("/workspaces", get(workspaces::list_workspaces).post(workspaces::create_workspace))
         .route(
