@@ -169,6 +169,13 @@ test('filterCollectionTree: filters by protocol or method', () => {
   assert.ok(res.matchedFolderIds.has('f-grandchild-sub'));
 });
 
+test('filterCollectionTree: folder match keeps all files in matched folder', () => {
+  const tree = buildFolderTree(mockFolders, mockEndpoints);
+  const { filteredTree } = filterCollectionTree(tree, 'auth');
+  const folder = filteredTree.rootFolders[0].children[0];
+  assert.equal(folder.endpoints.length, 2);
+});
+
 test('getDescendantFolderIds: finds folder and all recursive subfolders', () => {
   // f-root-1 contains f-child-auth, which contains f-grandchild-sub
   const descendants = getDescendantFolderIds(mockFolders, 'f-root-1');
@@ -440,6 +447,5 @@ test('isCollectionHighlighted: matches collection containing active endpoint', (
   assert.equal(isCollectionHighlighted('col-1', null), false);
   assert.equal(isCollectionHighlighted('col-1', undefined), false);
 });
-
 
 

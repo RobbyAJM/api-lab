@@ -78,6 +78,10 @@ export function applyInheritedGrpcAuth(
     metadata: { ...req.metadata },
   };
 
+  const endpointAuthType = reqClone.auth?.auth_type?.toLowerCase();
+  if (endpointAuthType === 'none') return reqClone;
+  if (endpointAuthType && endpointAuthType !== 'inherit') return reqClone;
+
   const collectionAuth: CollectionAuthSettings | undefined = settings?.auth;
   if (!collectionAuth || collectionAuth.auth_type === 'none') {
     return reqClone;
@@ -95,7 +99,7 @@ export function applyInheritedGrpcAuth(
     }
   } else if (authType === 'custom' && collectionAuth.header_name && collectionAuth.header_value) {
     const name = substitute(collectionAuth.header_name.trim(), variables).trim().toLowerCase();
-    const existing = reqClone.metadata[name];
+    const existing = Object.entries(reqClone.metadata).find(([key]) => key.toLowerCase() === name)?.[1];
     if (!existing || !existing.trim()) {
       const val = substitute(collectionAuth.header_value.trim(), variables).trim();
       reqClone.metadata[name] = val;
