@@ -12,6 +12,8 @@ import {
   isConfigDirty,
   getEffectiveEndpointConfig,
   getAdjacentEndpoint,
+  setEndpointResponseInState,
+  getEndpointResponseFromState,
   type TabState,
 } from './tabManager.ts';
 import type { Endpoint } from '@api-lab/api-types';
@@ -352,4 +354,44 @@ test('getAdjacentEndpoint: navigates left and right between tabs', () => {
 
   // Empty list returns null
   assert.equal(getAdjacentEndpoint([], 'ep1', 'prev'), null);
+});
+
+test('endpointResponses: preserves responses per tab across switches and cleans on close', () => {
+  const ep1 = createMockEndpoint('ep1', 'Tab 1');
+  const ep2 = createMockEndpoint('ep2', 'Tab 2');
+
+  let state: TabState = {
+    openEndpoints: [],
+    activeEndpointId: null,
+    activeEndpoint: null,
+    endpointDrafts: {},
+    endpointResponses: {},
+  };
+
+  // Open Tab 1 and record response
+  state = openEndpointInTabs(state, ep1);
+  state = setEndpointResponseInState(state, 'ep1', {
+    http: { status_code: 200, body: '{"ok":true}', headers: {}, response_time_ms: 10, response_size_bytes: 12 },
+  });
+  assert.equal(getEndpointResponseFromState(state, 'ep1')?.http?.status_code, 200);
+
+  // Open Tab 2 and record response
+  state = openEndpointInTabs(state, ep2);
+  state = setEndpointResponseInState(state, 'ep2', {
+    grpc: { status_code: 0, status_message: 'OK', body: {}, metadata: {}, response_time_ms: 5, response_size_bytes: 8 },
+  });
+
+  // Switch back to Tab 1
+  state = openEndpointInTabs(state, ep1);
+  assert.equal(getEndpointResponseFromState(state, 'ep1')?.http?.status_code, 200);
+  assert.equal(getEndpointResponseFromState(state, 'ep2')?.grpc?.status_code, 0);
+
+  // Close Tab 2 cleans Tab 2 response
+  state = closeEndpointInTabs(state, 'ep2');
+  assert.equal(getEndpointResponseFromState(state, 'ep1')?.http?.status_code, 200);
+  assert.equal(getEndpointResponseFromState(state, 'ep2'), null);
+
+  // Close all cleans everything
+  state = closeAllEndpointsInTabs();
+  assert.deepEqual(state.endpointResponses, {});
 });

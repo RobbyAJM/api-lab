@@ -5,6 +5,7 @@ import { apiRequest } from '../../api/client';
 import {
   executeNativeGrpc,
   executeNativeGrpcStream,
+  sendNativeGrpcStreamMessage,
   discoverNativeGrpcServices,
   generateNativeGrpcSamplePayload,
 } from '../../api/native';
@@ -15,6 +16,7 @@ import type {
   VariableResponse,
   Collection,
   CollectionFolder,
+  HttpAuth,
 } from '@api-lab/api-types';
 import {
   Save,
@@ -26,6 +28,8 @@ import {
   ChevronDown,
   Radio,
   ArrowDownUp,
+  ArrowLeftRight,
+  Send,
   Shield,
   Search,
   X,
@@ -51,6 +55,22 @@ import { getEffectiveEndpointConfig } from '../../utils/tabManager';
 import { parseJsonWithComments } from '../../utils/jsonComments';
 import { mergeFolderSettings } from '../../utils/folderSettings';
 
+function substituteVars(obj: any, vars: Record<string, string>): any {
+  if (!obj || !vars) return obj;
+  if (typeof obj === 'string') {
+    return obj.replace(/\{\{([A-Za-z0-9_]+)\}\}/g, (_, k) => vars[k] ?? vars[k.toLowerCase()] ?? vars[k.toUpperCase()] ?? `{{${k}}}`);
+  }
+  if (Array.isArray(obj)) return obj.map((i) => substituteVars(i, vars));
+  if (typeof obj === 'object') {
+    const res: any = {};
+    for (const [k, v] of Object.entries(obj)) {
+      res[k] = substituteVars(v, vars);
+    }
+    return res;
+  }
+  return obj;
+}
+
 export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
   const {
@@ -58,6 +78,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     lastGrpcResponse,
     setLastGrpcResponse,
     isStreaming,
+    activeStreamId,
     streamingEndpointId,
     setIsStreaming,
     addStreamMessage,
@@ -92,6 +113,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [authorityOverride, setAuthorityOverride] = useState(
     initialConfig.authority_override || ''
   );
+  const [auth, setAuth] = useState<HttpAuth>(() => {
+    return initialConfig.auth || { auth_type: 'inherit' };
+  });
   const [timeoutSeconds, setTimeoutSeconds] = useState(
     initialConfig.timeout_seconds !== undefined ? String(initialConfig.timeout_seconds) : '30'
   );
@@ -235,6 +259,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       setSelectedMethod(cfg.method || '');
       setSchemaSamplePayload(null);
       setAuthorityOverride(cfg.authority_override || '');
+      setAuth(cfg.auth || { auth_type: 'inherit' });
       setTimeoutSeconds(cfg.timeout_seconds !== undefined ? String(cfg.timeout_seconds) : '30');
       setMaxMsgSizeMb(cfg.max_msg_size_mb !== undefined ? String(cfg.max_msg_size_mb) : '4');
       setShowReqSchemaPreview(false);
@@ -457,6 +482,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       metadata: metaMap,
       auth,
       payload: payloadJson,
+      auth,
       pre_request_script: preRequestScript,
       post_request_script: postResponseScript,
       post_response_script: postResponseScript,
@@ -578,8 +604,13 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
         if (isStreamingRpc) {
-          if (!isCurrentEndpointStreaming) handleStartStream();
-          else handleStopStream();
+          if (isCurrentEndpointStreaming && streamType === 'bidi_stream') {
+            handleSendStreamMessage();
+          } else if (!isCurrentEndpointStreaming) {
+            handleStartStream();
+          } else {
+            handleStopStream();
+          }
         } else {
           handleSend();
         }
@@ -587,7 +618,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentVersion, isStreamingRpc, isCurrentEndpointStreaming, selectedService, selectedMethod, preRequestScript, postResponseScript, payloadStr, serverAddress, useTls, metadata]);
+  }, [currentVersion, isStreamingRpc, isCurrentEndpointStreaming, streamType, activeStreamId, selectedService, selectedMethod, preRequestScript, postResponseScript, payloadStr, serverAddress, useTls, metadata, auth]);
 
   // Execute unary gRPC
   async function handleSend() {
@@ -652,11 +683,32 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         }
       }
 
-      const finalReq = applyCollectionSettingsToGrpc(
+      let finalReq = applyCollectionSettingsToGrpc(
         beforeResult.request,
-         mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id),
+         auth.auth_type === 'inherit' ? mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id) : undefined,
         beforeResult.variables
       );
+
+      if (auth.auth_type === 'bearer' && auth.token) {
+        const token = substituteVars(auth.token.trim(), beforeResult.variables);
+        finalReq = {
+          ...finalReq,
+          metadata: {
+            ...finalReq.metadata,
+            authorization: token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}`,
+          },
+        };
+      } else if (auth.auth_type === 'custom' && auth.header_name && auth.header_value) {
+        const headerName = substituteVars(auth.header_name.trim(), beforeResult.variables).toLowerCase();
+        const headerVal = substituteVars(auth.header_value.trim(), beforeResult.variables);
+        finalReq = {
+          ...finalReq,
+          metadata: {
+            ...finalReq.metadata,
+            [headerName]: headerVal,
+          },
+        };
+      }
 
       // 3. Execute gRPC Request
       const resp = await executeNativeGrpc(finalReq, beforeResult.variables);
@@ -768,11 +820,32 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         }
       }
 
-      const finalReq = applyCollectionSettingsToGrpc(
+      let finalReq = applyCollectionSettingsToGrpc(
         beforeResult.request,
-         mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id),
+         auth.auth_type === 'inherit' ? mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id) : undefined,
         beforeResult.variables
       );
+
+      if (auth.auth_type === 'bearer' && auth.token) {
+        const token = substituteVars(auth.token.trim(), beforeResult.variables);
+        finalReq = {
+          ...finalReq,
+          metadata: {
+            ...finalReq.metadata,
+            authorization: token.toLowerCase().startsWith('bearer ') ? token : `Bearer ${token}`,
+          },
+        };
+      } else if (auth.auth_type === 'custom' && auth.header_name && auth.header_value) {
+        const headerName = substituteVars(auth.header_name.trim(), beforeResult.variables).toLowerCase();
+        const headerVal = substituteVars(auth.header_value.trim(), beforeResult.variables);
+        finalReq = {
+          ...finalReq,
+          metadata: {
+            ...finalReq.metadata,
+            [headerName]: headerVal,
+          },
+        };
+      }
 
       const resp = await executeNativeGrpcStream(
         finalReq,
@@ -828,6 +901,27 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
   }
 
+  async function handleSendStreamMessage() {
+    if (!isCurrentEndpointStreaming || !activeStreamId) return;
+    let parsedPayload: any = {};
+    try {
+      parsedPayload = parseJsonWithComments(payloadStr || '{}');
+    } catch (err: any) {
+      setStatusMessage(`Invalid JSON: ${err.message}`);
+      return;
+    }
+    const currentVars = await resolveVariables();
+    const finalPayload = substituteVars(parsedPayload, currentVars);
+    try {
+      await sendNativeGrpcStreamMessage(activeStreamId, finalPayload);
+      addStreamMessage(finalPayload, 'out');
+      setStatusMessage('Sent message to stream');
+      setTimeout(() => setStatusMessage(null), 2000);
+    } catch (err: any) {
+      setStatusMessage(`Send failed: ${err.message || err}`);
+    }
+  }
+
   async function handleStopStream() {
     await stopStreaming();
     setSending(false);
@@ -840,12 +934,28 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       {/* Breadcrumbs Row + Save Button (Image 1) */}
       <div className="px-4 py-2 flex items-center justify-between text-xs select-none flex-shrink-0">
         <div className="flex items-center gap-1.5 font-mono text-[11px] truncate mr-2">
-          <Radio size={13} className="text-secondary flex-shrink-0" />
+          {streamType === 'bidi_stream' ? (
+            <ArrowLeftRight size={13} className="text-amber-400 flex-shrink-0" />
+          ) : streamType === 'omni_stream' ? (
+            <ArrowDownUp size={13} className="text-amber-400 flex-shrink-0" />
+          ) : (
+            <Radio size={13} className="text-secondary flex-shrink-0" />
+          )}
           <span className="text-zinc-400">{collection?.name?.toUpperCase() || 'COLLECTION'}</span>
           <span className="text-zinc-600">&gt;</span>
           <span className="text-zinc-400">{shortServiceName || 'Service'}</span>
           <span className="text-zinc-600">&gt;</span>
           <span className="text-white font-semibold">{selectedMethod || endpoint.name}</span>
+          {streamType === 'bidi_stream' && (
+            <span className="ml-1 px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/50 text-amber-300 text-[10px] font-sans">
+              Bidi Stream
+            </span>
+          )}
+          {streamType === 'omni_stream' && (
+            <span className="ml-1 px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/50 text-amber-300 text-[10px] font-sans">
+              Omni Stream
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -1026,11 +1136,15 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                             >
                               <ArrowDownUp size={12} className={isSelected ? 'text-primary' : 'text-zinc-500'} />
                               <span className="truncate">{m.name}</span>
-                              {m.stream_type && m.stream_type !== 'unary' && (
-                                <span className="ml-auto text-[10px] text-amber-400/80 font-sans">
-                                  stream
+                              {m.stream_type === 'bidi_stream' ? (
+                                <span className="ml-auto text-[10px] text-amber-400 font-sans px-1 rounded bg-amber-950/60 border border-amber-800/50">
+                                  bidi
                                 </span>
-                              )}
+                              ) : m.stream_type === 'omni_stream' ? (
+                                <span className="ml-auto text-[10px] text-amber-400 font-sans px-1 rounded bg-amber-950/60 border border-amber-800/50">
+                                  omni
+                                </span>
+                              ) : null}
                             </button>
                           );
                         })}
@@ -1076,6 +1190,20 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             {sending ? 'Calling...' : isStreamingRpc ? (isCurrentEndpointStreaming ? 'Stop' : 'Stream') : 'Invoke'}
           </span>
         </button>
+
+        {/* Send message on Bidirectional Stream */}
+        {streamType === 'bidi_stream' && (
+          <button
+            type="button"
+            onClick={handleSendStreamMessage}
+            disabled={!isCurrentEndpointStreaming}
+            className="px-3.5 py-2 text-xs font-semibold rounded transition flex items-center gap-1.5 h-9 flex-shrink-0 cursor-pointer shadow-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white"
+            title={isCurrentEndpointStreaming ? "Send message to stream (Ctrl+Enter)" : "Start stream first to send messages"}
+          >
+            <Send size={12} />
+            <span>Send</span>
+          </button>
+        )}
       </div>
 
       {/* Tabs Bar */}
@@ -1101,6 +1229,25 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Metadata</span>
+            {metadata.filter(([k]) => k.trim()).length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
+                {metadata.filter(([k]) => k.trim()).length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('auth')}
+            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              activeTab === 'auth'
+                ? 'border-primary text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <span>Auth</span>
+            {auth.auth_type !== 'none' && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            )}
           </button>
 
           <button
@@ -1224,57 +1371,82 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           />
         )}
 
+        {/* Auth Panel */}
         {activeTab === 'authorization' && (
-          <div className="max-w-2xl space-y-4">
+          <div className="space-y-4 max-w-md">
             <div>
-              <label className="block text-zinc-400 mb-1">Auth Type</label>
+              <label className="block text-zinc-400 mb-1">Authentication Type</label>
               <Select
                 value={auth.auth_type}
-                onChange={(val) => setAuth({ ...auth, auth_type: val as typeof auth.auth_type })}
+                onChange={(val) => setAuth({ ...auth, auth_type: val as any })}
                 options={[
                   { value: 'inherit', label: 'Inherit auth from collection' },
-                  { value: 'none', label: 'No Auth (Inherit Disabled)' },
-                  { value: 'bearer', label: 'Bearer Token (JWT / API Token)' },
-                  { value: 'custom', label: 'Custom Header (API Key)' },
+                  { value: 'none', label: 'No Auth' },
+                  { value: 'bearer', label: 'Bearer Token' },
+                  { value: 'custom', label: 'Custom Header' },
                 ]}
                 fontMono
               />
             </div>
             {auth.auth_type === 'inherit' && (
-              <p className="text-[11px] text-zinc-500">Uses Authorization from collection settings.</p>
-            )}
-            {auth.auth_type === 'bearer' && (
-              <div>
-                <label className="block text-zinc-400 mb-1">Bearer Token</label>
-                <VariableInput
-                  value={auth.token || ''}
-                  onChange={(value) => setAuth({ ...auth, token: value })}
-                  variables={activeVariables}
-                  placeholder="{{TOKEN}} or raw-token"
-                  className="w-full h-9 px-2.5 bg-zinc-900 border border-zinc-800 rounded text-xs font-mono focus:outline-none focus:border-primary"
-                />
+              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-1">
+                <div className="text-zinc-200 font-medium flex items-center gap-1.5">
+                  <Shield size={13} className="text-secondary" />
+                  <span>Inherited from Collection: {collection?.name || 'Current'}</span>
+                </div>
+                <div className="text-zinc-400 text-[11px]">
+                  {collection?.settings?.auth && collection.settings.auth.auth_type !== 'none'
+                    ? `Type: ${collection.settings.auth.auth_type.toUpperCase()} ${
+                        collection.settings.auth.token
+                          ? `(Token: ${collection.settings.auth.token.slice(0, 15)}...)`
+                          : ''
+                      }`
+                    : 'No authorization configured on this collection yet. Configure in Collection Settings.'}
+                </div>
               </div>
             )}
+
+            {auth.auth_type === 'bearer' && (
+              <div className="space-y-1.5">
+                <label className="block text-zinc-400 font-medium">Bearer Token</label>
+                <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-primary h-8">
+                  <VariableInput
+                    value={auth.token || ''}
+                    onChange={(newVal) => setAuth({ ...auth, token: newVal })}
+                    variables={activeVariables}
+                    placeholder="{{TOKEN}} or eyJhbGciOi..."
+                    className="w-full h-full text-xs font-mono"
+                  />
+                </div>
+                <p className="text-[10px] text-zinc-500 font-mono">
+                  Injected into gRPC metadata <code className="text-zinc-400">authorization</code>.
+                </p>
+              </div>
+            )}
+
             {auth.auth_type === 'custom' && (
               <div className="space-y-3">
                 <div>
-                  <label className="block text-zinc-400 mb-1">Header / Metadata Name</label>
+                  <label className="block text-zinc-400 mb-1 font-medium">Header Name</label>
                   <input
+                    type="text"
                     value={auth.header_name || ''}
                     onChange={(e) => setAuth({ ...auth, header_name: e.target.value })}
-                    placeholder="Authorization or x-api-key"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs"
+                    placeholder="x-api-key"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-100 focus:outline-none focus:border-primary"
                   />
                 </div>
                 <div>
-                  <label className="block text-zinc-400 mb-1">Header / Metadata Value</label>
-                  <VariableInput
-                    value={auth.header_value || ''}
-                    onChange={(value) => setAuth({ ...auth, header_value: value })}
-                    variables={activeVariables}
-                    placeholder="{{API_KEY}}"
-                    className="w-full h-9 px-2.5 bg-zinc-900 border border-zinc-800 rounded text-xs font-mono focus:outline-none focus:border-primary"
-                  />
+                  <label className="block text-zinc-400 mb-1 font-medium">Header Value</label>
+                  <div className="bg-zinc-950 border border-zinc-800 rounded focus-within:border-primary h-8">
+                    <VariableInput
+                      value={auth.header_value || ''}
+                      onChange={(newVal) => setAuth({ ...auth, header_value: newVal })}
+                      variables={activeVariables}
+                      placeholder="key_value or {{API_KEY}}"
+                      className="w-full h-full text-xs font-mono"
+                    />
+                  </div>
                 </div>
               </div>
             )}

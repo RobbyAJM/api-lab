@@ -68,6 +68,8 @@ test('getEndpointStreamActionInfo: streaming endpoint shows Stop Stream when act
 
   assert.equal(info.canStopStream, true);
   assert.equal(info.canStartStream, false);
+  assert.equal(info.canSendStreamMessage, true, 'Active bidi stream allows sending messages');
+  assert.equal(info.isBidiStream, true);
   assert.equal(info.buttonLabel, 'Stop Stream');
   assert.equal(info.isStreaming, true);
 });
@@ -100,6 +102,8 @@ test('getEndpointStreamActionInfo: streaming endpoint shows Start Stream when id
 
   assert.equal(info.canStartStream, true);
   assert.equal(info.canStopStream, false);
+  assert.equal(info.canSendStreamMessage, false, 'Idle stream cannot send message');
+  assert.equal(info.isBidiStream, false, 'omni_stream is not bidi');
   assert.equal(info.buttonLabel, 'Start Stream');
   assert.equal(info.isStreaming, false);
 });
