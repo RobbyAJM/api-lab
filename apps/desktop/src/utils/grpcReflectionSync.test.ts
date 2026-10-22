@@ -463,4 +463,99 @@ test('executeReflectionSync: reuses shared parent folder and prunes empty interm
   assert.equal(endpointPosts.length, 1);
   assert.equal(endpointPosts[0].body.name, 'Pay');
   assert.equal(endpointPosts[0].body.folder_id, 'folder-100');
+  assert.deepEqual(endpointPosts[0].body.config.auth, { auth_type: 'inherit' });
+});
+
+test('executeReflectionSync: preserves folder settings and newly created endpoints inherit folder auth', async () => {
+  const rootId = 'root-reflect';
+  const existingFolders: CollectionFolder[] = [
+    {
+      id: rootId,
+      collection_id: 'col-1',
+      parent_folder_id: null,
+      name: 'Services',
+      grpc_url: 'localhost:50051',
+      settings: {
+        auth: { auth_type: 'bearer', token: 'reflection-secret-jwt' },
+      },
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-sub',
+      collection_id: 'col-1',
+      parent_folder_id: rootId,
+      name: 'AuthService',
+      settings: {
+        auth: { auth_type: 'custom', header_name: 'X-API-KEY', header_value: 'sub-folder-key' },
+      },
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const plan = {
+    servicesToDelete: [],
+    servicesToCreate: [],
+    methodsToCreate: [
+      {
+        folderId: 'f-sub',
+        serviceName: 'AuthService',
+        methodName: 'Login',
+        streamType: 'unary',
+      },
+    ],
+    methodsToDelete: [],
+    methodsToUpdate: [],
+  };
+
+  const calls: any[] = [];
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      calls.push({ method: 'POST', path, body });
+      return { id: 'ep-new' };
+    },
+    patch: async (path: string, body: any) => {
+      calls.push({ method: 'PATCH', path, body });
+      return {};
+    },
+    delete: async (path: string) => {
+      calls.push({ method: 'DELETE', path });
+      return {};
+    },
+  };
+
+  await executeReflectionSync(
+    'col-1',
+    rootId,
+    'localhost:50051',
+    plan,
+    { 'AuthService/Login': { username: 'test' } },
+    mockApi,
+    existingFolders
+  );
+
+  const endpointPosts = calls.filter((c) => c.method === 'POST' && c.path.includes('/endpoints'));
+  assert.equal(endpointPosts.length, 1);
+  assert.equal(endpointPosts[0].body.name, 'Login');
+  assert.equal(endpointPosts[0].body.folder_id, 'f-sub');
+  assert.deepEqual(endpointPosts[0].body.config.auth, { auth_type: 'inherit' });
+
+  // Verify that the new endpoint inherits from f-sub
+  const { resolveInheritedAuth, getInheritedAuthHeader } = await import('./folderSettings.ts');
+  const resolved = resolveInheritedAuth(
+    { id: 'col-1', name: 'Collection', settings: { auth: { auth_type: 'none' } } },
+    existingFolders,
+    endpointPosts[0].body.folder_id
+  );
+  assert.ok(resolved);
+  assert.equal(resolved.sourceId, 'f-sub');
+  assert.equal(resolved.auth.auth_type, 'custom');
+  assert.equal(resolved.auth.header_name, 'X-API-KEY');
+
+  const header = getInheritedAuthHeader(resolved, 'grpc');
+  assert.equal(header?.key, 'X-API-KEY'); // exact case
+  assert.equal(header?.value, 'sub-folder-key');
 });

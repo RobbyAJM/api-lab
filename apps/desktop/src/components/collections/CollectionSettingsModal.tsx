@@ -13,26 +13,56 @@ import { Select } from '../common/Select';
 import { X, Shield, Settings, Sliders, Plus, Trash2, Save, Check } from 'lucide-react';
 
 interface CollectionSettingsModalProps {
-  collection: Collection;
-  isOpen: boolean;
-  onClose: () => void;
+  collection?: Collection;
+  isOpen?: boolean;
+  onClose?: () => void;
   activeVariables?: Record<string, string>;
 }
 
 type SettingsTab = 'general' | 'auth' | 'headers';
 
 export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = ({
-  collection,
-  isOpen,
-  onClose,
+  collection: propCollection,
+  isOpen: propIsOpen,
+  onClose: propOnClose,
   activeVariables,
 }) => {
   const queryClient = useQueryClient();
-  const { activeEnvironmentId } = useAppStore();
+  const {
+    activeEnvironmentId,
+    collectionSettingsModal,
+    closeCollectionSettingsModal,
+  } = useAppStore();
+
+  const isStoreDriven = propIsOpen === undefined;
+  const isOpen = propIsOpen ?? Boolean(collectionSettingsModal?.isOpen);
+  const storeCollectionId = collectionSettingsModal?.collectionId;
+
+  const { data: fetchedCollection } = useQuery<Collection>({
+    queryKey: ['collection', storeCollectionId],
+    queryFn: () => apiRequest<Collection>(`/collections/${storeCollectionId}`),
+    enabled: isOpen && !propCollection && !!storeCollectionId,
+  });
+
+  const collection = propCollection || fetchedCollection;
+
+  const handleClose = () => {
+    if (propOnClose) propOnClose();
+    if (isStoreDriven || collectionSettingsModal?.isOpen) {
+      closeCollectionSettingsModal();
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
 
+  useEffect(() => {
+    if (collectionSettingsModal?.initialTab) {
+      setActiveTab(collectionSettingsModal.initialTab);
+    }
+  }, [collectionSettingsModal?.initialTab]);
+
   // Name state
-  const [name, setName] = useState(collection.name || '');
+  const [name, setName] = useState('');
 
   // Fetch active environment variables so syntax highlighting is always accurate
   const { data: envVars = [] } = useQuery<VariableResponse[]>({
@@ -53,36 +83,25 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
   }, [envVars, activeVariables]);
 
   // Auth state
-  const [authType, setAuthType] = useState<CollectionAuthSettings['auth_type']>(
-    collection.settings?.auth?.auth_type || 'none'
-  );
-  const [token, setToken] = useState(collection.settings?.auth?.token || '');
-  const [username, setUsername] = useState(collection.settings?.auth?.username || '');
-  const [password, setPassword] = useState(collection.settings?.auth?.password || '');
-  const [headerName, setHeaderName] = useState(
-    collection.settings?.auth?.header_name || 'Authorization'
-  );
-  const [headerValue, setHeaderValue] = useState(
-    collection.settings?.auth?.header_value || ''
-  );
+  const [authType, setAuthType] = useState<CollectionAuthSettings['auth_type']>('none');
+  const [token, setToken] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [headerName, setHeaderName] = useState('Authorization');
+  const [headerValue, setHeaderValue] = useState('');
 
   // General settings state
-  const [timeoutMs, setTimeoutMs] = useState<string>(
-    collection.settings?.timeout_ms ? String(collection.settings.timeout_ms) : ''
-  );
-  const [description, setDescription] = useState(collection.settings?.description || '');
+  const [timeoutMs, setTimeoutMs] = useState<string>('');
+  const [description, setDescription] = useState('');
 
   // Shared Headers state
-  const [headers, setHeaders] = useState<CollectionHeaderSetting[]>(() => {
-    return collection.settings?.headers && collection.settings.headers.length > 0
-      ? collection.settings.headers.map((h) => ({ ...h, enabled: h.enabled !== false }))
-      : [];
-  });
+  const [headers, setHeaders] = useState<CollectionHeaderSetting[]>([]);
 
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Synchronize state when collection changes
   useEffect(() => {
+    if (!collection) return;
     setName(collection.name || '');
     setAuthType(collection.settings?.auth?.auth_type || 'none');
     setToken(collection.settings?.auth?.token || '');
@@ -99,7 +118,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
         ? collection.settings.headers.map((h) => ({ ...h, enabled: h.enabled !== false }))
         : []
     );
-  }, [collection.id, collection.name, collection.settings]);
+  }, [collection?.id, collection?.name, collection?.settings]);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -107,12 +126,12 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        handleClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   const updateMutation = useMutation({
     mutationFn: () => {
@@ -141,6 +160,10 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
 
       const parsedTimeout = timeoutMs.trim() ? parseInt(timeoutMs.trim(), 10) : undefined;
 
+      if (!collection) {
+        throw new Error('Collection not found');
+      }
+
       return apiRequest<Collection>(`/collections/${collection.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
@@ -156,11 +179,13 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['collections'] });
-      queryClient.invalidateQueries({ queryKey: ['collection', collection.id] });
+      if (collection?.id) {
+        queryClient.invalidateQueries({ queryKey: ['collection', collection.id] });
+      }
       setStatusMessage('Settings saved successfully');
       setTimeout(() => {
         setStatusMessage(null);
-        onClose();
+        handleClose();
       }, 800);
     },
     onError: (err: any) => {
@@ -184,12 +209,12 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
     setHeaders((prev) => prev.filter((_, i) => i !== index));
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !collection) return null;
 
   return (
     <div
       className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans select-none animate-in fade-in duration-100"
-      onClick={onClose}
+      onClick={handleClose}
     >
       <div
         className="bg-zinc-900 border border-zinc-800 rounded-md max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
@@ -214,7 +239,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-zinc-400 hover:text-zinc-200 p-1.5 rounded-md hover:bg-zinc-800 transition"
             title="Close (Esc)"
           >
@@ -522,7 +547,7 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-800 bg-zinc-950/60 flex-shrink-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs font-medium transition"
           >
             Cancel
