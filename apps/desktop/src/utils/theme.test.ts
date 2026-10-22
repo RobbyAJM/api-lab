@@ -83,7 +83,7 @@ test('generateThemeCss: outputs complete valid CSS text block', () => {
   assert.ok(css.includes('background-color: rgb(var(--color-zinc-950));'));
 });
 
-test('THEMES list contains popular Opencode themes', () => {
+test('THEMES list contains popular Opencode themes and light themes', () => {
   const ids = THEMES.map((t) => t.id);
   assert.ok(ids.includes('api-lab'));
   assert.ok(ids.includes('dracula'));
@@ -94,5 +94,24 @@ test('THEMES list contains popular Opencode themes', () => {
   assert.ok(ids.includes('gruvbox'));
   assert.ok(ids.includes('monokai'));
   assert.ok(ids.includes('vesper'));
-  assert.ok(THEMES.length >= 20);
+  assert.ok(ids.includes('github-light'));
+  assert.ok(ids.includes('one-light'));
+  assert.ok(ids.includes('nord-light'));
+  assert.ok(ids.includes('solarized-light'));
+  assert.ok(ids.includes('vesper-light'));
+  assert.ok(THEMES.length >= 25);
+});
+
+test('resolveThemeVariables: handles light themes with inverted surface scale', () => {
+  const ghLight = getThemeById('github-light');
+  assert.equal(ghLight.isLight, true);
+  const vars = resolveThemeVariables(ghLight);
+
+  // In light mode, zinc-950 is the lightest background (#ffffff -> 255 255 255)
+  assert.equal(vars['--color-zinc-950'], '255 255 255');
+  // zinc-100 is dark high-contrast ink
+  assert.notEqual(vars['--color-zinc-100'], '255 255 255');
+
+  const css = generateThemeCss(ghLight);
+  assert.ok(css.includes('color-scheme: light;'));
 });
