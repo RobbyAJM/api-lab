@@ -157,3 +157,15 @@ export async function cancelNativeGrpcStream(streamId: string): Promise<boolean>
   }
   return false;
 }
+
+export async function sendNativeGrpcStreamMessage(
+  streamId: string,
+  payload: any
+): Promise<boolean> {
+  if (await isTauri()) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('send_grpc_stream_message', { streamId, payload });
+    return true;
+  }
+  return false;
+}

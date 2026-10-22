@@ -117,20 +117,36 @@ pub async fn run_grpc_sample_payload(
 use std::sync::Mutex;
 
 static CANCEL_MAP: Mutex<Option<HashMap<String, tokio::sync::oneshot::Sender<()>>>> = Mutex::new(None);
+static SEND_MAP: Mutex<Option<HashMap<String, tokio::sync::mpsc::Sender<serde_json::Value>>>> = Mutex::new(None);
 
-fn register_stream(id: String, tx: tokio::sync::oneshot::Sender<()>) {
+fn register_stream(id: String, cancel_tx: tokio::sync::oneshot::Sender<()>, send_tx: tokio::sync::mpsc::Sender<serde_json::Value>) {
     let mut lock = CANCEL_MAP.lock().unwrap();
     if lock.is_none() {
         *lock = Some(HashMap::new());
     }
     if let Some(ref mut map) = *lock {
-        map.insert(id, tx);
+        map.insert(id.clone(), cancel_tx);
+    }
+    drop(lock);
+
+    let mut send_lock = SEND_MAP.lock().unwrap();
+    if send_lock.is_none() {
+        *send_lock = Some(HashMap::new());
+    }
+    if let Some(ref mut map) = *send_lock {
+        map.insert(id, send_tx);
     }
 }
 
 fn unregister_stream(id: &str) {
     let mut lock = CANCEL_MAP.lock().unwrap();
     if let Some(ref mut map) = *lock {
+        map.remove(id);
+    }
+    drop(lock);
+
+    let mut send_lock = SEND_MAP.lock().unwrap();
+    if let Some(ref mut map) = *send_lock {
         map.remove(id);
     }
 }
@@ -144,6 +160,18 @@ pub fn cancel_stream(id: &str) -> bool {
         }
     }
     false
+}
+
+pub async fn send_stream_message(id: &str, payload: serde_json::Value) -> Result<(), String> {
+    let tx = {
+        let lock = SEND_MAP.lock().unwrap();
+        lock.as_ref()
+            .and_then(|map| map.get(id).cloned())
+            .ok_or_else(|| format!("Active stream '{}' not found or closed", id))?
+    };
+    tx.send(payload)
+        .await
+        .map_err(|e| format!("Failed to send stream message: {e}"))
 }
 
 pub async fn run_grpc_stream<F>(
@@ -222,9 +250,10 @@ where
     req.payload = interpolated_payload;
 
     let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
-    register_stream(stream_id.clone(), cancel_tx);
+    let (outbound_tx, outbound_rx) = tokio::sync::mpsc::channel(32);
+    register_stream(stream_id.clone(), cancel_tx, outbound_tx);
 
-    let res = grpc_client::execute_streaming(req, on_message, cancel_rx).await;
+    let res = grpc_client::execute_streaming_with_outbound(req, on_message, cancel_rx, Some(outbound_rx)).await;
     unregister_stream(&stream_id);
     res
 }
