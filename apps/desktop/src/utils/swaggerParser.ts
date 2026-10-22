@@ -3,17 +3,21 @@
  * Pure TypeScript, zero external UI/runtime dependencies.
  */
 
+import { convertSwaggerPathToApiPath } from './pathVariables.ts';
+
 export interface ParsedHttpEndpoint {
   name: string;
   method: string; // 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
-  path: string; // e.g. '/manager/api/v1/users'
-  fullUrl: string; // e.g. 'http://localhost:9090/manager/api/v1/users'
+  path: string; // e.g. '/manager/api/v1/users' or '/manager/api/v1/users/:id'
+  fullUrl: string; // e.g. 'http://localhost:9090/manager/api/v1/users/:id'
   serviceTag: string; // e.g. 'UserAPI' or 'Default'
   operationId?: string;
   summary?: string;
   description?: string;
-  queryParams: [string, string][];
+  queryParams: [string, string, string?][];
+  pathVariables?: [string, string, string?][];
   headers: Record<string, string>;
+  headerDescriptions?: Record<string, string>;
   bodyType: 'none' | 'json';
   body: string; // JSON string payload
 }
@@ -233,8 +237,10 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
       const opParams = Array.isArray(operation.parameters) ? operation.parameters : [];
       const allParams = [...commonParams, ...opParams];
 
-      const queryParams: [string, string][] = [];
+      const queryParams: [string, string, string?][] = [];
+      const pathVariables: [string, string, string?][] = [];
       const headers: Record<string, string> = {};
+      const headerDescriptions: Record<string, string> = {};
       let bodySample: any = null;
       let hasBody = false;
 
@@ -243,12 +249,20 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
         const pIn = p.in;
         const pName = p.name;
 
-        if (pIn === 'query' && pName) {
+        if (pIn === 'path' && pName) {
           const defaultVal = p.default !== undefined ? String(p.default) : '';
-          queryParams.push([pName, defaultVal]);
+          pathVariables.push(
+            p.description ? [pName, defaultVal, p.description] : [pName, defaultVal]
+          );
+        } else if (pIn === 'query' && pName) {
+          const defaultVal = p.default !== undefined ? String(p.default) : '';
+          queryParams.push(
+            p.description ? [pName, defaultVal, p.description] : [pName, defaultVal]
+          );
         } else if (pIn === 'header' && pName) {
           const defaultVal = p.default !== undefined ? String(p.default) : '';
           headers[pName] = defaultVal;
+          if (p.description) headerDescriptions[pName] = p.description;
         } else if (pIn === 'body' && p.schema) {
           hasBody = true;
           bodySample = generateSampleFromSchema(p.schema, doc);
@@ -270,23 +284,27 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
         }
       }
 
+      const normalizedPath = convertSwaggerPathToApiPath(pathKey);
+
       // Format endpoint name: operationId > summary > method + path
-      let epName = operation.operationId || operation.summary || `${method} ${pathKey}`;
+      let epName = operation.operationId || operation.summary || `${method} ${normalizedPath}`;
       epName = epName.trim();
 
-      const fullUrl = `${baseUrl}${pathKey.startsWith('/') ? '' : '/'}${pathKey}`;
+      const fullUrl = `${baseUrl}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
 
       const endpoint: ParsedHttpEndpoint = {
         name: epName,
         method,
-        path: pathKey,
+        path: normalizedPath,
         fullUrl,
         serviceTag: primaryTag,
         operationId: operation.operationId,
         summary: operation.summary,
         description: operation.description,
         queryParams,
+        pathVariables,
         headers,
+        headerDescriptions,
         bodyType: hasBody ? 'json' : 'none',
         body: hasBody && bodySample !== null ? JSON.stringify(bodySample, null, 2) : '',
       };

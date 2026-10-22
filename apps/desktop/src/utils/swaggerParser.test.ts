@@ -268,8 +268,57 @@ test('parseSwaggerSpec: parses OpenAPI 3.x with requestBody', () => {
   const ep = parsed.services[0].endpoints[0];
   assert.equal(ep.name, 'UpdateProduct');
   assert.equal(ep.method, 'PUT');
-  assert.equal(ep.fullUrl, 'https://store.example.com/api/products/{id}');
+  assert.equal(ep.fullUrl, 'https://store.example.com/api/products/:id');
   assert.equal(ep.bodyType, 'json');
   assert.ok(ep.body.includes('Laptop'));
   assert.ok(ep.body.includes('999'));
+});
+
+test('parseSwaggerSpec: converts path variable {id} to :id and extracts path parameters', () => {
+  const doc: SwaggerDoc = {
+    swagger: '2.0',
+    host: 'nu-gateway.dev.dxtr.asia',
+    basePath: '',
+    schemes: ['https'],
+    paths: {
+      '/manager/api/v1/emergency-contact-status/{id}': {
+        get: {
+          summary: 'Get Emergency Contact Status',
+          tags: ['EmergencyAPI'],
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              type: 'string',
+              description: 'Contact identifier',
+              default: '123',
+            },
+            {
+              name: 'verbose',
+              in: 'query',
+              type: 'boolean',
+              description: 'Include full logs',
+              default: 'true',
+            },
+          ],
+        },
+      },
+    },
+  };
+
+  const parsed = parseSwaggerSpec(doc, 'https://nu-gateway.dev.dxtr.asia/swagger.json');
+  assert.equal(parsed.services.length, 1);
+  const ep = parsed.services[0].endpoints[0];
+  assert.equal(ep.path, '/manager/api/v1/emergency-contact-status/:id');
+  assert.equal(
+    ep.fullUrl,
+    'https://nu-gateway.dev.dxtr.asia/manager/api/v1/emergency-contact-status/:id'
+  );
+  assert.deepEqual(ep.pathVariables, [
+    ['id', '123', 'Contact identifier'],
+  ]);
+  assert.deepEqual(ep.queryParams, [
+    ['verbose', 'true', 'Include full logs'],
+  ]);
 });

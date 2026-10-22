@@ -54,6 +54,7 @@ export interface CollectionHeaderSetting {
   key: string;
   value: string;
   enabled?: boolean;
+  description?: string;
 }
 
 export interface CollectionSettings {
