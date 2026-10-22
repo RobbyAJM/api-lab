@@ -13,7 +13,7 @@ import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
 import { applyCollectionSettingsToHttp } from '../../utils/collectionSettings';
 import { syncEnvironmentVariables } from '../../utils/envSync';
-import { getEffectiveEndpointConfig } from '../../utils/tabManager';
+import { getEffectiveEndpointConfig, isConfigDirty } from '../../utils/tabManager';
 import { stripJsonComments } from '../../utils/jsonComments';
 import { splitUrlQuery, type HttpBodyType } from '../../utils/httpRequest';
 import {
@@ -309,7 +309,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   // Keep working draft synchronized in store so tab switches retain unsaved edits
   useEffect(() => {
     const cfg = buildConfig();
-    setEndpointDraft(endpoint.id, cfg);
+    if (isConfigDirty(endpoint.config, cfg)) {
+      setEndpointDraft(endpoint.id, cfg);
+    } else {
+      clearEndpointDraft(endpoint.id);
+    }
   }, [
     method,
     url,
