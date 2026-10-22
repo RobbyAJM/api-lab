@@ -4,7 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection, CollectionFolder } from '@api-lab/api-types';
-import { Save, Shield, Globe } from 'lucide-react';
+import { Save, Shield, Globe, Settings } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
@@ -22,7 +22,11 @@ import {
   convertSwaggerPathToApiPath,
   syncPathVariablesWithKeys,
 } from '../../utils/pathVariables';
-import { mergeFolderSettings } from '../../utils/folderSettings';
+import {
+  mergeFolderSettings,
+  resolveInheritedAuth,
+  getInheritedAuthHeader,
+} from '../../utils/folderSettings';
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -32,6 +36,8 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setActiveEndpoint,
     setEndpointDraft,
     clearEndpointDraft,
+    openFolderSettingsModal,
+    openCollectionSettingsModal,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -127,6 +133,31 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     queryFn: () => apiRequest<CollectionFolder[]>(`/collections/${endpoint.collection_id}/folders`),
     enabled: !!endpoint.collection_id,
   });
+
+  const resolvedInheritedAuth = React.useMemo(() => {
+    return resolveInheritedAuth(collection, folders, endpoint.folder_id);
+  }, [collection, folders, endpoint.folder_id]);
+
+  const inheritedAuthHeader = React.useMemo(() => {
+    if (auth.auth_type !== 'inherit') return null;
+    return getInheritedAuthHeader(resolvedInheritedAuth, 'http', activeVariables);
+  }, [auth.auth_type, resolvedInheritedAuth, activeVariables]);
+
+  const handleEditInheritedSource = React.useCallback(() => {
+    if (!resolvedInheritedAuth) {
+      if (endpoint.folder_id) {
+        openFolderSettingsModal(endpoint.folder_id, endpoint.collection_id, 'auth');
+      } else {
+        openCollectionSettingsModal(endpoint.collection_id, 'auth');
+      }
+      return;
+    }
+    if (resolvedInheritedAuth.sourceType === 'folder') {
+      openFolderSettingsModal(resolvedInheritedAuth.sourceId, endpoint.collection_id, 'auth');
+    } else {
+      openCollectionSettingsModal(endpoint.collection_id, 'auth');
+    }
+  }, [resolvedInheritedAuth, endpoint.folder_id, endpoint.collection_id, openFolderSettingsModal, openCollectionSettingsModal]);
 
   // Resolve active environment variables
   async function resolveVariables(): Promise<Record<string, string>> {
@@ -614,6 +645,19 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             title="Request Headers"
             items={headers}
             onChange={setHeaders}
+            inheritedEntries={
+              inheritedAuthHeader
+                ? [
+                    {
+                      key: inheritedAuthHeader.key,
+                      value: inheritedAuthHeader.value,
+                      description: inheritedAuthHeader.description,
+                      sourceLabel: `${inheritedAuthHeader.sourceType}: ${inheritedAuthHeader.sourceName}`,
+                      onEditSource: handleEditInheritedSource,
+                    },
+                  ]
+                : []
+            }
             variables={activeVariables}
             keyPlaceholder="Header-Name"
             valuePlaceholder="Header-Value (or {{VAR}})"
@@ -784,7 +828,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   setAuth({ ...auth, auth_type: val as HttpAuth['auth_type'] })
                 }
                 options={[
-                  { value: 'inherit', label: 'Inherit auth from collection' },
+                  { value: 'inherit', label: 'Inherit auth from parent' },
                   { value: 'none', label: 'No Auth (Inherit Disabled)' },
                   { value: 'bearer', label: 'Bearer Token (JWT / API Token)' },
                   { value: 'basic', label: 'Basic Auth (Username & Password)' },
@@ -795,19 +839,36 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             </div>
 
             {auth.auth_type === 'inherit' && (
-              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-1">
-                <div className="text-zinc-200 font-medium flex items-center gap-1.5">
-                  <Shield size={13} className="text-secondary" />
-                  <span>Inherited from Collection: {collection?.name || 'Current'}</span>
+              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-zinc-200 font-medium flex items-center gap-1.5">
+                    <Shield size={13} className="text-secondary" />
+                    <span>
+                      {resolvedInheritedAuth
+                        ? `Inherited from ${resolvedInheritedAuth.sourceType}: ${resolvedInheritedAuth.sourceName}`
+                        : 'Inherit auth from parent'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleEditInheritedSource}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 transition"
+                    title="Edit inherited authorization settings"
+                  >
+                    <Settings size={11} />
+                    <span>Edit in Settings</span>
+                  </button>
                 </div>
                 <div className="text-zinc-400 text-[11px]">
-                  {collection?.settings?.auth && collection.settings.auth.auth_type !== 'none'
-                    ? `Type: ${collection.settings.auth.auth_type.toUpperCase()} ${
-                        collection.settings.auth.token
-                          ? `(Token: ${collection.settings.auth.token})`
+                  {resolvedInheritedAuth
+                    ? `Type: ${resolvedInheritedAuth.auth.auth_type.toUpperCase()} ${
+                        resolvedInheritedAuth.auth.token
+                          ? `(Token: ${resolvedInheritedAuth.auth.token.slice(0, 15)}...)`
+                          : resolvedInheritedAuth.auth.header_name
+                          ? `(Header: ${resolvedInheritedAuth.auth.header_name})`
                           : ''
                       }`
-                    : 'No authorization configured on this collection yet. Configure in Collection Settings.'}
+                    : 'No authorization configured on parent folders or collection yet. Click "Edit in Settings" to configure.'}
                 </div>
               </div>
             )}

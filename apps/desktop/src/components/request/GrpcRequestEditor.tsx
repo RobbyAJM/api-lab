@@ -52,7 +52,11 @@ import {
 } from '../../utils/grpcSpecification';
 import { getEffectiveEndpointConfig } from '../../utils/tabManager';
 import { parseJsonWithComments } from '../../utils/jsonComments';
-import { mergeFolderSettings } from '../../utils/folderSettings';
+import {
+  mergeFolderSettings,
+  resolveInheritedAuth,
+  getInheritedAuthHeader,
+} from '../../utils/folderSettings';
 
 function substituteVars(obj: any, vars: Record<string, string>): any {
   if (!obj || !vars) return obj;
@@ -87,6 +91,8 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setEndpointDraft,
     clearEndpointDraft,
     openReflectionSettingsModal,
+    openFolderSettingsModal,
+    openCollectionSettingsModal,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -167,6 +173,31 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     queryFn: () => apiRequest<CollectionFolder[]>(`/collections/${endpoint.collection_id}/folders`),
     enabled: !!endpoint.collection_id,
   });
+
+  const resolvedInheritedAuth = React.useMemo(() => {
+    return resolveInheritedAuth(collection, folders, endpoint.folder_id);
+  }, [collection, folders, endpoint.folder_id]);
+
+  const inheritedAuthHeader = React.useMemo(() => {
+    if (auth.auth_type !== 'inherit') return null;
+    return getInheritedAuthHeader(resolvedInheritedAuth, 'grpc', activeVariables);
+  }, [auth.auth_type, resolvedInheritedAuth, activeVariables]);
+
+  const handleEditInheritedSource = React.useCallback(() => {
+    if (!resolvedInheritedAuth) {
+      if (endpoint.folder_id) {
+        openFolderSettingsModal(endpoint.folder_id, endpoint.collection_id, 'auth');
+      } else {
+        openCollectionSettingsModal(endpoint.collection_id, 'auth');
+      }
+      return;
+    }
+    if (resolvedInheritedAuth.sourceType === 'folder') {
+      openFolderSettingsModal(resolvedInheritedAuth.sourceId, endpoint.collection_id, 'auth');
+    } else {
+      openCollectionSettingsModal(endpoint.collection_id, 'auth');
+    }
+  }, [resolvedInheritedAuth, endpoint.folder_id, endpoint.collection_id, openFolderSettingsModal, openCollectionSettingsModal]);
 
   const inheritedInfo = resolveInheritedGrpcAddress(endpoint, folders, collection?.settings);
   const effectiveServerAddress = inheritedInfo.isInherited
@@ -695,7 +726,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       let finalReq = applyCollectionSettingsToGrpc(
         beforeResult.request,
-         auth.auth_type === 'inherit' ? mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id) : undefined,
+        mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id),
         beforeResult.variables
       );
 
@@ -709,7 +740,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           },
         };
       } else if (auth.auth_type === 'custom' && auth.header_name && auth.header_value) {
-        const headerName = substituteVars(auth.header_name.trim(), beforeResult.variables).toLowerCase();
+        const headerName = substituteVars(auth.header_name.trim(), beforeResult.variables);
         const headerVal = substituteVars(auth.header_value.trim(), beforeResult.variables);
         finalReq = {
           ...finalReq,
@@ -832,7 +863,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       let finalReq = applyCollectionSettingsToGrpc(
         beforeResult.request,
-         auth.auth_type === 'inherit' ? mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id) : undefined,
+        mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id),
         beforeResult.variables
       );
 
@@ -846,7 +877,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           },
         };
       } else if (auth.auth_type === 'custom' && auth.header_name && auth.header_value) {
-        const headerName = substituteVars(auth.header_name.trim(), beforeResult.variables).toLowerCase();
+        const headerName = substituteVars(auth.header_name.trim(), beforeResult.variables);
         const headerVal = substituteVars(auth.header_value.trim(), beforeResult.variables);
         finalReq = {
           ...finalReq,
@@ -1347,6 +1378,19 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             title="gRPC Request Metadata"
             items={metadata}
             onChange={setMetadata}
+            inheritedEntries={
+              inheritedAuthHeader
+                ? [
+                    {
+                      key: inheritedAuthHeader.key,
+                      value: inheritedAuthHeader.value,
+                      description: inheritedAuthHeader.description,
+                      sourceLabel: `${inheritedAuthHeader.sourceType}: ${inheritedAuthHeader.sourceName}`,
+                      onEditSource: handleEditInheritedSource,
+                    },
+                  ]
+                : []
+            }
             variables={activeVariables}
             keyPlaceholder="x-metadata-key"
             valuePlaceholder="metadata-value (or {{TOKEN}})"
@@ -1364,7 +1408,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 value={auth.auth_type}
                 onChange={(val) => setAuth({ ...auth, auth_type: val as any })}
                 options={[
-                  { value: 'inherit', label: 'Inherit auth from collection' },
+                  { value: 'inherit', label: 'Inherit auth from parent' },
                   { value: 'none', label: 'No Auth' },
                   { value: 'bearer', label: 'Bearer Token' },
                   { value: 'custom', label: 'Custom Header' },
@@ -1373,19 +1417,36 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               />
             </div>
             {auth.auth_type === 'inherit' && (
-              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-1">
-                <div className="text-zinc-200 font-medium flex items-center gap-1.5">
-                  <Shield size={13} className="text-secondary" />
-                  <span>Inherited from Collection: {collection?.name || 'Current'}</span>
+              <div className="p-3 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-zinc-200 font-medium flex items-center gap-1.5">
+                    <Shield size={13} className="text-secondary" />
+                    <span>
+                      {resolvedInheritedAuth
+                        ? `Inherited from ${resolvedInheritedAuth.sourceType}: ${resolvedInheritedAuth.sourceName}`
+                        : 'Inherit auth from parent'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleEditInheritedSource}
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 transition"
+                    title="Edit inherited authorization settings"
+                  >
+                    <Settings size={11} />
+                    <span>Edit in Settings</span>
+                  </button>
                 </div>
                 <div className="text-zinc-400 text-[11px]">
-                  {collection?.settings?.auth && collection.settings.auth.auth_type !== 'none'
-                    ? `Type: ${collection.settings.auth.auth_type.toUpperCase()} ${
-                        collection.settings.auth.token
-                          ? `(Token: ${collection.settings.auth.token.slice(0, 15)}...)`
+                  {resolvedInheritedAuth
+                    ? `Type: ${resolvedInheritedAuth.auth.auth_type.toUpperCase()} ${
+                        resolvedInheritedAuth.auth.token
+                          ? `(Token: ${resolvedInheritedAuth.auth.token.slice(0, 15)}...)`
+                          : resolvedInheritedAuth.auth.header_name
+                          ? `(Header: ${resolvedInheritedAuth.auth.header_name})`
                           : ''
                       }`
-                    : 'No authorization configured on this collection yet. Configure in Collection Settings.'}
+                    : 'No authorization configured on parent folders or collection yet. Click "Edit in Settings" to configure.'}
                 </div>
               </div>
             )}

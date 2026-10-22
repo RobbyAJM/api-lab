@@ -996,7 +996,7 @@ const FolderTreeNodeComponent: React.FC<{
   onSyncSwagger,
 }) => {
   const queryClient = useQueryClient();
-  const { openReflectionSettingsModal, openSwaggerSettingsModal } = useAppStore();
+  const { openReflectionSettingsModal, openSwaggerSettingsModal, openFolderSettingsModal } = useAppStore();
   const [isOpen, setIsOpen] = useState(true);
   const [showAddSubFolder, setShowAddSubFolder] = useState(false);
   const [showAddSubEndpoint, setShowAddSubEndpoint] = useState(false);
@@ -1226,6 +1226,21 @@ const FolderTreeNodeComponent: React.FC<{
                 onClick={() => {
                   setFolderContextMenuPos(null);
                   openSwaggerSettingsModal(node.folder.id, collectionId);
+                }}
+                className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+              >
+                <Settings size={12} className="text-zinc-400" />
+                <span>Settings</span>
+              </button>
+              <div className="h-px bg-zinc-800 my-1" />
+            </>
+          )}
+          {!isReflection && !isSwagger && (
+            <>
+              <button
+                onClick={() => {
+                  setFolderContextMenuPos(null);
+                  openFolderSettingsModal(node.folder.id, collectionId);
                 }}
                 className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
               >
