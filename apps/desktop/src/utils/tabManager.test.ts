@@ -263,6 +263,180 @@ test('isConfigDirty: accurately detects HTTP and gRPC unsaved changes', () => {
   assert.equal(isConfigDirty(baseGrpc, { ...baseGrpc, payload: { id: 2 } }), true);
 });
 
+test('isConfigDirty: prevents false positives on newly opened HTTP endpoints', () => {
+  // Scenario A: Saved endpoint has path variables in URL but empty path_variables array in DB
+  const baseWithParam = {
+    method: 'GET',
+    url: 'https://api.example.com/users/:id',
+  };
+  const draftInitialParam = {
+    method: 'GET',
+    url: 'https://api.example.com/users/:id',
+    query_params: [],
+    path_variables: [['id', '', '']], // extracted placeholder
+    headers: {},
+    body: '',
+  };
+  assert.equal(isConfigDirty(baseWithParam, draftInitialParam), false);
+
+  // Scenario B: Swagger-imported template {id} converted to :id by editor
+  const baseSwagger = {
+    method: 'POST',
+    url: 'https://api.example.com/items/{item_id}',
+  };
+  const draftSwagger = {
+    method: 'POST',
+    url: 'https://api.example.com/items/:item_id',
+    query_params: [],
+    path_variables: [['item_id', '', '']],
+    headers: {},
+    body: '',
+  };
+  assert.equal(isConfigDirty(baseSwagger, draftSwagger), false);
+
+  // Scenario C: URL contains query string split into query_params by editor on mount
+  const baseUrlQuery = {
+    method: 'DELETE',
+    url: 'https://api.example.com/orders?status=active&limit=10',
+  };
+  const draftUrlQuery = {
+    method: 'DELETE',
+    url: 'https://api.example.com/orders',
+    query_params: [
+      ['status', 'active', ''],
+      ['limit', '10', ''],
+    ],
+    path_variables: [],
+    headers: {},
+    body: '',
+  };
+  assert.equal(isConfigDirty(baseUrlQuery, draftUrlQuery), false);
+
+  // Scenario D: 2-tuple vs 3-tuple query params in DB
+  const base2Tuple = {
+    method: 'PUT',
+    url: 'https://api.example.com/update',
+    query_params: [['page', '1']],
+  };
+  const draft3Tuple = {
+    method: 'PUT',
+    url: 'https://api.example.com/update',
+    query_params: [['page', '1', '']],
+    path_variables: [],
+    headers: {},
+  };
+  assert.equal(isConfigDirty(base2Tuple, draft3Tuple), false);
+
+  // BUT real changes must still be detected:
+  // User fills in the path variable value
+  const draftParamEdited = {
+    ...draftInitialParam,
+    path_variables: [['id', '12345', '']],
+  };
+  assert.equal(isConfigDirty(baseWithParam, draftParamEdited), true);
+
+  // User changes query param
+  const draftQueryEdited = {
+    ...draftUrlQuery,
+    query_params: [['status', 'archived', '']],
+  };
+  assert.equal(isConfigDirty(baseUrlQuery, draftQueryEdited), true);
+});
+
+test('isConfigDirty: prevents false positives on newly opened gRPC endpoints (Unary & Stream)', () => {
+  // Scenario A: gRPC Unary with omitted auth and empty payload in DB
+  const baseGrpcUnary = {
+    server_address: 'localhost:50051',
+    service: 'order.OrderService',
+    method: 'GetOrder',
+    stream_type: 'unary',
+  };
+  // Initial editor state mounts with inherit auth, empty payload object, default options
+  const draftGrpcUnary = {
+    server_address: 'localhost:50051',
+    service: 'order.OrderService',
+    method: 'GetOrder',
+    stream_type: 'unary',
+    use_tls: false,
+    authority_override: '',
+    timeout_seconds: 30,
+    max_msg_size_mb: 4,
+    metadata: {},
+    metadata_descriptions: {},
+    auth: { auth_type: 'inherit' },
+    payload: {},
+    pre_request_script: '',
+    post_request_script: '',
+    post_response_script: '',
+  };
+  assert.equal(isConfigDirty(baseGrpcUnary, draftGrpcUnary), false);
+
+  // Scenario B: gRPC Server/Client/Bidi Stream with whitespace or null payload in DB
+  const baseGrpcStream = {
+    server_address: 'stream.example.com:443',
+    service: 'telemetry.StreamService',
+    method: 'SubscribeMetrics',
+    stream_type: 'bidi_stream',
+    payload: null,
+  };
+  const draftGrpcStream = {
+    server_address: 'stream.example.com:443',
+    service: 'telemetry.StreamService',
+    method: 'SubscribeMetrics',
+    stream_type: 'bidi_stream',
+    use_tls: true, // Auto-detected for remote domain
+    auth: { auth_type: 'inherit' },
+    payload: {},
+    metadata: {},
+  };
+  assert.equal(isConfigDirty(baseGrpcStream, draftGrpcStream), false);
+
+  // Scenario C: Derived authorization in metadata does not falsely dirty when auth token exists
+  const baseGrpcAuth = {
+    server_address: 'localhost:50051',
+    service: 'auth.Service',
+    method: 'Check',
+    auth: { auth_type: 'bearer', token: 'secret-token' },
+    metadata: {},
+  };
+  const draftGrpcAuth = {
+    server_address: 'localhost:50051',
+    service: 'auth.Service',
+    method: 'Check',
+    auth: { auth_type: 'bearer', token: 'secret-token' },
+    metadata: { authorization: 'Bearer secret-token' },
+  };
+  assert.equal(isConfigDirty(baseGrpcAuth, draftGrpcAuth), false);
+
+  // BUT real changes must still be detected:
+  // User changes payload
+  assert.equal(
+    isConfigDirty(baseGrpcUnary, {
+      ...draftGrpcUnary,
+      payload: { order_id: 'ord-100' },
+    }),
+    true
+  );
+
+  // User changes server address
+  assert.equal(
+    isConfigDirty(baseGrpcUnary, {
+      ...draftGrpcUnary,
+      server_address: 'localhost:9090',
+    }),
+    true
+  );
+
+  // User changes stream type
+  assert.equal(
+    isConfigDirty(baseGrpcUnary, {
+      ...draftGrpcUnary,
+      stream_type: 'omni_stream',
+    }),
+    true
+  );
+});
+
 test('draft management in TabState preserves unsaved changes across switches', () => {
   const ep1 = createMockEndpoint('ep1', 'User Endpoint');
   const state0: TabState = {
