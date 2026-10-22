@@ -4,6 +4,22 @@
 
 :root {
   color-scheme: dark;
+  --color-zinc-950: 11 12 14;
+  --color-zinc-900: 17 19 23;
+  --color-zinc-850: 22 25 31;
+  --color-zinc-800: 32 36 44;
+  --color-zinc-750: 41 46 57;
+  --color-zinc-700: 53 60 74;
+  --color-zinc-600: 82 82 91;
+  --color-zinc-500: 113 113 122;
+  --color-zinc-400: 161 161 170;
+  --color-zinc-300: 212 212 216;
+  --color-zinc-200: 228 228 231;
+  --color-zinc-100: 244 244 245;
+  --color-primary: 79 70 229;
+  --color-primary-hover: 67 56 202;
+  --color-secondary: 99 102 241;
+  --color-secondary-hover: 79 70 229;
 }
 
 body {
@@ -11,19 +27,19 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Albert Sans", Roboto, sans-serif;
   user-select: none;
   overflow: hidden;
-  background-color: #0b0c0e;
-  color: #e4e4e7;
+  background-color: rgb(var(--color-zinc-950));
+  color: rgb(var(--color-zinc-200));
   -webkit-font-smoothing: antialiased;
 }
 
 /* Browser surface theming (anti-slop floor) */
 ::selection {
-  background: rgba(79, 70, 229, 0.35);
+  background: rgb(var(--color-primary) / 0.35);
   color: #ffffff;
 }
 
 input, textarea, select {
-  caret-color: #4f46e5;
+  caret-color: rgb(var(--color-primary));
   font-feature-settings: 'tnum';
 }
 
@@ -36,9 +52,9 @@ input, textarea, select {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #20242c;
+  background: rgb(var(--color-zinc-800));
   border-radius: 2px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #353c4a;
+  background: rgb(var(--color-zinc-700));
 }

@@ -19,6 +19,7 @@ import { MembersModal } from './components/members/MembersModal';
 import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSettingsModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
+import { ThemePickerModal } from './components/common/ThemePickerModal';
 import { EmptyWorkspaceView } from './components/common/EmptyWorkspaceView';
 import { matchesShortcut, getTabNumberFromEvent } from './utils/shortcuts';
 import { getAdjacentEndpoint } from './utils/tabManager';
@@ -52,6 +53,8 @@ export const App: React.FC = () => {
     setCommandPaletteOpen,
     shortcutsHelpOpen,
     setShortcutsHelpOpen,
+    themeModalOpen,
+    setThemeModalOpen,
   } = useAppStore();
 
   // Vertical resizer state between Request & Response
@@ -188,6 +191,9 @@ export const App: React.FC = () => {
         } else if (shortcutsHelpOpen) {
           e.preventDefault();
           setShortcutsHelpOpen(false);
+        } else if (themeModalOpen) {
+          e.preventDefault();
+          setThemeModalOpen(false);
         } else if (envModalOpen) {
           e.preventDefault();
           setEnvModalOpen(false);
@@ -206,6 +212,7 @@ export const App: React.FC = () => {
   }, [
     commandPaletteOpen,
     shortcutsHelpOpen,
+    themeModalOpen,
     envModalOpen,
     membersModalOpen,
     workspaceModalOpen,
@@ -214,6 +221,7 @@ export const App: React.FC = () => {
     activeEndpointId,
     setCommandPaletteOpen,
     setShortcutsHelpOpen,
+    setThemeModalOpen,
     setEnvModalOpen,
     setMembersModalOpen,
     setWorkspaceModalOpen,
@@ -236,6 +244,7 @@ export const App: React.FC = () => {
       <WorkspaceSettingsModal />
       <CommandPaletteModal />
       <ShortcutsHelpModal />
+      <ThemePickerModal />
 
       {/* Left Sidebar */}
       <Sidebar />

@@ -36,6 +36,12 @@ pub struct UserSummary {
     pub email: String,
     pub name: String,
     pub role: String,
+    pub theme: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateThemeDto {
+    pub theme: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
