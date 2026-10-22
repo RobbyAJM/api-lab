@@ -22,16 +22,30 @@ export interface PlannedEndpoint {
   };
 }
 
-export interface PlannedServiceFolder {
+export interface PlannedFolderNode {
   name: string;
+  children: PlannedFolderNode[];
   endpoints: PlannedEndpoint[];
 }
+
+export type PlannedServiceFolder = PlannedFolderNode;
 
 export interface PlannedHierarchy {
   rootFolderName: string;
   serverAddress: string;
-  serviceFolders: PlannedServiceFolder[];
+  serviceFolders: PlannedFolderNode[];
   totalEndpoints: number;
+}
+
+/**
+ * Splits a full gRPC service name into dot-separated segments case-sensitively.
+ * E.g. "nutrade.Client.ClientAccountAPI" -> ["nutrade", "Client", "ClientAccountAPI"]
+ */
+export function splitServiceName(serviceName: string): string[] {
+  const trimmed = (serviceName || '').trim();
+  if (!trimmed) return [];
+  const segments = trimmed.split('.').map((s) => s.trim()).filter(Boolean);
+  return segments.length > 0 ? segments : [trimmed];
 }
 
 /**
@@ -61,9 +75,12 @@ export function shouldAutoDetectTls(addr: string, variables?: Record<string, str
 
 /**
  * Plans the folder and endpoint hierarchy:
+ * Automatically nests folders based on dot-separated service names.
  * {folderName}/
- * |-- {service}
- *     |-- {method}
+ * |-- {package}
+ *     |-- {subpackage}
+ *         |-- {service}
+ *             |-- {method}
  */
 export function planGrpcHierarchy(options: {
   folderName: string;
@@ -73,13 +90,16 @@ export function planGrpcHierarchy(options: {
   samplePayloads?: Record<string, any>; // key format: "{service}/{method}"
 }): PlannedHierarchy {
   const rootFolderName = options.folderName.trim() || 'gRPC Services';
-  const serviceFolders: PlannedServiceFolder[] = [];
+  const serviceFolders: PlannedFolderNode[] = [];
   let totalEndpoints = 0;
   const useTls =
     options.useTls !== undefined ? options.useTls : shouldAutoDetectTls(options.serverAddress);
 
   for (const svc of options.services) {
     if (!svc.name) continue;
+    const segments = splitServiceName(svc.name);
+    if (segments.length === 0) continue;
+
     const endpoints: PlannedEndpoint[] = [];
 
     for (const method of svc.methods) {
@@ -105,10 +125,27 @@ export function planGrpcHierarchy(options: {
       totalEndpoints++;
     }
 
-    serviceFolders.push({
-      name: svc.name,
-      endpoints,
-    });
+    // Traverse or create nested folder nodes
+    let currentChildren = serviceFolders;
+    let currentNode: PlannedFolderNode | null = null;
+
+    for (const seg of segments) {
+      let found = currentChildren.find((node) => node.name === seg);
+      if (!found) {
+        found = {
+          name: seg,
+          children: [],
+          endpoints: [],
+        };
+        currentChildren.push(found);
+      }
+      currentNode = found;
+      currentChildren = found.children;
+    }
+
+    if (currentNode) {
+      currentNode.endpoints.push(...endpoints);
+    }
   }
 
   return {
@@ -124,7 +161,7 @@ export interface ApiCaller {
 }
 
 /**
- * Executes creation of folders and endpoints inside the specified collection.
+ * Executes creation of nested folders and endpoints inside the specified collection.
  */
 export async function executeGrpcHierarchyCreation(
   collectionId: string,
@@ -146,24 +183,32 @@ export async function executeGrpcHierarchyCreation(
   let createdServiceFoldersCount = 0;
   let createdEndpointsCount = 0;
 
-  // 2. Create service subfolders and their endpoints
-  for (const sFolder of planned.serviceFolders) {
-    const childFolder = await api.post(`/collections/${collectionId}/folders`, {
-      name: sFolder.name,
-      parent_folder_id: rootFolderId,
-    });
-    createdServiceFoldersCount++;
-
-    for (const ep of sFolder.endpoints) {
-      await api.post(`/collections/${collectionId}/endpoints`, {
-        name: ep.name,
-        protocol: 'grpc',
-        folder_id: childFolder.id,
-        config: ep.config,
+  // 2. Recursively create service subfolders and child endpoints
+  async function createNodes(nodes: PlannedFolderNode[], parentFolderId: string) {
+    for (const node of nodes) {
+      const childFolder = await api.post(`/collections/${collectionId}/folders`, {
+        name: node.name,
+        parent_folder_id: parentFolderId,
       });
-      createdEndpointsCount++;
+      createdServiceFoldersCount++;
+
+      for (const ep of node.endpoints) {
+        await api.post(`/collections/${collectionId}/endpoints`, {
+          name: ep.name,
+          protocol: 'grpc',
+          folder_id: childFolder.id,
+          config: ep.config,
+        });
+        createdEndpointsCount++;
+      }
+
+      if (node.children.length > 0) {
+        await createNodes(node.children, childFolder.id);
+      }
     }
   }
+
+  await createNodes(planned.serviceFolders, rootFolderId);
 
   return {
     rootFolderId,

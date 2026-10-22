@@ -3,6 +3,62 @@ import type {
   Endpoint,
   GrpcServiceSummary,
 } from '@api-lab/api-types';
+import { getDescendantFolderIds } from './folderTree.ts';
+import { splitServiceName } from './grpcReflectionGenerator.ts';
+
+/**
+ * Resolves the dot-separated path of a folder relative to rootFolderId.
+ * Traverses parent_folder_id until reaching rootFolderId.
+ * E.g. root (NuTrade) -> nutrade -> Client -> ClientAccountAPI
+ * Returns: "nutrade.Client.ClientAccountAPI"
+ */
+export function getFolderDotPath(
+  folderId: string,
+  rootFolderId: string,
+  foldersById: Map<string, CollectionFolder>
+): string {
+  const parts: string[] = [];
+  let curr = foldersById.get(folderId);
+  while (curr && curr.id !== rootFolderId) {
+    parts.unshift(curr.name);
+    if (!curr.parent_folder_id) break;
+    curr = foldersById.get(curr.parent_folder_id);
+  }
+  return parts.join('.');
+}
+
+/**
+ * Finds the folder representing a specific gRPC service within a root folder's hierarchy.
+ * Matches case-sensitively by folder dot-path or by endpoint config service.
+ */
+export function findServiceFolder(
+  serviceName: string,
+  rootFolderId: string,
+  folders: CollectionFolder[],
+  endpoints: Endpoint[]
+): CollectionFolder | undefined {
+  const foldersById = new Map<string, CollectionFolder>(folders.map((f) => [f.id, f]));
+  const descendantIds = getDescendantFolderIds(folders, rootFolderId);
+  descendantIds.delete(rootFolderId);
+
+  // 1. Direct dot-path match
+  for (const fid of descendantIds) {
+    const f = foldersById.get(fid);
+    if (!f) continue;
+    if (getFolderDotPath(f.id, rootFolderId, foldersById) === serviceName) {
+      return f;
+    }
+  }
+
+  // 2. Endpoint config match fallback
+  for (const ep of endpoints) {
+    if (ep.folder_id && descendantIds.has(ep.folder_id) && ep.config?.service === serviceName) {
+      return foldersById.get(ep.folder_id);
+    }
+  }
+
+  return undefined;
+}
 
 /**
  * Reconciles an existing payload with a fresh sample payload derived from reflection:
@@ -97,6 +153,7 @@ export interface SyncPlan {
 /**
  * Plans the reflection reconciliation between existing local folders/endpoints
  * and the freshly queried gRPC reflection services.
+ * Handles nested folder hierarchies matching dot-separated service names case-sensitively.
  */
 export function planReflectionSync(
   rootFolderId: string,
@@ -105,18 +162,35 @@ export function planReflectionSync(
   freshServices: GrpcServiceSummary[],
   freshPayloads: Record<string, any> // key format: "{service}/{method}"
 ): SyncPlan {
-  const serviceFolders = existingFolders.filter(
-    (f) => f.parent_folder_id === rootFolderId
-  );
+  const foldersById = new Map<string, CollectionFolder>(existingFolders.map((f) => [f.id, f]));
+  const descendantIds = getDescendantFolderIds(existingFolders, rootFolderId);
+  descendantIds.delete(rootFolderId);
+
+  const descendantFolders = existingFolders.filter((f) => descendantIds.has(f.id));
+
+  // Determine which descendant folders have child folders
+  const parentFolderIds = new Set<string>();
+  for (const f of descendantFolders) {
+    if (f.parent_folder_id) {
+      parentFolderIds.add(f.parent_folder_id);
+    }
+  }
 
   const freshServiceMap = new Map<string, GrpcServiceSummary>();
   for (const s of freshServices) {
     freshServiceMap.set(s.name, s);
   }
 
-  const existingFolderMap = new Map<string, CollectionFolder>();
-  for (const sf of serviceFolders) {
-    existingFolderMap.set(sf.name, sf);
+  // Map each service to its existing folder if found
+  const serviceFolderMap = new Map<string, CollectionFolder>();
+  const recognizedFolderIds = new Set<string>();
+
+  for (const s of freshServices) {
+    const foundFolder = findServiceFolder(s.name, rootFolderId, existingFolders, existingEndpoints);
+    if (foundFolder) {
+      serviceFolderMap.set(s.name, foundFolder);
+      recognizedFolderIds.add(foundFolder.id);
+    }
   }
 
   const servicesToDelete: { folderId: string; serviceName: string }[] = [];
@@ -125,24 +199,40 @@ export function planReflectionSync(
   const methodsToDelete: SyncPlan['methodsToDelete'] = [];
   const methodsToUpdate: SyncPlan['methodsToUpdate'] = [];
 
-  // 1. Detect deleted services
-  for (const sf of serviceFolders) {
-    if (!freshServiceMap.has(sf.name)) {
-      servicesToDelete.push({ folderId: sf.id, serviceName: sf.name });
+  // 1. Detect deleted services:
+  // Folders under root that represent a service (either hold endpoints or are leaf folders),
+  // but are not in freshServiceMap.
+  const inspectedFolderIds = new Set<string>();
+
+  for (const sf of descendantFolders) {
+    if (recognizedFolderIds.has(sf.id)) continue;
+    if (inspectedFolderIds.has(sf.id)) continue;
+
+    const folderEndpoints = existingEndpoints.filter((e) => e.folder_id === sf.id);
+    const dotPath = getFolderDotPath(sf.id, rootFolderId, foldersById);
+    const epService = folderEndpoints.find((e) => e.config?.service)?.config?.service;
+    const inferredServiceName = epService || dotPath;
+
+    const isLeaf = !parentFolderIds.has(sf.id);
+    const isServiceFolder = folderEndpoints.length > 0 || isLeaf;
+
+    if (isServiceFolder && inferredServiceName && !freshServiceMap.has(inferredServiceName)) {
+      servicesToDelete.push({ folderId: sf.id, serviceName: inferredServiceName });
+      inspectedFolderIds.add(sf.id);
     }
   }
 
   // 2. Detect new services
   for (const fs of freshServices) {
-    if (!existingFolderMap.has(fs.name)) {
+    if (!serviceFolderMap.has(fs.name)) {
       servicesToCreate.push(fs);
     }
   }
 
   // 3. For existing services: reconcile methods and payloads
-  for (const sf of serviceFolders) {
-    const freshService = freshServiceMap.get(sf.name);
-    if (!freshService) continue; // Will be deleted
+  for (const [serviceName, sf] of serviceFolderMap.entries()) {
+    const freshService = freshServiceMap.get(serviceName);
+    if (!freshService) continue;
 
     const folderEndpoints = existingEndpoints.filter((e) => e.folder_id === sf.id);
     const existingEpMap = new Map<string, Endpoint>();
@@ -166,12 +256,12 @@ export function planReflectionSync(
     for (const fm of freshService.methods) {
       const existingEp = existingEpMap.get(fm.name);
       const streamType = fm.stream_type || 'unary';
-      const freshPayload = freshPayloads[`${sf.name}/${fm.name}`] || {};
+      const freshPayload = freshPayloads[`${serviceName}/${fm.name}`] || {};
 
       if (!existingEp) {
         methodsToCreate.push({
           folderId: sf.id,
-          serviceName: sf.name,
+          serviceName: serviceName,
           methodName: fm.name,
           streamType,
         });
@@ -219,7 +309,51 @@ export interface SyncExecutionResult {
 }
 
 /**
+ * Ensures that the nested folder hierarchy for segments exists under rootFolderId.
+ * Reuses existing folders where names match case-sensitively.
+ * Returns the ID of the leaf folder.
+ */
+export async function ensureFolderPath(
+  collectionId: string,
+  rootFolderId: string,
+  segments: string[],
+  foldersList: CollectionFolder[],
+  api: SyncApiCaller
+): Promise<string> {
+  let currentParentId = rootFolderId;
+
+  for (const seg of segments) {
+    let match = foldersList.find(
+      (f) => f.parent_folder_id === currentParentId && f.name === seg
+    );
+
+    if (match) {
+      currentParentId = match.id;
+    } else {
+      const created = await api.post(`/collections/${collectionId}/folders`, {
+        name: seg,
+        parent_folder_id: currentParentId,
+      });
+      const newFolder: CollectionFolder = {
+        id: created.id,
+        collection_id: collectionId,
+        parent_folder_id: currentParentId,
+        name: seg,
+        sort_order: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      foldersList.push(newFolder);
+      currentParentId = newFolder.id;
+    }
+  }
+
+  return currentParentId;
+}
+
+/**
  * Executes the planned reflection sync actions against the workspace API.
+ * Preserves nested folder structure for new services and prunes empty intermediate folders.
  */
 export async function executeReflectionSync(
   collectionId: string,
@@ -227,7 +361,8 @@ export async function executeReflectionSync(
   serverAddress: string,
   plan: SyncPlan,
   freshPayloads: Record<string, any>,
-  api: SyncApiCaller
+  api: SyncApiCaller,
+  existingFolders: CollectionFolder[] = []
 ): Promise<SyncExecutionResult> {
   let servicesDeleted = 0;
   let servicesCreated = 0;
@@ -235,10 +370,30 @@ export async function executeReflectionSync(
   let methodsCreated = 0;
   let methodsUpdated = 0;
 
+  const localFolders = [...existingFolders];
+
   // 1. Delete removed services (cascades to their endpoints)
+  const deletedFolderIds = new Set<string>();
   for (const s of plan.servicesToDelete) {
     await api.delete(`/folders/${s.folderId}`);
+    deletedFolderIds.add(s.folderId);
     servicesDeleted++;
+
+    // Prune empty intermediate ancestor folders up to rootFolderId
+    let curr = localFolders.find((f) => f.id === s.folderId);
+    while (curr && curr.parent_folder_id && curr.parent_folder_id !== rootFolderId) {
+      const parentId = curr.parent_folder_id;
+      const hasOtherChildren = localFolders.some(
+        (f) => f.parent_folder_id === parentId && !deletedFolderIds.has(f.id)
+      );
+      if (!hasOtherChildren) {
+        await api.delete(`/folders/${parentId}`);
+        deletedFolderIds.add(parentId);
+        curr = localFolders.find((f) => f.id === parentId);
+      } else {
+        break;
+      }
+    }
   }
 
   // 2. Delete removed methods in existing services
@@ -249,10 +404,14 @@ export async function executeReflectionSync(
 
   // 3. Create new services and their methods
   for (const s of plan.servicesToCreate) {
-    const folderRes = await api.post(`/collections/${collectionId}/folders`, {
-      name: s.name,
-      parent_folder_id: rootFolderId,
-    });
+    const segments = splitServiceName(s.name);
+    const leafFolderId = await ensureFolderPath(
+      collectionId,
+      rootFolderId,
+      segments,
+      localFolders,
+      api
+    );
     servicesCreated++;
 
     for (const m of s.methods) {
@@ -260,7 +419,7 @@ export async function executeReflectionSync(
       await api.post(`/collections/${collectionId}/endpoints`, {
         name: m.name,
         protocol: 'grpc',
-        folder_id: folderRes.id,
+        folder_id: leafFolderId,
         config: {
           server_address: serverAddress,
           service: s.name,
