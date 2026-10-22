@@ -268,7 +268,7 @@ jobs:
 
       - name: Create checksums
         working-directory: release-assets
-        run: sha256sum $(find . -type f -printf '%p\n' | sort) > SHA256SUMS
+        run: find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
