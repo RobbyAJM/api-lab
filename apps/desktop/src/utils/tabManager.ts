@@ -1,10 +1,17 @@
 import type { Endpoint } from '@api-lab/api-types';
 
+export interface TabResponseData {
+  http?: any;
+  grpc?: any;
+  streamMessages?: any[];
+}
+
 export interface TabState {
   openEndpoints: Endpoint[];
   activeEndpointId: string | null;
   activeEndpoint: Endpoint | null;
   endpointDrafts?: Record<string, Record<string, any>>;
+  endpointResponses?: Record<string, TabResponseData>;
 }
 
 /**
@@ -99,6 +106,8 @@ export function closeEndpointInTabs(state: TabState, endpointId: string): TabSta
   const nextOpen = state.openEndpoints.filter((e) => e.id !== endpointId);
   const nextDrafts = { ...(state.endpointDrafts || {}) };
   delete nextDrafts[endpointId];
+  const nextResponses = { ...(state.endpointResponses || {}) };
+  delete nextResponses[endpointId];
 
   // Non-active tab closed: keep current active endpoint
   if (state.activeEndpointId !== endpointId) {
@@ -107,6 +116,7 @@ export function closeEndpointInTabs(state: TabState, endpointId: string): TabSta
       activeEndpointId: state.activeEndpointId,
       activeEndpoint: state.activeEndpoint,
       endpointDrafts: nextDrafts,
+      endpointResponses: nextResponses,
     };
   }
 
@@ -117,6 +127,7 @@ export function closeEndpointInTabs(state: TabState, endpointId: string): TabSta
       activeEndpoint: null,
       activeEndpointId: null,
       endpointDrafts: nextDrafts,
+      endpointResponses: nextResponses,
     };
   }
 
@@ -129,6 +140,7 @@ export function closeEndpointInTabs(state: TabState, endpointId: string): TabSta
     activeEndpoint: nextActive,
     activeEndpointId: nextActive.id,
     endpointDrafts: nextDrafts,
+    endpointResponses: nextResponses,
   };
 }
 
@@ -144,11 +156,17 @@ export function closeOtherEndpointsInTabs(state: TabState, endpointId: string): 
     nextDrafts[endpointId] = state.endpointDrafts[endpointId];
   }
 
+  const nextResponses: Record<string, TabResponseData> = {};
+  if (state.endpointResponses && state.endpointResponses[endpointId]) {
+    nextResponses[endpointId] = state.endpointResponses[endpointId];
+  }
+
   return {
     openEndpoints: [target],
     activeEndpointId: target.id,
     activeEndpoint: target,
     endpointDrafts: nextDrafts,
+    endpointResponses: nextResponses,
   };
 }
 
@@ -161,6 +179,7 @@ export function closeAllEndpointsInTabs(): TabState {
     activeEndpointId: null,
     activeEndpoint: null,
     endpointDrafts: {},
+    endpointResponses: {},
   };
 }
 
@@ -247,4 +266,30 @@ export function getAdjacentEndpoint(
 
   if (nextIndex === currentIndex) return null;
   return openEndpoints[nextIndex];
+}
+
+export function setEndpointResponseInState(
+  state: TabState,
+  endpointId: string,
+  responseUpdate: Partial<TabResponseData>
+): TabState {
+  const current = state.endpointResponses?.[endpointId] || {};
+  return {
+    ...state,
+    endpointResponses: {
+      ...(state.endpointResponses || {}),
+      [endpointId]: {
+        ...current,
+        ...responseUpdate,
+      },
+    },
+  };
+}
+
+export function getEndpointResponseFromState(
+  state: TabState,
+  endpointId: string | null
+): TabResponseData | null {
+  if (!endpointId || !state.endpointResponses) return null;
+  return state.endpointResponses[endpointId] || null;
 }
