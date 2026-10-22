@@ -188,11 +188,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f \
+          find src-tauri/target -type f \
             \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
-          APPIMAGE=$(find src-tauri/target/${{ matrix.target }}/release/bundle/appimage -name '*.AppImage' -print -quit)
+          APPIMAGE=$(find src-tauri/target -type f -name '*.AppImage' -print -quit)
           test -n "${APPIMAGE}"
           tar -czf "release/api-lab-${{ matrix.artifact }}.tar.gz" -C "$(dirname "${APPIMAGE}")" "$(basename "${APPIMAGE}")"
+          test -n "$(find release -type f -print -quit)"
           for file in release/*; do
             base=$(basename "${file}")
             mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
@@ -204,7 +205,8 @@ jobs:
         shell: bash
         run: |
           mkdir -p release
-          find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \) -exec cp {} release/ \;
+          find src-tauri/target -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \) -exec cp {} release/ \;
+          test -n "$(find release -type f -print -quit)"
           for file in release/*; do
             base=$(basename "${file}")
             mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
