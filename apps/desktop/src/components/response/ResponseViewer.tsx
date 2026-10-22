@@ -4,7 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Endpoint, SavedResponse } from '@api-lab/api-types';
 import {
-  Bookmark,
+  Save,
   Clock,
   HardDrive,
   Trash2,
@@ -51,7 +51,9 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     isGrpc &&
     Boolean(endpoint.config?.stream_type && endpoint.config.stream_type !== 'unary');
 
-  const [activeTab, setActiveTab] = useState<'body' | 'stream' | 'headers' | 'saved'>('body');
+  const [activeTab, setActiveTab] = useState<'body' | 'stream' | 'headers' | 'saved'>(
+    isStreamRpc ? 'stream' : 'body'
+  );
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [streamSearchQuery, setStreamSearchQuery] = useState('');
@@ -66,19 +68,14 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   const [copiedError, setCopiedError] = useState(false);
   const streamBottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto switch to stream tab when streaming begins or stream messages exist on stream RPC
+  // Sync tab on RPC stream type changes: stream RPCs never show body
   useEffect(() => {
-    if (isStreamRpc && (isStreaming || streamMessages.length > 0)) {
+    if (isStreamRpc && activeTab === 'body') {
       setActiveTab('stream');
-    }
-  }, [isStreaming, streamMessages.length, isStreamRpc]);
-
-  // If not a stream RPC and activeTab is stream, fall back to body
-  useEffect(() => {
-    if (!isStreamRpc && activeTab === 'stream') {
+    } else if (!isStreamRpc && activeTab === 'stream') {
       setActiveTab('body');
     }
-  }, [isStreamRpc, activeTab]);
+  }, [isStreamRpc, activeTab, endpoint.id]);
 
   // Reset tab state on endpoint switch
   useEffect(() => {
@@ -420,8 +417,8 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
               className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
               title="Save response to workspace"
             >
-              <Bookmark size={12} className="text-zinc-400" />
-              <span>Save</span>
+              <Save size={12} className="text-primary" />
+              <span>Save Response</span>
             </button>
           )}
         </div>
@@ -430,16 +427,18 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
       {/* Navigation Tabs Bar */}
       <div className="px-4 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setActiveTab('body')}
-            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
-              activeTab === 'body'
-                ? 'border-zinc-200 text-zinc-100'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <span>Body</span>
-          </button>
+          {!isStreamRpc && (
+            <button
+              onClick={() => setActiveTab('body')}
+              className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+                activeTab === 'body'
+                  ? 'border-zinc-200 text-zinc-100'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <span>Body</span>
+            </button>
+          )}
 
           {isStreamRpc && (
             <button
@@ -485,8 +484,8 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           </button>
         </div>
 
-        {/* Output Controls (Format indicator & Copy) */}
-        {activeTab === 'body' && formattedBody && (
+        {/* Output Controls (Format indicator & Copy & Save Response) */}
+        {!isStreamRpc && activeTab === 'body' && formattedBody && (
           <div className="flex items-center gap-2 py-1">
             <span className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
               {detectedFormat} Formatted
@@ -507,6 +506,15 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                   <span>Copy</span>
                 </>
               )}
+            </button>
+            <button
+              onClick={handleSaveCurrent}
+              disabled={saveResponseMutation.isPending}
+              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              title="Save response to workspace"
+            >
+              <Save size={12} className="text-primary" />
+              <span>Save Response</span>
             </button>
           </div>
         )}
@@ -627,14 +635,25 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                   </button>
                 )}
                 {streamMessages.length > 0 && (
-                  <button
-                    onClick={clearStreamMessages}
-                    className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200 text-xs transition px-2 py-0.5 rounded hover:bg-zinc-900 border border-transparent hover:border-zinc-800"
-                    title="Clear stream messages"
-                  >
-                    <Trash2 size={12} />
-                    <span>Clear Messages</span>
-                  </button>
+                  <>
+                    <button
+                      onClick={handleSaveCurrent}
+                      disabled={saveResponseMutation.isPending}
+                      className="flex items-center gap-1.5 text-zinc-300 hover:text-white text-xs transition px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 shadow-sm disabled:opacity-50"
+                      title="Save stream messages to workspace"
+                    >
+                      <Save size={12} className="text-primary" />
+                      <span>Save Response</span>
+                    </button>
+                    <button
+                      onClick={clearStreamMessages}
+                      className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200 text-xs transition px-2 py-0.5 rounded hover:bg-zinc-900 border border-transparent hover:border-zinc-800"
+                      title="Clear stream messages"
+                    >
+                      <Trash2 size={12} />
+                      <span>Clear Messages</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>

@@ -442,17 +442,20 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
 
     let service_desc = match pool.get_service_by_name(&req.service) {
         Some(s) => s,
-        None => {
-            return GrpcExecutionResponse {
-                status_code: 12, // UNIMPLEMENTED
-                status_message: format!("Service '{}' not found in server reflection", req.service),
-                response_time_ms: start.elapsed().as_millis() as u64,
-                response_size_bytes: 0,
-                metadata: HashMap::new(),
-                body: serde_json::Value::Null,
-                error: Some(format!("Service '{}' not found. gRPC server reflection unavailable on target; reflection required.", req.service)),
-            };
-        }
+        None => match pool.services().find(|s| s.full_name() == req.service || s.name() == req.service || s.full_name().ends_with(&format!(".{}", req.service))) {
+            Some(s) => s,
+            None => {
+                return GrpcExecutionResponse {
+                    status_code: 12, // UNIMPLEMENTED
+                    status_message: format!("Service '{}' not found in server reflection", req.service),
+                    response_time_ms: start.elapsed().as_millis() as u64,
+                    response_size_bytes: 0,
+                    metadata: HashMap::new(),
+                    body: serde_json::Value::Null,
+                    error: Some(format!("Service '{}' not found. gRPC server reflection unavailable on target; reflection required.", req.service)),
+                };
+            }
+        },
     };
 
     let method_desc = match service_desc.methods().find(|m| m.name() == req.method) {
@@ -501,7 +504,7 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
 
     // Call unary RPC via tonic Grpc client
     let mut grpc_client = tonic::client::Grpc::new(channel);
-    let path = format!("/{}/{}", req.service, req.method);
+    let path = format!("/{}/{}", service_desc.full_name(), req.method);
     let http_path = match http::uri::PathAndQuery::from_maybe_shared(path.clone()) {
         Ok(p) => p,
         Err(e) => {
@@ -629,8 +632,20 @@ pub async fn execute_unary(req: GrpcExecutionRequest) -> GrpcExecutionResponse {
 
 pub async fn execute_streaming<F>(
     req: GrpcExecutionRequest,
+    on_message: F,
+    cancel_rx: tokio::sync::oneshot::Receiver<()>,
+) -> GrpcExecutionResponse
+where
+    F: FnMut(serde_json::Value) + Send + 'static,
+{
+    execute_streaming_with_outbound(req, on_message, cancel_rx, None).await
+}
+
+pub async fn execute_streaming_with_outbound<F>(
+    req: GrpcExecutionRequest,
     mut on_message: F,
     mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+    outbound_rx: Option<tokio::sync::mpsc::Receiver<serde_json::Value>>,
 ) -> GrpcExecutionResponse
 where
     F: FnMut(serde_json::Value) + Send + 'static,
@@ -655,17 +670,20 @@ where
 
     let service_desc = match pool.get_service_by_name(&req.service) {
         Some(s) => s,
-        None => {
-            return GrpcExecutionResponse {
-                status_code: 12,
-                status_message: format!("Service '{}' not found", req.service),
-                response_time_ms: start.elapsed().as_millis() as u64,
-                response_size_bytes: 0,
-                metadata: HashMap::new(),
-                body: serde_json::Value::Null,
-                error: Some(format!("Service '{}' not found in server reflection", req.service)),
-            };
-        }
+        None => match pool.services().find(|s| s.name() == req.service || s.name().ends_with(&format!(".{}", req.service))) {
+            Some(s) => s,
+            None => {
+                return GrpcExecutionResponse {
+                    status_code: 12,
+                    status_message: format!("Service '{}' not found", req.service),
+                    response_time_ms: start.elapsed().as_millis() as u64,
+                    response_size_bytes: 0,
+                    metadata: HashMap::new(),
+                    body: serde_json::Value::Null,
+                    error: Some(format!("Service '{}' not found in server reflection", req.service)),
+                };
+            }
+        },
     };
 
     let method_desc = match service_desc.methods().find(|m| m.name() == req.method) {
@@ -684,7 +702,7 @@ where
     };
 
     let input_desc = method_desc.input();
-    let dynamic_input: DynamicMessage = match input_desc.deserialize(req.payload) {
+    let dynamic_input: DynamicMessage = match input_desc.clone().deserialize(req.payload) {
         Ok(msg) => msg,
         Err(e) => {
             return GrpcExecutionResponse {
@@ -713,7 +731,7 @@ where
     }
 
     let mut grpc_client = tonic::client::Grpc::new(channel);
-    let path = format!("/{}/{}", req.service, req.method);
+    let path = format!("/{}/{}", service_desc.full_name(), req.method);
     let http_path = match http::uri::PathAndQuery::from_maybe_shared(path.clone()) {
         Ok(p) => p,
         Err(e) => {
@@ -748,9 +766,27 @@ where
     let is_client_streaming = method_desc.is_client_streaming();
 
     let (keepalive_tx, stream_res) = if is_client_streaming {
-        let (tx, rx) = tokio::sync::mpsc::channel(10);
+        let (tx, rx) = tokio::sync::mpsc::channel(32);
         let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
         let _ = tx.send(buf).await;
+
+        if let Some(mut rx_in) = outbound_rx {
+            let tx_clone = tx.clone();
+            let in_desc = input_desc.clone();
+            tokio::spawn(async move {
+                while let Some(json_val) = rx_in.recv().await {
+                    if let Ok(dyn_msg) = in_desc.clone().deserialize(json_val) {
+                        let mut b = Vec::new();
+                        if prost::Message::encode(&dyn_msg, &mut b).is_ok() {
+                            if tx_clone.send(b).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         let mut tonic_req = tonic::Request::new(outbound);
         for (k, v) in req.metadata {
             let key_lower = k.to_lowercase();
@@ -791,6 +827,7 @@ where
             let mut inbound_stream = response.into_inner();
             let mut received_messages = Vec::new();
             let mut total_bytes = 0;
+            let mut stream_err: Option<tonic::Status> = None;
 
             loop {
                 tokio::select! {
@@ -808,7 +845,8 @@ where
                                     }
                                 }
                             }
-                            Some(Err(_)) => {
+                            Some(Err(status)) => {
+                                stream_err = Some(status);
                                 break;
                             }
                             None => {
@@ -820,14 +858,26 @@ where
             }
 
             let elapsed = start.elapsed().as_millis() as u64;
-            GrpcExecutionResponse {
-                status_code: 0,
-                status_message: "Stream completed".into(),
-                response_time_ms: elapsed,
-                response_size_bytes: total_bytes,
-                metadata: meta_map,
-                body: serde_json::Value::Array(received_messages),
-                error: None,
+            if let Some(err) = stream_err {
+                GrpcExecutionResponse {
+                    status_code: err.code() as i32,
+                    status_message: err.message().to_string(),
+                    response_time_ms: elapsed,
+                    response_size_bytes: total_bytes,
+                    metadata: meta_map,
+                    body: serde_json::Value::Array(received_messages),
+                    error: Some(format!("Streaming RPC error: {}", err.message())),
+                }
+            } else {
+                GrpcExecutionResponse {
+                    status_code: 0,
+                    status_message: "Stream completed".into(),
+                    response_time_ms: elapsed,
+                    response_size_bytes: total_bytes,
+                    metadata: meta_map,
+                    body: serde_json::Value::Array(received_messages),
+                    error: None,
+                }
             }
         }
         Err(status) => {
@@ -848,11 +898,15 @@ where
 async fn fetch_pool_for_symbol(channel: Channel, symbol: &str) -> Result<DescriptorPool, String> {
     // Try v1 first
     if let Ok(pool) = fetch_pool_v1(channel.clone(), symbol).await {
-        return Ok(pool);
+        if pool.services().count() > 0 {
+            return Ok(pool);
+        }
     }
     // Fallback v1alpha
     fetch_pool_v1alpha(channel, symbol).await
 }
+
+const REFL_STEP_TIMEOUT: Duration = Duration::from_millis(2500);
 
 async fn fetch_pool_v1(channel: Channel, symbol: &str) -> Result<DescriptorPool, String> {
     use tonic_reflection::pb::v1::server_reflection_client::ServerReflectionClient;
@@ -861,34 +915,125 @@ async fn fetch_pool_v1(channel: Channel, symbol: &str) -> Result<DescriptorPool,
     use tonic_reflection::pb::v1::ServerReflectionRequest;
 
     let mut client = ServerReflectionClient::new(channel);
-    let (tx, rx) = tokio::sync::mpsc::channel(10);
+    let (tx, rx) = tokio::sync::mpsc::channel(20);
     let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
 
+    // Send first request BEFORE awaiting server_reflection_info so server receives headers
     let sym_req = ServerReflectionRequest {
         host: String::new(),
         message_request: Some(MessageRequest::FileContainingSymbol(symbol.to_string())),
     };
-
     tx.send(sym_req).await.map_err(|e| e.to_string())?;
 
-    let mut response_stream = tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound))
+    let mut response_stream = tokio::time::timeout(REFL_STEP_TIMEOUT, client.server_reflection_info(outbound))
         .await
         .map_err(|_| "v1 timeout".to_string())?
         .map_err(|e| e.to_string())?
         .into_inner();
 
-    let mut pool = DescriptorPool::new();
-    if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
+    let mut raw_protos: HashMap<String, FileDescriptorProto> = HashMap::new();
+
+    if let Ok(Some(Ok(res))) = tokio::time::timeout(REFL_STEP_TIMEOUT, response_stream.next()).await {
         if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
-            let mut protos = Vec::new();
             for fd_bytes in fdr.file_descriptor_proto {
                 if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
-                    protos.push(proto);
+                    if let Some(ref name) = proto.name {
+                        raw_protos.insert(name.clone(), proto);
+                    }
                 }
             }
-            let _ = pool.add_file_descriptor_protos(protos);
         }
     }
+
+    // If symbol lookup returned empty, list services to find matching qualified service name
+    if raw_protos.is_empty() {
+        let list_req = ServerReflectionRequest {
+            host: String::new(),
+            message_request: Some(MessageRequest::ListServices(String::new())),
+        };
+        if tx.send(list_req).await.is_ok() {
+            if let Ok(Some(Ok(res))) = tokio::time::timeout(REFL_STEP_TIMEOUT, response_stream.next()).await {
+                if let Some(MessageResponse::ListServicesResponse(ls)) = res.message_response {
+                    let matching_svc = ls.service.into_iter().find(|s| {
+                        s.name == symbol || s.name.ends_with(&format!(".{}", symbol))
+                    });
+                    if let Some(svc) = matching_svc {
+                        let retry_req = ServerReflectionRequest {
+                            host: String::new(),
+                            message_request: Some(MessageRequest::FileContainingSymbol(svc.name)),
+                        };
+                        if tx.send(retry_req).await.is_ok() {
+                            if let Ok(Some(Ok(retry_res))) = tokio::time::timeout(REFL_STEP_TIMEOUT, response_stream.next()).await {
+                                if let Some(MessageResponse::FileDescriptorResponse(fdr)) = retry_res.message_response {
+                                    for fd_bytes in fdr.file_descriptor_proto {
+                                        if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
+                                            if let Some(ref name) = proto.name {
+                                                raw_protos.insert(name.clone(), proto);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if raw_protos.is_empty() {
+        return Err(format!("Symbol '{}' not found via v1 reflection", symbol));
+    }
+
+    // Transitive dependency resolution via FileByFilename
+    let mut resolved_filenames: std::collections::HashSet<String> = raw_protos.keys().cloned().collect();
+    let mut pending_deps: Vec<String> = Vec::new();
+    for proto in raw_protos.values() {
+        for dep in &proto.dependency {
+            if !resolved_filenames.contains(dep) {
+                pending_deps.push(dep.clone());
+            }
+        }
+    }
+
+    while let Some(dep_filename) = pending_deps.pop() {
+        if resolved_filenames.contains(&dep_filename) {
+            continue;
+        }
+        resolved_filenames.insert(dep_filename.clone());
+
+        let dep_req = ServerReflectionRequest {
+            host: String::new(),
+            message_request: Some(MessageRequest::FileByFilename(dep_filename)),
+        };
+        if tx.send(dep_req).await.is_ok() {
+            if let Ok(Some(Ok(dep_res))) = tokio::time::timeout(REFL_STEP_TIMEOUT, response_stream.next()).await {
+                if let Some(MessageResponse::FileDescriptorResponse(fdr)) = dep_res.message_response {
+                    for fd_bytes in fdr.file_descriptor_proto {
+                        if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
+                            if let Some(ref name) = proto.name {
+                                for sub_dep in &proto.dependency {
+                                    if !resolved_filenames.contains(sub_dep) {
+                                        pending_deps.push(sub_dep.clone());
+                                    }
+                                }
+                                raw_protos.insert(name.clone(), proto);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut pool = DescriptorPool::new();
+    pool.add_file_descriptor_protos(raw_protos.into_values())
+        .map_err(|e| format!("v1 pool build error: {e}"))?;
+
+    if pool.services().count() == 0 {
+        return Err("No services found in v1 pool".into());
+    }
+
     Ok(pool)
 }
 
@@ -899,34 +1044,125 @@ async fn fetch_pool_v1alpha(channel: Channel, symbol: &str) -> Result<Descriptor
     use tonic_reflection::pb::v1alpha::ServerReflectionRequest;
 
     let mut client = ServerReflectionClient::new(channel);
-    let (tx, rx) = tokio::sync::mpsc::channel(10);
+    let (tx, rx) = tokio::sync::mpsc::channel(20);
     let outbound = tokio_stream::wrappers::ReceiverStream::new(rx);
 
+    // Send first request BEFORE awaiting server_reflection_info so server receives headers
     let sym_req = ServerReflectionRequest {
         host: String::new(),
         message_request: Some(MessageRequest::FileContainingSymbol(symbol.to_string())),
     };
-
     tx.send(sym_req).await.map_err(|e| e.to_string())?;
 
-    let mut response_stream = tokio::time::timeout(REQUEST_TIMEOUT, client.server_reflection_info(outbound))
+    let mut response_stream = tokio::time::timeout(REFL_STEP_TIMEOUT, client.server_reflection_info(outbound))
         .await
         .map_err(|_| "v1alpha timeout".to_string())?
         .map_err(|e| e.to_string())?
         .into_inner();
 
-    let mut pool = DescriptorPool::new();
-    if let Ok(Some(Ok(res))) = tokio::time::timeout(REQUEST_TIMEOUT, response_stream.next()).await {
+    let mut raw_protos: HashMap<String, FileDescriptorProto> = HashMap::new();
+
+    if let Ok(Some(Ok(res))) = tokio::time::timeout(REFL_STEP_TIMEOUT, response_stream.next()).await {
         if let Some(MessageResponse::FileDescriptorResponse(fdr)) = res.message_response {
-            let mut protos = Vec::new();
             for fd_bytes in fdr.file_descriptor_proto {
                 if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
-                    protos.push(proto);
+                    if let Some(ref name) = proto.name {
+                        raw_protos.insert(name.clone(), proto);
+                    }
                 }
             }
-            let _ = pool.add_file_descriptor_protos(protos);
         }
     }
+
+    // If symbol lookup returned empty, list services to find matching qualified service name
+    if raw_protos.is_empty() {
+        let list_req = ServerReflectionRequest {
+            host: String::new(),
+            message_request: Some(MessageRequest::ListServices(String::new())),
+        };
+        if tx.send(list_req).await.is_ok() {
+            if let Ok(Some(Ok(res))) = tokio::time::timeout(REFL_STEP_TIMEOUT, response_stream.next()).await {
+                if let Some(MessageResponse::ListServicesResponse(ls)) = res.message_response {
+                    let matching_svc = ls.service.into_iter().find(|s| {
+                        s.name == symbol || s.name.ends_with(&format!(".{}", symbol))
+                    });
+                    if let Some(svc) = matching_svc {
+                        let retry_req = ServerReflectionRequest {
+                            host: String::new(),
+                            message_request: Some(MessageRequest::FileContainingSymbol(svc.name)),
+                        };
+                        if tx.send(retry_req).await.is_ok() {
+                            if let Ok(Some(Ok(retry_res))) = tokio::time::timeout(REFL_STEP_TIMEOUT, response_stream.next()).await {
+                                if let Some(MessageResponse::FileDescriptorResponse(fdr)) = retry_res.message_response {
+                                    for fd_bytes in fdr.file_descriptor_proto {
+                                        if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
+                                            if let Some(ref name) = proto.name {
+                                                raw_protos.insert(name.clone(), proto);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if raw_protos.is_empty() {
+        return Err(format!("Symbol '{}' not found via v1alpha reflection", symbol));
+    }
+
+    // Transitive dependency resolution via FileByFilename
+    let mut resolved_filenames: std::collections::HashSet<String> = raw_protos.keys().cloned().collect();
+    let mut pending_deps: Vec<String> = Vec::new();
+    for proto in raw_protos.values() {
+        for dep in &proto.dependency {
+            if !resolved_filenames.contains(dep) {
+                pending_deps.push(dep.clone());
+            }
+        }
+    }
+
+    while let Some(dep_filename) = pending_deps.pop() {
+        if resolved_filenames.contains(&dep_filename) {
+            continue;
+        }
+        resolved_filenames.insert(dep_filename.clone());
+
+        let dep_req = ServerReflectionRequest {
+            host: String::new(),
+            message_request: Some(MessageRequest::FileByFilename(dep_filename)),
+        };
+        if tx.send(dep_req).await.is_ok() {
+            if let Ok(Some(Ok(dep_res))) = tokio::time::timeout(REFL_STEP_TIMEOUT, response_stream.next()).await {
+                if let Some(MessageResponse::FileDescriptorResponse(fdr)) = dep_res.message_response {
+                    for fd_bytes in fdr.file_descriptor_proto {
+                        if let Ok(proto) = FileDescriptorProto::decode(&fd_bytes[..]) {
+                            if let Some(ref name) = proto.name {
+                                for sub_dep in &proto.dependency {
+                                    if !resolved_filenames.contains(sub_dep) {
+                                        pending_deps.push(sub_dep.clone());
+                                    }
+                                }
+                                raw_protos.insert(name.clone(), proto);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut pool = DescriptorPool::new();
+    pool.add_file_descriptor_protos(raw_protos.into_values())
+        .map_err(|e| format!("v1alpha pool build error: {e}"))?;
+
+    if pool.services().count() == 0 {
+        return Err("No services found in v1alpha pool".into());
+    }
+
     Ok(pool)
 }
 
