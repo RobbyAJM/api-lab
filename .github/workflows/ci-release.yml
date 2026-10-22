@@ -1,0 +1,249 @@
+name: CI and Release
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: api-lab-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22
+  PNPM_VERSION: 10.5.2
+
+jobs:
+  checks:
+    name: Checks
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run TypeScript tests
+        run: pnpm run test:ts
+
+      - name: Build desktop frontend
+        run: pnpm run build:desktop
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check native desktop crates
+        run: cargo check --locked -p rust-core -p grpc-client
+
+      - name: Upload frontend build
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-lab-frontend
+          path: apps/desktop/dist/
+          if-no-files-found: error
+          retention-days: 1
+
+  prepare-release:
+    name: Prepare Release Tag
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - name: Checkout tags
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Create or use release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v0.1.${GITHUB_RUN_NUMBER}"
+            if ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git tag -a "${TAG}" -m "Release ${TAG}"
+              git push origin "${TAG}"
+            fi
+          fi
+          echo "tag=${TAG}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: Build ${{ matrix.name }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: prepare-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb,rpm
+            artifact: linux-x86_64
+          - name: Windows x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+            artifact: windows-x86_64
+          - name: macOS Intel
+            os: macos-13
+            target: x86_64-apple-darwin
+            bundles: dmg
+            artifact: macos-x86_64
+          - name: macOS Apple Silicon
+            os: macos-14
+            target: aarch64-apple-darwin
+            bundles: dmg
+            artifact: macos-aarch64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev patchelf
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: api-lab-frontend
+          path: apps/desktop/dist
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build desktop bundles
+        working-directory: apps/desktop
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          VERSION="${RELEASE_VERSION#v}"
+          pnpm tauri build \
+            --target "${{ matrix.target }}" \
+            --bundles "${{ matrix.bundles }}" \
+            --features desktop \
+            --config "{\"version\":\"${VERSION}\",\"build\":{\"beforeBuildCommand\":\"\"}}"
+
+      - name: Create Linux tar.gz
+        if: runner.os == 'Linux'
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          mkdir -p release
+          find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f \
+            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
+          APPIMAGE=$(find src-tauri/target/${{ matrix.target }}/release/bundle/appimage -name '*.AppImage' -print -quit)
+          test -n "${APPIMAGE}"
+          tar -czf "release/api-lab-${{ matrix.artifact }}.tar.gz" -C "$(dirname "${APPIMAGE}")" "$(basename "${APPIMAGE}")"
+          for file in release/*; do
+            base=$(basename "${file}")
+            mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
+          done
+
+      - name: Collect bundles
+        if: runner.os != 'Linux'
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          mkdir -p release
+          find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \) -exec cp {} release/ \;
+          for file in release/*; do
+            base=$(basename "${file}")
+            mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
+          done
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-lab-${{ matrix.artifact }}
+          path: apps/desktop/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.prepare-release.result == 'success'
+    needs:
+      - prepare-release
+      - build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: api-lab-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create checksums
+        working-directory: release-assets
+        run: sha256sum $(find . -type f -printf '%p\n' | sort) > SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          name: API Lab ${{ needs.prepare-release.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ contains(needs.prepare-release.outputs.tag, '-') }}
+          files: release-assets/*
