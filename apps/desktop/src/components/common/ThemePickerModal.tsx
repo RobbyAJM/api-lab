@@ -103,68 +103,78 @@ export const ThemePickerModal: React.FC = () => {
 
         {/* Themes List */}
         <div className="overflow-y-auto p-1.5 space-y-1 flex-1">
-          {filteredThemes.map((theme) => {
+          {filteredThemes.map((theme, idx) => {
             const isSelected = theme.id === activeThemeId;
+            const prevTheme = filteredThemes[idx - 1];
+            const isFirstOfCategory =
+              !prevTheme || Boolean(prevTheme.isLight) !== Boolean(theme.isLight);
+
             return (
-              <button
-                key={theme.id}
-                ref={(el) => {
-                  itemRefs.current[theme.id] = el;
-                }}
-                onClick={() => {
-                  setTheme(theme.id);
-                  setThemeModalOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded text-xs transition group text-left ${
-                  isSelected
-                    ? 'bg-zinc-850 text-zinc-100 border border-zinc-700'
-                    : 'text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100 border border-transparent'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  {/* Color Swatch Preview */}
-                  <div
-                    className="w-5 h-5 rounded border border-zinc-700 flex items-center justify-center p-0.5 shadow-sm flex-shrink-0"
-                    style={{ backgroundColor: theme.palette.neutral }}
-                    title={`Background: ${theme.palette.neutral}`}
-                  >
-                    <div className="flex gap-0.5">
-                      <div
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{ backgroundColor: theme.palette.primary }}
-                      />
-                      <div
-                        className="w-1.5 h-1.5 rounded-full"
-                        style={{
-                          backgroundColor:
-                            theme.palette.accent ?? theme.palette.info,
-                        }}
-                      />
+              <React.Fragment key={theme.id}>
+                {isFirstOfCategory && (
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-mono tracking-wider uppercase text-zinc-500 font-semibold border-b border-zinc-800/60 mb-0.5 select-none">
+                    {theme.isLight ? 'Light Themes' : 'Dark Themes'}
+                  </div>
+                )}
+                <button
+                  ref={(el) => {
+                    itemRefs.current[theme.id] = el;
+                  }}
+                  onClick={() => {
+                    setTheme(theme.id);
+                    setThemeModalOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded text-xs transition group text-left ${
+                    isSelected
+                      ? 'bg-zinc-850 text-zinc-100 border border-zinc-700'
+                      : 'text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100 border border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    {/* Color Swatch Preview */}
+                    <div
+                      className="w-5 h-5 rounded border border-zinc-700 flex items-center justify-center p-0.5 shadow-sm flex-shrink-0"
+                      style={{ backgroundColor: theme.palette.neutral }}
+                      title={`Background: ${theme.palette.neutral}`}
+                    >
+                      <div className="flex gap-0.5">
+                        <div
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: theme.palette.primary }}
+                        />
+                        <div
+                          className="w-1.5 h-1.5 rounded-full"
+                          style={{
+                            backgroundColor:
+                              theme.palette.accent ?? theme.palette.info,
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="truncate flex items-center gap-1.5">
+                      <span className="font-medium text-xs truncate">
+                        {theme.name}
+                      </span>
+                      <span
+                        className={`text-[9px] font-mono px-1 py-0.2 rounded border ${
+                          theme.isLight
+                            ? 'border-amber-500/40 text-amber-300 bg-amber-950/30'
+                            : 'border-zinc-700/60 text-zinc-400 bg-zinc-900/60'
+                        }`}
+                      >
+                        {theme.isLight ? 'Light' : 'Dark'}
+                      </span>
                     </div>
                   </div>
 
-                  <div className="truncate flex items-center gap-1.5">
-                    <span className="font-medium text-xs truncate">
-                      {theme.name}
-                    </span>
-                    <span
-                      className={`text-[9px] font-mono px-1 py-0.2 rounded border ${
-                        theme.isLight
-                          ? 'border-amber-500/40 text-amber-300 bg-amber-950/30'
-                          : 'border-zinc-700/60 text-zinc-400 bg-zinc-900/60'
-                      }`}
-                    >
-                      {theme.isLight ? 'Light' : 'Dark'}
-                    </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {isSelected && (
+                      <Check size={13} className="text-primary font-bold" />
+                    )}
                   </div>
-                </div>
-
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {isSelected && (
-                    <Check size={13} className="text-primary font-bold" />
-                  )}
-                </div>
-              </button>
+                </button>
+              </React.Fragment>
             );
           })}
 

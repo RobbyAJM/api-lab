@@ -8,6 +8,7 @@ import {
   getThemeById,
   resolveThemeVariables,
   generateThemeCss,
+  sortThemes,
   THEMES,
   DEFAULT_THEME_ID,
 } from './theme.ts';
@@ -102,6 +103,33 @@ test('THEMES list contains popular Opencode themes and light themes', () => {
   assert.ok(ids.includes('postman-dark'));
   assert.ok(ids.includes('postman-light'));
   assert.ok(THEMES.length >= 27);
+});
+
+test('sortThemes: pins api-lab to top, then dark themes A-Z, then light themes A-Z', () => {
+  assert.equal(THEMES[0].id, 'api-lab');
+  assert.equal(THEMES[0].name, 'API Lab Mineral (Default)');
+
+  const darkThemes = THEMES.filter((t) => !t.isLight);
+  const lightThemes = THEMES.filter((t) => t.isLight);
+
+  // Dark themes appear before light themes
+  const firstLightIndex = THEMES.findIndex((t) => t.isLight);
+  const lastDarkIndex = THEMES.map((t) => Boolean(t.isLight)).lastIndexOf(false);
+  assert.ok(lastDarkIndex < firstLightIndex);
+
+  // Remaining dark themes (after index 0) are strictly alphabetical
+  const darkNamesAfterDefault = darkThemes.slice(1).map((t) => t.name);
+  const sortedDarkNames = [...darkNamesAfterDefault].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
+  assert.deepEqual(darkNamesAfterDefault, sortedDarkNames);
+
+  // Light themes are strictly alphabetical
+  const lightNames = lightThemes.map((t) => t.name);
+  const sortedLightNames = [...lightNames].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
+  assert.deepEqual(lightNames, sortedLightNames);
 });
 
 test('resolveThemeVariables: resolves sampled postman-dark and postman-light themes', () => {
