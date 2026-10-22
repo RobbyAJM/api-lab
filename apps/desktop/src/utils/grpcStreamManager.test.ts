@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   getEndpointStreamActionInfo,
   createStreamMessage,
+  prependStreamMessage,
 } from './grpcStreamManager.ts';
+import { formatStreamTimestamp } from './streamViewer.ts';
 import type { Endpoint } from '@api-lab/api-types';
 
 test('getEndpointStreamActionInfo: unary endpoint remains invokable when another endpoint is streaming', () => {
@@ -158,4 +160,23 @@ test('createStreamMessage: distinguishes in vs out message entries and payloads'
   assert.equal(inMsg.id, 'msg-in-1');
   assert.equal(inMsg.direction, 'in');
   assert.deepEqual(inMsg.payload, inPayload);
+});
+
+test('prependStreamMessage: places newest message at index 0 (Postman-style prepend)', () => {
+  const msg1 = createStreamMessage({ tick: 1 }, 'in', () => 'id-1', () => '2026-10-22T13:58:00.100Z');
+  const msg2 = createStreamMessage({ tick: 2 }, 'in', () => 'id-2', () => '2026-10-22T13:58:00.200Z');
+  const msg3 = createStreamMessage({ tick: 3 }, 'in', () => 'id-3', () => '2026-10-22T13:58:00.300Z');
+
+  let list: any[] = [];
+  list = prependStreamMessage(list, msg1);
+  list = prependStreamMessage(list, msg2);
+  list = prependStreamMessage(list, msg3);
+
+  assert.equal(list.length, 3);
+  assert.equal(list[0].id, 'id-3', 'Newest message must be at the top (index 0)');
+  assert.equal(list[1].id, 'id-2');
+  assert.equal(list[2].id, 'id-1', 'Oldest message must be at the bottom (last index)');
+
+  // Formatted timestamps should preserve millisecond precision
+  assert.match(formatStreamTimestamp(list[0].timestamp), /:\d\d\.\d\d\d/);
 });

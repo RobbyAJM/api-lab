@@ -89,16 +89,24 @@ export interface StreamMessageRecord {
 }
 
 /**
- * Creates an in or out stream message record with validated direction and timestamp.
+ * Prepends a new stream message to maintain newest-on-top ordering (Postman-style).
+ */
+export function prependStreamMessage<T>(list: T[] = [], item: T): T[] {
+  return [item, ...list];
+}
+
+/**
+ * Creates an in or out stream message record with validated direction and ISO timestamp.
  */
 export function createStreamMessage(
   payload: any,
   direction: 'in' | 'out' = 'in',
-  idGenerator = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+  idGenerator = () => `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  timestampGenerator = () => new Date().toISOString()
 ): StreamMessageRecord {
   return {
     id: idGenerator(),
-    timestamp: new Date().toLocaleTimeString(),
+    timestamp: timestampGenerator(),
     direction,
     payload,
   };

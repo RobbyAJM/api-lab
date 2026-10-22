@@ -12,7 +12,6 @@ import {
   X,
   Copy,
   Check,
-  Square,
   ArrowDown,
   ArrowUp,
   ChevronDown,
@@ -43,7 +42,6 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     isStreaming,
     streamMessages,
     clearStreamMessages,
-    stopStreaming,
   } = useAppStore();
   const lastHttpResponse = getHttpResponse(endpoint.id);
   const lastGrpcResponse = getGrpcResponse(endpoint.id);
@@ -62,7 +60,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   const [directionFilter, setDirectionFilter] = useState<MessageDirectionFilter>('all');
   const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
   const [showNewMessagesPill, setShowNewMessagesPill] = useState(false);
-  const userScrolledUpRef = useRef(false);
+  const userScrolledDownRef = useRef(false);
   const streamScrollRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [copiedSaved, setCopiedSaved] = useState(false);
@@ -83,25 +81,25 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   useEffect(() => {
     setExpandedMessageIds(new Set());
     setShowNewMessagesPill(false);
-    userScrolledUpRef.current = false;
+    userScrolledDownRef.current = false;
   }, [endpoint.id]);
 
-  // Auto-scroll stream messages or show new message pill
+  // Auto-scroll stream messages or show new message pill (prepend: newest at top)
   useEffect(() => {
     if (activeTab !== 'stream') return;
-    if (userScrolledUpRef.current) {
+    if (userScrolledDownRef.current) {
       setShowNewMessagesPill(true);
     } else {
-      streamBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+      streamScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [streamMessages.length, activeTab]);
 
   const handleStreamScroll = () => {
     const el = streamScrollRef.current;
     if (!el) return;
-    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= 40;
-    userScrolledUpRef.current = !isAtBottom;
-    if (isAtBottom && showNewMessagesPill) {
+    const isAtTop = el.scrollTop <= 40;
+    userScrolledDownRef.current = !isAtTop;
+    if (isAtTop && showNewMessagesPill) {
       setShowNewMessagesPill(false);
     }
   };
@@ -277,18 +275,9 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
 
           {isStreaming && (
             <div className="flex items-center gap-1.5">
-              <span className="flex items-center gap-1 text-[10px] text-amber-300 font-mono font-bold bg-amber-950/50 border border-amber-800/60 px-2 py-0.5 rounded animate-pulse">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <span className="flex items-center text-[10px] text-white font-semibold bg-blue-600 px-2 py-0.5 rounded shadow-sm tracking-wider uppercase">
                 STREAMING
               </span>
-              <button
-                onClick={stopStreaming}
-                className="px-2 py-0.5 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 rounded text-[10px] font-medium flex items-center gap-1 transition"
-                title="Stop gRPC Stream"
-              >
-                <Square size={9} fill="currentColor" />
-                <span>Stop</span>
-              </button>
             </div>
           )}
 
@@ -451,9 +440,9 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <span>Stream</span>
+              <span>Responses</span>
               {streamMessages.length > 0 && (
-                <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-amber-300 rounded border border-zinc-800">
+                <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
                   {streamMessages.length}
                 </span>
               )}
@@ -623,39 +612,30 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                   <option value="in">Inbound (↓)</option>
                   <option value="out">Outbound (↑)</option>
                 </select>
+
+                <button
+                  type="button"
+                  onClick={clearStreamMessages}
+                  disabled={streamMessages.length === 0}
+                  className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200 text-xs transition px-2 py-0.5 rounded hover:bg-zinc-900 border border-transparent hover:border-zinc-800 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+                  title="Clear stream messages"
+                >
+                  <Trash2 size={12} />
+                  <span>Clear Messages</span>
+                </button>
               </div>
 
               <div className="flex items-center gap-2">
-                {isStreaming && (
-                  <button
-                    onClick={stopStreaming}
-                    className="px-2 py-0.5 bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300 rounded text-xs font-medium flex items-center gap-1 transition"
-                    title="Stop gRPC Stream"
-                  >
-                    <Square size={9} fill="currentColor" />
-                    <span>Stop</span>
-                  </button>
-                )}
                 {streamMessages.length > 0 && (
-                  <>
-                    <button
-                      onClick={handleSaveCurrent}
-                      disabled={saveResponseMutation.isPending}
-                      className="flex items-center gap-1.5 text-zinc-300 hover:text-white text-xs transition px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 shadow-sm disabled:opacity-50"
-                      title="Save stream messages to workspace"
-                    >
-                      <Save size={12} className="text-primary" />
-                      <span>Save Response</span>
-                    </button>
-                    <button
-                      onClick={clearStreamMessages}
-                      className="flex items-center gap-1.5 text-zinc-400 hover:text-zinc-200 text-xs transition px-2 py-0.5 rounded hover:bg-zinc-900 border border-transparent hover:border-zinc-800"
-                      title="Clear stream messages"
-                    >
-                      <Trash2 size={12} />
-                      <span>Clear Messages</span>
-                    </button>
-                  </>
+                  <button
+                    onClick={handleSaveCurrent}
+                    disabled={saveResponseMutation.isPending}
+                    className="flex items-center gap-1.5 text-zinc-300 hover:text-white text-xs transition px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 shadow-sm disabled:opacity-50"
+                    title="Save stream messages to workspace"
+                  >
+                    <Save size={12} className="text-primary" />
+                    <span>Save Response</span>
+                  </button>
                 )}
               </div>
             </div>
@@ -665,9 +645,9 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
               <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20">
                 <button
                   onClick={() => {
-                    streamBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    streamScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                     setShowNewMessagesPill(false);
-                    userScrolledUpRef.current = false;
+                    userScrolledDownRef.current = false;
                   }}
                   className="flex items-center gap-1.5 px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-full shadow-lg transition select-none"
                 >
@@ -711,11 +691,17 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                       >
                         {/* Direction / Lifecycle Icon */}
                         {isLifecycle ? (
-                          <Info size={13} className="text-zinc-400 flex-shrink-0" />
+                          <div className="w-4 h-4 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center justify-center flex-shrink-0">
+                            <Info size={10} />
+                          </div>
                         ) : isOut ? (
-                          <ArrowUp size={13} className="text-amber-400 flex-shrink-0" />
+                          <div className="w-4 h-4 rounded bg-amber-950/60 border border-amber-600/40 text-amber-400 flex items-center justify-center flex-shrink-0">
+                            <ArrowUp size={10} />
+                          </div>
                         ) : (
-                          <ArrowDown size={13} className="text-sky-400 flex-shrink-0" />
+                          <div className="w-4 h-4 rounded bg-blue-950/60 border border-blue-600/40 text-blue-400 flex items-center justify-center flex-shrink-0">
+                            <ArrowDown size={10} />
+                          </div>
                         )}
 
                         {/* Message Preview */}
