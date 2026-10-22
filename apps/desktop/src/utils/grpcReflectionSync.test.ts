@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import {
   reconcilePayload,
   planReflectionSync,
+  getFolderDotPath,
+  findServiceFolder,
+  ensureFolderPath,
+  executeReflectionSync,
 } from './grpcReflectionSync.ts';
 import type { CollectionFolder, Endpoint, GrpcServiceSummary } from '@api-lab/api-types';
 
@@ -266,4 +270,197 @@ test('executeReflectionSync: makes appropriate delete, post, and patch calls', a
   assert.ok(calls.some((c) => c.method === 'DELETE' && c.path === '/folders/f-old'));
   assert.ok(calls.some((c) => c.method === 'DELETE' && c.path === '/endpoints/ep-delete'));
   assert.ok(calls.some((c) => c.method === 'PATCH' && c.path === '/endpoints/ep-update'));
+});
+
+test('getFolderDotPath: reconstructs dot-path from nested folder hierarchy case-sensitively', () => {
+  const folders: CollectionFolder[] = [
+    { id: 'root', collection_id: 'c', parent_folder_id: null, name: 'Root', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-grpc', collection_id: 'c', parent_folder_id: 'root', name: 'grpc', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-health', collection_id: 'c', parent_folder_id: 'f-grpc', name: 'Health', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-v1', collection_id: 'c', parent_folder_id: 'f-health', name: 'v1', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-leaf', collection_id: 'c', parent_folder_id: 'f-v1', name: 'Health', sort_order: 0, created_at: '', updated_at: '' },
+  ];
+  const map = new Map(folders.map((f) => [f.id, f]));
+
+  assert.equal(getFolderDotPath('f-leaf', 'root', map), 'grpc.Health.v1.Health');
+  assert.equal(getFolderDotPath('f-v1', 'root', map), 'grpc.Health.v1');
+  assert.equal(getFolderDotPath('f-grpc', 'root', map), 'grpc');
+  assert.equal(getFolderDotPath('root', 'root', map), '');
+});
+
+test('planReflectionSync: reconciles nested multi-level gRPC folder structures (user scenario)', () => {
+  const rootId = 'root-nutrade';
+
+  const existingFolders: CollectionFolder[] = [
+    { id: rootId, collection_id: 'c', parent_folder_id: null, name: 'NuTrade', sort_order: 0, created_at: '', updated_at: '' },
+    // nutrade
+    { id: 'f-nutrade', collection_id: 'c', parent_folder_id: rootId, name: 'nutrade', sort_order: 0, created_at: '', updated_at: '' },
+    // nutrade.Client
+    { id: 'f-client', collection_id: 'c', parent_folder_id: 'f-nutrade', name: 'Client', sort_order: 0, created_at: '', updated_at: '' },
+    // nutrade.Client.ClientAccountAPI
+    { id: 'f-account', collection_id: 'c', parent_folder_id: 'f-client', name: 'ClientAccountAPI', sort_order: 0, created_at: '', updated_at: '' },
+    // nutrade.Client.ClientAuthAPI (to be deleted)
+    { id: 'f-auth', collection_id: 'c', parent_folder_id: 'f-client', name: 'ClientAuthAPI', sort_order: 1, created_at: '', updated_at: '' },
+  ];
+
+  const existingEndpoints: Endpoint[] = [
+    {
+      id: 'ep-get-account',
+      collection_id: 'c',
+      folder_id: 'f-account',
+      name: 'GetAccount',
+      protocol: 'grpc',
+      config: {
+        server_address: 'localhost:9091',
+        service: 'nutrade.Client.ClientAccountAPI',
+        method: 'GetAccount',
+        payload: { id: '123' },
+      },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'ep-login',
+      collection_id: 'c',
+      folder_id: 'f-auth',
+      name: 'Login',
+      protocol: 'grpc',
+      config: {
+        server_address: 'localhost:9091',
+        service: 'nutrade.Client.ClientAuthAPI',
+        method: 'Login',
+        payload: {},
+      },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  // Fresh reflection:
+  // 1. ClientAuthAPI is DELETED
+  // 2. ClientAccountAPI has new method 'UpdateAccount'
+  // 3. grpc.Health.v1.Health is ADDED (new service)
+  const freshServices: GrpcServiceSummary[] = [
+    {
+      name: 'nutrade.Client.ClientAccountAPI',
+      methods: [
+        { name: 'GetAccount', input_type: 'GetAccountRequest', output_type: 'GetAccountResponse' },
+        { name: 'UpdateAccount', input_type: 'UpdateAccountRequest', output_type: 'UpdateAccountResponse' },
+      ],
+    },
+    {
+      name: 'grpc.Health.v1.Health',
+      methods: [
+        { name: 'Check', input_type: 'HealthCheckRequest', output_type: 'HealthCheckResponse' },
+      ],
+    },
+  ];
+
+  const plan = planReflectionSync(
+    rootId,
+    existingFolders,
+    existingEndpoints,
+    freshServices,
+    {
+      'nutrade.Client.ClientAccountAPI/GetAccount': { id: '123' },
+      'nutrade.Client.ClientAccountAPI/UpdateAccount': { name: 'New Name' },
+      'grpc.Health.v1.Health/Check': {},
+    }
+  );
+
+  // 1. Services to delete: ClientAuthAPI only
+  assert.equal(plan.servicesToDelete.length, 1);
+  assert.equal(plan.servicesToDelete[0].serviceName, 'nutrade.Client.ClientAuthAPI');
+  assert.equal(plan.servicesToDelete[0].folderId, 'f-auth');
+
+  // 2. Services to create: grpc.Health.v1.Health
+  assert.equal(plan.servicesToCreate.length, 1);
+  assert.equal(plan.servicesToCreate[0].name, 'grpc.Health.v1.Health');
+
+  // 3. Methods to create: UpdateAccount inside f-account
+  assert.equal(plan.methodsToCreate.length, 1);
+  assert.equal(plan.methodsToCreate[0].folderId, 'f-account');
+  assert.equal(plan.methodsToCreate[0].methodName, 'UpdateAccount');
+
+  // 4. Methods to delete in existing retained services: none
+  assert.equal(plan.methodsToDelete.length, 0);
+});
+
+test('executeReflectionSync: reuses shared parent folder and prunes empty intermediate folders', async () => {
+  const calls: { method: string; path: string; body?: any }[] = [];
+  let folderIdCounter = 100;
+  let endpointIdCounter = 100;
+
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      calls.push({ method: 'POST', path, body });
+      if (path.includes('/folders')) {
+        return { id: `folder-${folderIdCounter++}`, name: body.name };
+      }
+      return { id: `endpoint-${endpointIdCounter++}`, name: body.name };
+    },
+    patch: async (path: string, body: any) => {
+      calls.push({ method: 'PATCH', path, body });
+      return { id: 'patched' };
+    },
+    delete: async (path: string) => {
+      calls.push({ method: 'DELETE', path });
+      return { ok: true };
+    },
+  };
+
+  const rootId = 'root-nutrade';
+  const existingFolders: CollectionFolder[] = [
+    { id: rootId, collection_id: 'c', parent_folder_id: null, name: 'NuTrade', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-nutrade', collection_id: 'c', parent_folder_id: rootId, name: 'nutrade', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-client', collection_id: 'c', parent_folder_id: 'f-nutrade', name: 'Client', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-account', collection_id: 'c', parent_folder_id: 'f-client', name: 'ClientAccountAPI', sort_order: 0, created_at: '', updated_at: '' },
+  ];
+
+  // Plan:
+  // 1. Add new service under existing nutrade.Client: "nutrade.Client.ClientBillingAPI"
+  // It should NOT create duplicate 'nutrade' or 'Client', but reuse them!
+  const plan = {
+    servicesToDelete: [],
+    servicesToCreate: [
+      {
+        name: 'nutrade.Client.ClientBillingAPI',
+        methods: [
+          { name: 'Pay', input_type: 'PayReq', output_type: 'PayRes', stream_type: 'unary' },
+        ],
+      },
+    ],
+    methodsToCreate: [],
+    methodsToDelete: [],
+    methodsToUpdate: [],
+  };
+
+  const res = await executeReflectionSync(
+    'c',
+    rootId,
+    'localhost:9091',
+    plan,
+    { 'nutrade.Client.ClientBillingAPI/Pay': { amount: 100 } },
+    mockApi,
+    existingFolders
+  );
+
+  assert.equal(res.servicesCreated, 1);
+  assert.equal(res.methodsCreated, 1);
+
+  // Check POST calls: only ONE folder created ('ClientBillingAPI' under 'f-client')!
+  const folderPosts = calls.filter((c) => c.method === 'POST' && c.path.includes('/folders'));
+  assert.equal(folderPosts.length, 1);
+  assert.equal(folderPosts[0].body.name, 'ClientBillingAPI');
+  assert.equal(folderPosts[0].body.parent_folder_id, 'f-client');
+
+  // Check endpoint created inside the newly created folder
+  const endpointPosts = calls.filter((c) => c.method === 'POST' && c.path.includes('/endpoints'));
+  assert.equal(endpointPosts.length, 1);
+  assert.equal(endpointPosts[0].body.name, 'Pay');
+  assert.equal(endpointPosts[0].body.folder_id, 'folder-100');
 });
