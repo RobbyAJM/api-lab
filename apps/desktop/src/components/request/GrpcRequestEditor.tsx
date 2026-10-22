@@ -50,7 +50,7 @@ import {
   formatRpcSignature,
   filterGrpcServices,
 } from '../../utils/grpcSpecification';
-import { getEffectiveEndpointConfig } from '../../utils/tabManager';
+import { getEffectiveEndpointConfig, isConfigDirty } from '../../utils/tabManager';
 import { parseJsonWithComments } from '../../utils/jsonComments';
 import {
   mergeFolderSettings,
@@ -105,7 +105,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const initialConfig = getEffectiveEndpointConfig(endpoint, draft);
 
   const [serverAddress, setServerAddress] = useState(
-    initialConfig.server_address || 'localhost:50051'
+    initialConfig.server_address !== undefined ? initialConfig.server_address : 'localhost:50051'
   );
   const [useTls, setUseTls] = useState<boolean>(() => {
     if (initialConfig.use_tls !== undefined) return Boolean(initialConfig.use_tls);
@@ -497,20 +497,19 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         if (d && d.trim()) metaDescMap[k.trim()] = d.trim();
       }
     }
-    applyRequestAuth(metaMap);
 
-    let payloadJson = {};
+    let payloadJson: any = {};
     try {
       payloadJson = parseJsonWithComments(payloadStr || '{}');
     } catch {
-      // ignore
+      payloadJson = payloadStr;
     }
 
     return {
-      server_address: effectiveServerAddress,
+      server_address: serverAddress,
       service: selectedService,
       method: selectedMethod,
-      use_tls: effectiveTls,
+      use_tls: useTls,
       stream_type: streamType,
       authority_override: authorityOverride.trim(),
       timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
@@ -587,39 +586,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   // Keep working draft synchronized in store so tab switches retain unsaved edits
   useEffect(() => {
-    let parsedPayload: any = {};
-    try {
-      parsedPayload = parseJsonWithComments(payloadStr || '{}');
-    } catch {
-      parsedPayload = payloadStr;
+    const cfg = buildConfig();
+    if (isConfigDirty(endpoint.config, cfg)) {
+      setEndpointDraft(endpoint.id, cfg);
+    } else {
+      clearEndpointDraft(endpoint.id);
     }
-    const metaMap: Record<string, string> = {};
-    const metaDescMap: Record<string, string> = {};
-    for (const [k, v, d] of metadata) {
-      if (k.trim()) {
-        metaMap[k.trim()] = v;
-        if (d && d.trim()) metaDescMap[k.trim()] = d.trim();
-      }
-    }
-    applyRequestAuth(metaMap);
-    const cfg = {
-      server_address: serverAddress,
-      use_tls: useTls,
-      service: selectedService,
-      method: selectedMethod,
-      stream_type: streamType,
-      authority_override: authorityOverride.trim(),
-      timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
-      max_msg_size_mb: maxMsgSizeMb ? Number(maxMsgSizeMb) : 4,
-      metadata: metaMap,
-      metadata_descriptions: metaDescMap,
-      auth,
-      payload: parsedPayload,
-      pre_request_script: preRequestScript,
-      post_request_script: postResponseScript,
-      post_response_script: postResponseScript,
-    };
-    setEndpointDraft(endpoint.id, cfg);
   }, [
     serverAddress,
     useTls,
