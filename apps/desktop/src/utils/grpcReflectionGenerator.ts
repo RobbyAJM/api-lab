@@ -46,12 +46,13 @@ export function shouldAutoDetectTls(addr: string, variables?: Record<string, str
       return (val || '').trim().toLowerCase();
     });
   }
-  if (clean.startsWith('https://') || clean.endsWith(':443')) {
+  if (clean.startsWith('https://') || clean.startsWith('grpcs://') || clean.endsWith(':443')) {
     return true;
   }
   if (clean.startsWith('http://')) {
     return false;
   }
+  clean = clean.replace(/^(?:grpc|grpcs|http|https):\/\//, '').replace(/\/+$/, '');
   const host = clean.split(':')[0];
   const isLocal =
     host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1';
