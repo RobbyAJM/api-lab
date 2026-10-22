@@ -23,6 +23,13 @@ test('convertSwaggerPathToApiPath: converts {param} into :param', () => {
   assert.equal(convertSwaggerPathToApiPath('/api/v1/health'), '/api/v1/health');
 });
 
+test('convertSwaggerPathToApiPath: preserves environment variables', () => {
+  assert.equal(
+    convertSwaggerPathToApiPath('https://{{nutrade_se}}/api/{{BASE_URL}}/{id}'),
+    'https://{{nutrade_se}}/api/{{BASE_URL}}/:id'
+  );
+});
+
 test('extractPathVariables: extracts keys from standard full URL', () => {
   const url = 'https://nu-gateway.dev.dxtr.asia/manager/api/v1/emergency-contact-status/:id';
   assert.deepEqual(extractPathVariables(url), ['id']);
