@@ -20,6 +20,7 @@ env:
 jobs:
   checks:
     name: Checks
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
@@ -64,7 +65,7 @@ jobs:
 
   prepare-release:
     name: Prepare Release Tag
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: checks
     runs-on: ubuntu-22.04
     permissions:
@@ -97,6 +98,7 @@ jobs:
 
   build:
     name: Build ${{ matrix.name }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: prepare-release
     strategy:
       fail-fast: false
@@ -212,7 +214,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    if: needs.prepare-release.result == 'success'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.prepare-release.result == 'success'
     needs:
       - prepare-release
       - build
