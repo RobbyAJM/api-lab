@@ -105,11 +105,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Linux x86_64
-            os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-            bundles: appimage,deb,rpm
-            artifact: linux-x86_64
           - name: Windows x86_64
             os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -196,24 +191,7 @@ jobs:
             -ov \
             -format UDZO \
             -imagekey zlib-level=9 \
-            "${DMG_DIR}/API Lab_${VERSION}_${{ matrix.target }}.dmg"
-
-      - name: Create Linux tar.gz
-        if: runner.os == 'Linux'
-        working-directory: apps/desktop
-        shell: bash
-        run: |
-          mkdir -p release
-          find ../../target -type f \
-            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
-          APPIMAGE=$(find ../../target -type f -name '*.AppImage' -print -quit)
-          test -n "${APPIMAGE}"
-          tar -czf "release/api-lab-${{ matrix.artifact }}.tar.gz" -C "$(dirname "${APPIMAGE}")" "$(basename "${APPIMAGE}")"
-          test -n "$(find release -type f -print -quit)"
-          for file in release/*; do
-            base=$(basename "${file}")
-            mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
-          done
+            "${DMG_DIR}/API.Lab_${VERSION}_universal.dmg"
 
       - name: Collect Windows bundles
         if: runner.os == 'Windows'
@@ -225,7 +203,7 @@ jobs:
             Where-Object { $_.Extension -in '.msi', '.exe' }
           if (-not $bundles) { throw 'No Windows bundles found' }
           foreach ($bundle in $bundles) {
-            Copy-Item $bundle.FullName "release/api-lab-${{ matrix.artifact }}-$($bundle.Name)"
+            Copy-Item $bundle.FullName "release/$($bundle.Name.Replace('API Lab', 'API.Lab'))"
           }
 
       - name: Collect macOS bundles
@@ -235,11 +213,10 @@ jobs:
         run: |
           mkdir -p release
           find ../../target -type f -iname '*.dmg' -exec cp {} release/ \;
+          APP="../../target/${{ matrix.target }}/release/bundle/macos/API Lab.app"
+          test -d "${APP}"
+          tar -czf "release/API.Lab_universal.app.tar.gz" -C "$(dirname "${APP}")" "$(basename "${APP}")"
           test -n "$(find release -type f -print -quit)"
-          for file in release/*; do
-            base=$(basename "${file}")
-            mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
-          done
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -265,10 +242,6 @@ jobs:
           pattern: api-lab-*
           path: release-assets
           merge-multiple: true
-
-      - name: Create checksums
-        working-directory: release-assets
-        run: find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
