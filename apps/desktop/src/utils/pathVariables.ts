@@ -9,7 +9,7 @@
  */
 export function convertSwaggerPathToApiPath(path: string): string {
   if (!path) return '';
-  return path.replace(/\{([a-zA-Z0-9_]+)\}/g, ':$1');
+  return path.replace(/(?<!\{)\{([a-zA-Z0-9_]+)\}(?!\})/g, ':$1');
 }
 
 /**
