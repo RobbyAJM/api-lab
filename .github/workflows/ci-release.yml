@@ -8,8 +8,16 @@ on:
     tags:
       - 'v*'
 
+concurrency:
+  group: api-lab-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
+
+env:
+  NODE_VERSION: 22
+  PNPM_VERSION: 10.5.2
 
 jobs:
   checks:
@@ -19,15 +27,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential file libssl-dev libxdo-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf libgtk-3-dev \
+            libwebkit2gtk-4.1-dev
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.5.2
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install JavaScript dependencies
@@ -39,23 +54,46 @@ jobs:
       - name: Build desktop frontend
         run: pnpm run build:desktop
 
-  release:
-    name: Release ${{ matrix.platform }}
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check native desktop crates
+        run: cargo check --locked -p rust-core -p grpc-client -p api-lab-desktop
+
+  build:
+    name: Build ${{ matrix.name }}
     if: startsWith(github.ref, 'refs/tags/v')
     needs: checks
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: Linux
+          - name: Linux x86_64
             os: ubuntu-22.04
-          - platform: Windows
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb,rpm
+            artifact: linux-x86_64
+          - name: Windows x86_64
             os: windows-latest
-          - platform: macOS
-            os: macos-latest
+            target: x86_64-pc-windows-msvc
+            bundles: msi,nsis
+            artifact: windows-x86_64
+          - name: macOS Intel
+            os: macos-13
+            target: x86_64-apple-darwin
+            bundles: dmg
+            artifact: macos-x86_64
+          - name: macOS Apple Silicon
+            os: macos-14
+            target: aarch64-apple-darwin
+            bundles: dmg
+            artifact: macos-aarch64
     runs-on: ${{ matrix.os }}
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -64,19 +102,19 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential curl wget file libssl-dev \
-            libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
+          sudo apt-get install -y build-essential file libssl-dev libxdo-dev \
+            libayatana-appindicator3-dev librsvg2-dev patchelf libgtk-3-dev \
             libwebkit2gtk-4.1-dev
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 10.5.2
+          version: ${{ env.PNPM_VERSION }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - name: Install JavaScript dependencies
@@ -84,16 +122,87 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Build and publish release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: API Lab ${{ github.ref_name }}
-          releaseBody: Automated desktop build for ${{ github.ref_name }}.
-          releaseDraft: true
-          prerelease: false
-          args: --features desktop
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build desktop bundles
+        working-directory: apps/desktop
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: |
+          VERSION="${RELEASE_VERSION#v}"
+          pnpm tauri build \
+            --target "${{ matrix.target }}" \
+            --bundles "${{ matrix.bundles }}" \
+            --features desktop \
+            --config "{\"version\":\"${VERSION}\"}"
+
+      - name: Create Linux tar.gz
+        if: runner.os == 'Linux'
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          mkdir -p release
+          find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f \
+            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} release/ \;
+          APPIMAGE=$(find src-tauri/target/${{ matrix.target }}/release/bundle/appimage -name '*.AppImage' -print -quit)
+          test -n "${APPIMAGE}"
+          tar -czf "release/api-lab-${{ matrix.artifact }}.tar.gz" -C "$(dirname "${APPIMAGE}")" "$(basename "${APPIMAGE}")"
+          for file in release/*; do
+            base=$(basename "${file}")
+            mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
+          done
+
+      - name: Collect bundles
+        if: runner.os != 'Linux'
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          mkdir -p release
+          find "src-tauri/target/${{ matrix.target }}/release/bundle" -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \) -exec cp {} release/ \;
+          for file in release/*; do
+            base=$(basename "${file}")
+            mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
+          done
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-lab-${{ matrix.artifact }}
+          path: apps/desktop/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: api-lab-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create checksums
+        working-directory: release-assets
+        run: sha256sum $(find . -type f -printf '%p\n' | sort) > SHA256SUMS
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: API Lab ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-assets/*
