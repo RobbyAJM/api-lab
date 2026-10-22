@@ -115,11 +115,6 @@ jobs:
             target: x86_64-pc-windows-msvc
             bundles: msi,nsis
             artifact: windows-x86_64
-          - name: macOS Intel
-            os: macos-13
-            target: x86_64-apple-darwin
-            bundles: app
-            artifact: macos-x86_64
           - name: macOS Apple Silicon
             os: macos-14
             target: aarch64-apple-darwin
