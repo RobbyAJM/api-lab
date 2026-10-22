@@ -13,6 +13,8 @@ import { EnvironmentModal } from './components/environments/EnvironmentModal';
 import { EditVariableModal } from './components/common/EditVariableModal';
 import { ReflectionFolderSettingsModal } from './components/collections/ReflectionFolderSettingsModal';
 import { SwaggerFolderSettingsModal } from './components/collections/SwaggerFolderSettingsModal';
+import { FolderSettingsModal } from './components/collections/FolderSettingsModal';
+import { CollectionSettingsModal } from './components/collections/CollectionSettingsModal';
 import { MembersModal } from './components/members/MembersModal';
 import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSettingsModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
@@ -228,6 +230,8 @@ export const App: React.FC = () => {
       <EditVariableModal />
       <ReflectionFolderSettingsModal />
       <SwaggerFolderSettingsModal />
+      <FolderSettingsModal />
+      <CollectionSettingsModal />
       <MembersModal />
       <WorkspaceSettingsModal />
       <CommandPaletteModal />

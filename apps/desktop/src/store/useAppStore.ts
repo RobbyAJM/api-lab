@@ -100,6 +100,17 @@ interface AppState {
     folderId: string;
     collectionId: string;
   } | null;
+  folderSettingsModal: {
+    isOpen: boolean;
+    folderId: string;
+    collectionId: string;
+    initialTab?: 'general' | 'auth';
+  } | null;
+  collectionSettingsModal: {
+    isOpen: boolean;
+    collectionId: string;
+    initialTab?: 'general' | 'auth' | 'headers';
+  } | null;
 
   setAuth: (token: string, user: UserSummary, workspace?: WorkspaceSummary) => void;
   logout: () => void;
@@ -132,6 +143,10 @@ interface AppState {
   closeReflectionSettingsModal: () => void;
   openSwaggerSettingsModal: (folderId: string, collectionId: string) => void;
   closeSwaggerSettingsModal: () => void;
+  openFolderSettingsModal: (folderId: string, collectionId: string, initialTab?: 'general' | 'auth') => void;
+  closeFolderSettingsModal: () => void;
+  openCollectionSettingsModal: (collectionId: string, initialTab?: 'general' | 'auth' | 'headers') => void;
+  closeCollectionSettingsModal: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -526,4 +541,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }),
   closeSwaggerSettingsModal: () => set({ swaggerSettingsModal: null }),
+  folderSettingsModal: null,
+  openFolderSettingsModal: (folderId: string, collectionId: string, initialTab?: 'general' | 'auth') =>
+    set({
+      folderSettingsModal: {
+        isOpen: true,
+        folderId,
+        collectionId,
+        initialTab,
+      },
+    }),
+  closeFolderSettingsModal: () => set({ folderSettingsModal: null }),
+  collectionSettingsModal: null,
+  openCollectionSettingsModal: (collectionId: string, initialTab?: 'general' | 'auth' | 'headers') =>
+    set({
+      collectionSettingsModal: {
+        isOpen: true,
+        collectionId,
+        initialTab,
+      },
+    }),
+  closeCollectionSettingsModal: () => set({ collectionSettingsModal: null }),
 }));

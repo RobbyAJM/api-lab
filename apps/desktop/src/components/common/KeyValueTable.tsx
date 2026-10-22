@@ -1,14 +1,23 @@
 import React, { useState } from 'react';
 import { VariableInput } from './VariableInput';
-import { Plus, Trash2, Edit3, List } from 'lucide-react';
+import { Plus, Trash2, Edit3, List, Settings, Shield } from 'lucide-react';
 import type { VariableSource } from '../../utils/variableHighlight';
 
 export type KeyValueRow = [string, string, string?];
+
+export interface InheritedEntry {
+  key: string;
+  value: string;
+  description?: string;
+  sourceLabel: string;
+  onEditSource?: () => void;
+}
 
 export interface KeyValueTableProps {
   title: string;
   items: Array<[string, string, string?] | [string, string]>;
   onChange: (items: [string, string, string][]) => void;
+  inheritedEntries?: InheritedEntry[];
   variables?: VariableSource;
   keyPlaceholder?: string;
   valuePlaceholder?: string;
@@ -24,6 +33,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
   title,
   items,
   onChange,
+  inheritedEntries = [],
   variables,
   keyPlaceholder = 'Key',
   valuePlaceholder = 'Value (or {{VAR}})',
@@ -176,12 +186,78 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
           </div>
 
           {/* Table Rows */}
-          {items.length === 0 ? (
+          {items.length === 0 && inheritedEntries.length === 0 ? (
             <div className="py-6 text-center text-zinc-500 font-sans select-none">
               No entries. {!hideAdd && <>Click <strong className="text-zinc-400 font-medium">"{addLabel}"</strong> to add one.</>}
             </div>
           ) : (
             <div className="divide-y divide-zinc-900">
+              {/* Inherited Uneditable Entries */}
+              {inheritedEntries.map((entry, idx) => (
+                <div
+                  key={`inherited-${idx}`}
+                  className="grid grid-cols-12 items-center px-2 py-1.5 bg-zinc-950/60 transition group"
+                  title={`Inherited authorization from ${entry.sourceLabel}. Cannot be edited directly here.`}
+                >
+                  {/* Key Input */}
+                  <div className="col-span-4 pr-1">
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        value={entry.key}
+                        readOnly
+                        disabled
+                        className="w-full bg-zinc-950 text-zinc-400 border border-zinc-800/60 rounded px-2.5 py-1 text-xs font-mono h-7 cursor-not-allowed select-text pr-16"
+                      />
+                      <span className="absolute right-1.5 px-1 py-0.5 rounded text-[9px] font-mono tracking-wider uppercase text-zinc-400 bg-zinc-900 border border-zinc-800 select-none">
+                        Inherited
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Value Input */}
+                  <div className="col-span-4 px-1">
+                    <input
+                      type="text"
+                      value={entry.value}
+                      readOnly
+                      disabled
+                      className="w-full bg-zinc-950 text-zinc-400 border border-zinc-800/60 rounded px-2.5 py-1 text-xs font-mono h-7 cursor-not-allowed select-text"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div className={hideDelete ? 'col-span-4 pl-1' : 'col-span-3 px-1'}>
+                    <div
+                      className="w-full bg-zinc-950/80 border border-zinc-800/40 rounded px-2.5 py-1 text-[11px] text-zinc-400 truncate flex items-center gap-1.5 h-7 cursor-help"
+                      title={`Inherited from ${entry.sourceLabel}. Adjust in settings.`}
+                    >
+                      <Shield size={11} className="text-secondary flex-shrink-0" />
+                      <span className="truncate">{entry.description || `Inherited from ${entry.sourceLabel}`}</span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  {!hideDelete && (
+                    <div className="col-span-1 text-right pr-1">
+                      {entry.onEditSource ? (
+                        <button
+                          type="button"
+                          onClick={entry.onEditSource}
+                          className="p-1 rounded text-zinc-400 hover:text-secondary hover:bg-zinc-800 transition"
+                          title={`Edit inherited authorization in ${entry.sourceLabel} settings`}
+                        >
+                          <Settings size={12} />
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-zinc-600 select-none px-1">locked</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Standard Items */}
               {items.map(([k, v, d], idx) => (
                 <div
                   key={idx}
