@@ -115,11 +115,11 @@ jobs:
             target: x86_64-pc-windows-msvc
             bundles: msi,nsis
             artifact: windows-x86_64
-          - name: macOS Apple Silicon
+          - name: macOS Universal
             os: macos-14
-            target: aarch64-apple-darwin
+            target: universal-apple-darwin
             bundles: app
-            artifact: macos-aarch64
+            artifact: macos-universal
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -157,7 +157,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: ${{ runner.os == 'macOS' && 'x86_64-apple-darwin,aarch64-apple-darwin' || matrix.target }}
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
