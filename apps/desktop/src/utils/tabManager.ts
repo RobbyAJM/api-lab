@@ -1,4 +1,7 @@
 import type { Endpoint } from '@api-lab/api-types';
+import { splitUrlQuery } from './httpRequest.ts';
+import { convertSwaggerPathToApiPath } from './pathVariables.ts';
+import { shouldAutoDetectTls } from './grpcReflectionGenerator.ts';
 
 export interface TabResponseData {
   http?: any;
@@ -16,6 +19,8 @@ export interface TabState {
 
 /**
  * Checks if a working draft has unsaved changes compared to the base saved config.
+ * Normalizes protocol defaults, Swagger/URL path variables, query string formats,
+ * and empty payload/auth representations to prevent false-positive dirty states.
  */
 export function isConfigDirty(
   base: Record<string, any> | undefined | null,
@@ -24,44 +29,152 @@ export function isConfigDirty(
   if (!draft) return false;
   const b = base || {};
 
+  const isGrpc = Boolean(
+    b.protocol === 'grpc' ||
+    draft.protocol === 'grpc' ||
+    b.server_address !== undefined ||
+    draft.server_address !== undefined ||
+    b.service !== undefined ||
+    draft.service !== undefined
+  );
+
   const normalize = (cfg: Record<string, any>) => {
+    // 1. URL & query params normalization
+    const rawUrl = convertSwaggerPathToApiPath((cfg.url || '').trim());
+    const split = splitUrlQuery(rawUrl);
+    const cleanUrl = split.url.trim();
+
+    // Collect query params from both cfg.query_params and any URL query string
+    const queryMap = new Map<string, [string, string, string]>();
+    const rawQueryParams: Array<any> = Array.isArray(cfg.query_params) ? cfg.query_params : [];
+    for (const item of rawQueryParams) {
+      if (Array.isArray(item)) {
+        const k = String(item[0] || '').trim();
+        if (k) {
+          const v = item[1] !== undefined && item[1] !== null ? String(item[1]).trim() : '';
+          const d = item[2] !== undefined && item[2] !== null ? String(item[2]).trim() : '';
+          queryMap.set(k, [k, v, d]);
+        }
+      }
+    }
+    for (const [k, v] of split.params) {
+      const trimmedKey = k.trim();
+      if (trimmedKey && !queryMap.has(trimmedKey)) {
+        queryMap.set(trimmedKey, [trimmedKey, (v || '').trim(), '']);
+      }
+    }
+    const normalizedQueryParams = Array.from(queryMap.values()).sort(([a], [b]) => a.localeCompare(b));
+
+    // 2. Path variables: filter out empty placeholders (empty value and empty description)
+    // ponytail: ignore unedited path placeholders so auto-extracted URL keys don't mark clean endpoints dirty
+    const rawPathVars: Array<any> = Array.isArray(cfg.path_variables) ? cfg.path_variables : [];
+    const normalizedPathVars = rawPathVars
+      .filter((item) => Array.isArray(item) && String(item[0] || '').trim())
+      .map((item) => [
+        String(item[0] || '').trim(),
+        item[1] !== undefined && item[1] !== null ? String(item[1]).trim() : '',
+        item[2] !== undefined && item[2] !== null ? String(item[2]).trim() : '',
+      ])
+      .filter(([_, v, d]) => v !== '' || d !== '')
+      .sort(([a], [b]) => a.localeCompare(b));
+
+    // 3. Headers & Descriptions
+    const headers = Object.entries(cfg.headers || {})
+      .map(([k, v]) => [k.trim(), typeof v === 'string' ? v.trim() : String(v ?? '')])
+      .filter(([k]) => Boolean(k))
+      .sort(([k1], [k2]) => k1.localeCompare(k2));
+
+    const headerDescriptions = Object.entries(cfg.header_descriptions || {})
+      .map(([k, v]) => [k.trim(), typeof v === 'string' ? v.trim() : String(v ?? '')])
+      .filter(([k, v]) => Boolean(k) && Boolean(v))
+      .sort(([k1], [k2]) => k1.localeCompare(k2));
+
+    // 4. Metadata & Descriptions (gRPC)
+    const rawAuth = cfg.auth;
+    const hasAuthToken = rawAuth && (rawAuth.auth_type === 'bearer' || rawAuth.auth_type === 'custom');
+    const metadata = Object.entries(cfg.metadata || {})
+      .map(([k, v]) => [k.trim(), typeof v === 'string' ? v.trim() : String(v ?? '')])
+      .filter(([k]) => {
+        if (!k) return false;
+        // Ignore derived authorization header in metadata if auth object is configured
+        if (hasAuthToken && k.toLowerCase() === 'authorization') return false;
+        return true;
+      })
+      .sort(([k1], [k2]) => k1.localeCompare(k2));
+
+    const metadataDescriptions = Object.entries(cfg.metadata_descriptions || {})
+      .map(([k, v]) => [k.trim(), typeof v === 'string' ? v.trim() : String(v ?? '')])
+      .filter(([k, v]) => Boolean(k) && Boolean(v))
+      .sort(([k1], [k2]) => k1.localeCompare(k2));
+
+    // 5. Auth normalization
+    const defaultAuthType = isGrpc ? 'inherit' : 'none';
+    const authType = rawAuth?.auth_type || defaultAuthType;
+    let normalizedAuth: Record<string, string> = { auth_type: authType };
+    if (authType === 'bearer') {
+      normalizedAuth = { auth_type: 'bearer', token: (rawAuth.token || '').trim() };
+    } else if (authType === 'basic') {
+      normalizedAuth = {
+        auth_type: 'basic',
+        username: (rawAuth.username || '').trim(),
+        password: (rawAuth.password || '').trim(),
+      };
+    } else if (authType === 'custom') {
+      normalizedAuth = {
+        auth_type: 'custom',
+        header_name: (rawAuth.header_name || '').trim(),
+        header_value: (rawAuth.header_value || '').trim(),
+      };
+    } else if (authType === 'inherit') {
+      normalizedAuth = { auth_type: 'inherit' };
+    } else {
+      normalizedAuth = { auth_type: 'none' };
+    }
+
+    // 6. Payload normalization (empty protobuf message / json / string)
+    let normalizedPayload = '';
+    if (cfg.payload !== undefined && cfg.payload !== null) {
+      if (typeof cfg.payload === 'string') {
+        const trimmed = cfg.payload.trim();
+        if (trimmed && trimmed !== '{}' && trimmed !== '{\n  \n}') {
+          try {
+            const parsed = JSON.parse(trimmed);
+            if (parsed && typeof parsed === 'object' && Object.keys(parsed).length === 0) {
+              normalizedPayload = '';
+            } else {
+              normalizedPayload = JSON.stringify(parsed);
+            }
+          } catch {
+            normalizedPayload = trimmed;
+          }
+        }
+      } else if (typeof cfg.payload === 'object') {
+        if (Object.keys(cfg.payload).length > 0) {
+          normalizedPayload = JSON.stringify(cfg.payload);
+        }
+      }
+    }
+
     return {
-      method: cfg.method || '',
-      url: (cfg.url || '').trim(),
+      method: cfg.method || (isGrpc ? '' : 'GET'),
+      url: cleanUrl,
       server_address: (cfg.server_address || '').trim(),
-      use_tls: Boolean(cfg.use_tls),
+      use_tls: cfg.use_tls !== undefined ? Boolean(cfg.use_tls) : (isGrpc ? shouldAutoDetectTls(cfg.server_address || '') : false),
       service: (cfg.service || '').trim(),
       stream_type: cfg.stream_type || 'unary',
       authority_override: (cfg.authority_override || '').trim(),
-      timeout_seconds: cfg.timeout_seconds !== undefined ? Number(cfg.timeout_seconds) : 30,
-      max_msg_size_mb: cfg.max_msg_size_mb !== undefined ? Number(cfg.max_msg_size_mb) : 4,
+      timeout_seconds: cfg.timeout_seconds !== undefined && cfg.timeout_seconds !== null ? Number(cfg.timeout_seconds) : 30,
+      max_msg_size_mb: cfg.max_msg_size_mb !== undefined && cfg.max_msg_size_mb !== null ? Number(cfg.max_msg_size_mb) : 4,
       body_type: cfg.body_type || 'json',
       body: typeof cfg.body === 'string' ? cfg.body.trim() : '',
-      payload:
-        cfg.payload !== undefined && cfg.payload !== null
-          ? typeof cfg.payload === 'string'
-            ? cfg.payload.trim()
-            : JSON.stringify(cfg.payload)
-          : '',
-      headers: Object.entries(cfg.headers || {})
-        .filter(([k]) => k.trim())
-        .sort(([k1], [k2]) => k1.localeCompare(k2)),
-      header_descriptions: Object.entries(cfg.header_descriptions || {})
-        .filter(([k]) => k.trim())
-        .sort(([k1], [k2]) => k1.localeCompare(k2)),
-      metadata: Object.entries(cfg.metadata || {})
-        .filter(([k]) => k.trim())
-        .sort(([k1], [k2]) => k1.localeCompare(k2)),
-      metadata_descriptions: Object.entries(cfg.metadata_descriptions || {})
-        .filter(([k]) => k.trim())
-        .sort(([k1], [k2]) => k1.localeCompare(k2)),
-      query_params: (cfg.query_params || [])
-        .filter(([k]: [string, string]) => k && k.trim())
-        .sort(([k1]: [string, string], [k2]: [string, string]) => k1.localeCompare(k2)),
-      path_variables: (cfg.path_variables || [])
-        .filter(([k]: [string, string]) => k && k.trim())
-        .sort(([k1]: [string, string], [k2]: [string, string]) => k1.localeCompare(k2)),
-      auth: cfg.auth || { auth_type: 'none' },
+      payload: normalizedPayload,
+      headers,
+      header_descriptions: headerDescriptions,
+      metadata,
+      metadata_descriptions: metadataDescriptions,
+      query_params: normalizedQueryParams,
+      path_variables: normalizedPathVars,
+      auth: normalizedAuth,
       pre_request_script: (cfg.pre_request_script || '').trim(),
       post_response_script: (cfg.post_response_script || cfg.post_request_script || '').trim(),
     };
