@@ -7,6 +7,7 @@ export interface UserSummary {
   email: string;
   name: string;
   role: string;
+  theme?: string;
 }
 
 export interface WorkspaceSummary {
