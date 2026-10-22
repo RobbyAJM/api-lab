@@ -17,8 +17,10 @@ export interface PlannedSwaggerEndpoint {
   config: {
     method: string;
     url: string;
-    query_params: [string, string][];
+    query_params: [string, string, string?][];
+    path_variables?: [string, string, string?][];
     headers: Record<string, string>;
+    header_descriptions?: Record<string, string>;
     body_type: 'none' | 'json';
     body: string;
   };
@@ -69,7 +71,9 @@ export function planSwaggerHierarchy(options: {
           method: ep.method,
           url: ep.fullUrl,
           query_params: ep.queryParams,
+          path_variables: ep.pathVariables,
           headers: ep.headers,
+          header_descriptions: ep.headerDescriptions,
           body_type: ep.bodyType,
           body: ep.body,
         },

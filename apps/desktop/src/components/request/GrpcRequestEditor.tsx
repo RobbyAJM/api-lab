@@ -200,9 +200,10 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   const discoveredServices = cachedServices;
 
-  const [metadata, setMetadata] = useState<[string, string][]>(() => {
+  const [metadata, setMetadata] = useState<[string, string, string?][]>(() => {
     const raw = initialConfig.metadata || {};
-    return Object.entries(raw);
+    const descs = initialConfig.metadata_descriptions || {};
+    return Object.entries(raw).map(([k, v]) => [k, v as string, descs[k] || '']);
   });
   const [payloadStr, setPayloadStr] = useState<string>(() => {
     if (initialConfig.payload !== undefined && initialConfig.payload !== null) {
@@ -262,7 +263,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       setMaxMsgSizeMb(cfg.max_msg_size_mb !== undefined ? String(cfg.max_msg_size_mb) : '4');
       setShowReqSchemaPreview(false);
       setShowResSchemaPreview(false);
-      setMetadata(Object.entries(cfg.metadata || {}));
+      const rawMeta = cfg.metadata || {};
+      const descs = cfg.metadata_descriptions || {};
+      setMetadata(Object.entries(rawMeta).map(([k, v]) => [k, v as string, descs[k] || '']));
        setAuth(cfg.auth || { auth_type: 'inherit' });
       setPayloadStr(
         cfg.payload !== undefined && cfg.payload !== null
@@ -456,8 +459,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   function buildConfig() {
     const metaMap: Record<string, string> = {};
-    for (const [k, v] of metadata) {
-      if (k.trim()) metaMap[k.trim()] = v;
+    const metaDescMap: Record<string, string> = {};
+    for (const [k, v, d] of metadata) {
+      if (k.trim()) {
+        metaMap[k.trim()] = v;
+        if (d && d.trim()) metaDescMap[k.trim()] = d.trim();
+      }
     }
     applyRequestAuth(metaMap);
 
@@ -478,6 +485,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
       max_msg_size_mb: maxMsgSizeMb ? Number(maxMsgSizeMb) : 4,
       metadata: metaMap,
+      metadata_descriptions: metaDescMap,
       auth,
       payload: payloadJson,
       pre_request_script: preRequestScript,
@@ -555,8 +563,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       parsedPayload = payloadStr;
     }
     const metaMap: Record<string, string> = {};
-    for (const [k, v] of metadata) {
-      if (k.trim()) metaMap[k.trim()] = v;
+    const metaDescMap: Record<string, string> = {};
+    for (const [k, v, d] of metadata) {
+      if (k.trim()) {
+        metaMap[k.trim()] = v;
+        if (d && d.trim()) metaDescMap[k.trim()] = d.trim();
+      }
     }
     applyRequestAuth(metaMap);
     const cfg = {
@@ -569,6 +581,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
       max_msg_size_mb: maxMsgSizeMb ? Number(maxMsgSizeMb) : 4,
       metadata: metaMap,
+      metadata_descriptions: metaDescMap,
       auth,
       payload: parsedPayload,
       pre_request_script: preRequestScript,
@@ -1337,6 +1350,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             variables={activeVariables}
             keyPlaceholder="x-metadata-key"
             valuePlaceholder="metadata-value (or {{TOKEN}})"
+            descriptionPlaceholder="Description (optional)"
             addLabel="Add Metadata"
           />
         )}
