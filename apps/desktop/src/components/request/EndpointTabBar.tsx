@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Endpoint, Environment } from '@api-lab/api-types';
-import { X, Radio, ArrowDownUp, AlertTriangle, Plus, Settings } from 'lucide-react';
+import { X, Radio, ArrowDownUp, ArrowLeftRight, AlertTriangle, Plus, Settings } from 'lucide-react';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
 
@@ -114,10 +114,20 @@ export const EndpointTabBar: React.FC = () => {
     }
 
     const streamType = ep.config?.stream_type || 'unary';
-    if (streamType === 'bidi_stream' || streamType === 'omni_stream') {
+    if (streamType === 'bidi_stream') {
       return (
         <span
-          title={streamType === 'bidi_stream' ? 'gRPC Bidirectional Stream' : 'gRPC Stream'}
+          title="gRPC Bidirectional Stream"
+          className="text-amber-400 flex items-center select-none"
+        >
+          <ArrowLeftRight size={11} />
+        </span>
+      );
+    }
+    if (streamType === 'omni_stream') {
+      return (
+        <span
+          title="gRPC Omnidirectional Stream"
           className="text-amber-400 flex items-center select-none"
         >
           <ArrowDownUp size={11} />

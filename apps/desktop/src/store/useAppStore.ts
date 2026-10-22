@@ -17,6 +17,7 @@ import {
   setEndpointDraftInState,
   clearEndpointDraftInState,
   isEndpointDirtyInState,
+  type TabResponseData,
 } from '../utils/tabManager';
 import {
   recordPaletteAction,
@@ -44,6 +45,7 @@ interface AppState {
   activeEndpointId: string | null;
   activeEndpoint: Endpoint | null;
   endpointDrafts: Record<string, Record<string, any>>;
+  endpointResponses: Record<string, TabResponseData>;
   openEndpoint: (endpoint: Endpoint) => void;
   closeEndpoint: (endpointId: string) => void;
   closeOtherEndpoints: (endpointId: string) => void;
@@ -145,6 +147,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeEndpointId: null,
   activeEndpoint: null,
   endpointDrafts: {},
+  endpointResponses: {},
 
   lastHttpResponse: null,
   lastGrpcResponse: null,
@@ -162,18 +165,45 @@ export const useAppStore = create<AppState>((set, get) => ({
       streamingEndpointId: isStreaming ? endpointId : null,
     }),
   addStreamMessage: (msg, direction = 'in') =>
-    set((state) => ({
-      streamMessages: [
-        ...state.streamMessages,
-        {
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          timestamp: new Date().toLocaleTimeString(),
-          direction,
-          payload: msg,
-        },
-      ],
-    })),
-  clearStreamMessages: () => set({ streamMessages: [] }),
+    set((state) => {
+      const targetEpId = state.streamingEndpointId || state.activeEndpointId;
+      const newMsg: StreamMessageItem = {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        timestamp: new Date().toLocaleTimeString(),
+        direction,
+        payload: msg,
+      };
+      const nextResponses = { ...(state.endpointResponses || {}) };
+      if (targetEpId) {
+        const epResp = nextResponses[targetEpId] || {};
+        nextResponses[targetEpId] = {
+          ...epResp,
+          streamMessages: [...(epResp.streamMessages || []), newMsg],
+        };
+      }
+      return {
+        endpointResponses: nextResponses,
+        streamMessages:
+          !targetEpId || targetEpId === state.activeEndpointId
+            ? [...state.streamMessages, newMsg]
+            : state.streamMessages,
+      };
+    }),
+  clearStreamMessages: () =>
+    set((state) => {
+      const activeId = state.activeEndpointId;
+      const nextResponses = { ...(state.endpointResponses || {}) };
+      if (activeId && nextResponses[activeId]) {
+        nextResponses[activeId] = {
+          ...nextResponses[activeId],
+          streamMessages: [],
+        };
+      }
+      return {
+        endpointResponses: nextResponses,
+        streamMessages: [],
+      };
+    }),
   stopStreaming: async () => {
     const { activeStreamId } = get();
     if (activeStreamId) {
@@ -217,6 +247,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeWorkspaceRole: null,
       activeEndpointId: null,
       activeEndpoint: null,
+      endpointResponses: {},
       lastHttpResponse: null,
       lastGrpcResponse: null,
       isStreaming: false,
@@ -256,6 +287,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       openEndpoints: [],
       activeEndpointId: null,
       activeEndpoint: null,
+      endpointDrafts: {},
+      endpointResponses: {},
       lastHttpResponse: null,
       lastGrpcResponse: null,
       isStreaming: false,
@@ -291,15 +324,17 @@ export const useAppStore = create<AppState>((set, get) => ({
           activeEndpointId: state.activeEndpointId,
           activeEndpoint: state.activeEndpoint,
           endpointDrafts: state.endpointDrafts,
+          endpointResponses: state.endpointResponses,
         },
         endpoint
       );
 
-      const isSameEndpoint = state.activeEndpointId === endpoint.id;
+      const targetResp = state.endpointResponses?.[endpoint.id];
       return {
         ...tabState,
-        lastHttpResponse: isSameEndpoint ? state.lastHttpResponse : null,
-        lastGrpcResponse: isSameEndpoint ? state.lastGrpcResponse : null,
+        lastHttpResponse: targetResp?.http ?? null,
+        lastGrpcResponse: targetResp?.grpc ?? null,
+        streamMessages: targetResp?.streamMessages ?? [],
       };
     });
   },
@@ -312,6 +347,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           activeEndpointId: state.activeEndpointId,
           activeEndpoint: state.activeEndpoint,
           endpointDrafts: state.endpointDrafts,
+          endpointResponses: state.endpointResponses,
         },
         endpointId
       );
@@ -322,11 +358,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         localStorage.removeItem('api_lab_active_endpoint_id');
       }
 
-      const wasActive = state.activeEndpointId === endpointId;
+      const nextActiveId = tabState.activeEndpointId;
+      const targetResp = nextActiveId ? tabState.endpointResponses?.[nextActiveId] : null;
       return {
         ...tabState,
-        lastHttpResponse: wasActive ? null : state.lastHttpResponse,
-        lastGrpcResponse: wasActive ? null : state.lastGrpcResponse,
+        lastHttpResponse: targetResp?.http ?? null,
+        lastGrpcResponse: targetResp?.grpc ?? null,
+        streamMessages: targetResp?.streamMessages ?? [],
       };
     });
   },
@@ -340,15 +378,17 @@ export const useAppStore = create<AppState>((set, get) => ({
           activeEndpointId: state.activeEndpointId,
           activeEndpoint: state.activeEndpoint,
           endpointDrafts: state.endpointDrafts,
+          endpointResponses: state.endpointResponses,
         },
         endpointId
       );
 
-      const targetChanged = state.activeEndpointId !== endpointId;
+      const targetResp = tabState.endpointResponses?.[endpointId];
       return {
         ...tabState,
-        lastHttpResponse: targetChanged ? null : state.lastHttpResponse,
-        lastGrpcResponse: targetChanged ? null : state.lastGrpcResponse,
+        lastHttpResponse: targetResp?.http ?? null,
+        lastGrpcResponse: targetResp?.grpc ?? null,
+        streamMessages: targetResp?.streamMessages ?? [],
       };
     });
   },
@@ -359,6 +399,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...closeAllEndpointsInTabs(),
       lastHttpResponse: null,
       lastGrpcResponse: null,
+      streamMessages: [],
     });
   },
 
@@ -412,6 +453,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeEndpointId: null,
         lastHttpResponse: null,
         lastGrpcResponse: null,
+        streamMessages: [],
       });
       return;
     }
@@ -425,6 +467,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             activeEndpointId: s.activeEndpointId,
             activeEndpoint: s.activeEndpoint,
             endpointDrafts: s.endpointDrafts,
+            endpointResponses: s.endpointResponses,
           },
           endpoint
         ),
