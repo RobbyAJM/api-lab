@@ -75,6 +75,7 @@ pub struct User {
     pub name: String,
     pub password_hash: String,
     pub role: String,
+    pub theme: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
