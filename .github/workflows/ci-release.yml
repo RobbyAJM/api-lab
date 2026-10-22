@@ -199,13 +199,26 @@ jobs:
             mv "${file}" "release/api-lab-${{ matrix.artifact }}-${base}"
           done
 
-      - name: Collect bundles
-        if: runner.os != 'Linux'
+      - name: Collect Windows bundles
+        if: runner.os == 'Windows'
+        working-directory: apps/desktop
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release | Out-Null
+          $bundles = Get-ChildItem -Path src-tauri/target -Recurse -File |
+            Where-Object { $_.Extension -in '.msi', '.exe' }
+          if (-not $bundles) { throw 'No Windows bundles found' }
+          foreach ($bundle in $bundles) {
+            Copy-Item $bundle.FullName "release/api-lab-${{ matrix.artifact }}-$($bundle.Name)"
+          }
+
+      - name: Collect macOS bundles
+        if: runner.os == 'macOS'
         working-directory: apps/desktop
         shell: bash
         run: |
           mkdir -p release
-          find src-tauri/target -type f \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \) -exec cp {} release/ \;
+          find src-tauri/target -type f -iname '*.dmg' -exec cp {} release/ \;
           test -n "$(find release -type f -print -quit)"
           for file in release/*; do
             base=$(basename "${file}")
