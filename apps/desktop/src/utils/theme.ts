@@ -64,7 +64,24 @@ export function formatRgbSpace(color: RgbColor): string {
   return `${color.r} ${color.g} ${color.b}`;
 }
 
-export const THEMES: ThemeDefinition[] = [
+export const DEFAULT_THEME_ID = 'api-lab';
+
+export function sortThemes(themes: ThemeDefinition[]): ThemeDefinition[] {
+  return [...themes].sort((a, b) => {
+    if (a.id === DEFAULT_THEME_ID) return -1;
+    if (b.id === DEFAULT_THEME_ID) return 1;
+
+    const aLight = Boolean(a.isLight);
+    const bLight = Boolean(b.isLight);
+    if (aLight !== bLight) {
+      return aLight ? 1 : -1;
+    }
+
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
+}
+
+const RAW_THEMES: ThemeDefinition[] = [
   {
     id: 'api-lab',
     name: 'API Lab Mineral (Default)',
@@ -519,7 +536,7 @@ export const THEMES: ThemeDefinition[] = [
   },
 ];
 
-export const DEFAULT_THEME_ID = 'api-lab';
+export const THEMES: ThemeDefinition[] = sortThemes(RAW_THEMES);
 
 export function getThemeById(themeId?: string | null): ThemeDefinition {
   const match = THEMES.find((t) => t.id === themeId);
