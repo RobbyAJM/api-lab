@@ -80,6 +80,7 @@ export interface CollectionFolder {
   name: string;
   grpc_url?: string | null;
   swagger_url?: string | null;
+  settings?: Record<string, any>;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -146,7 +147,7 @@ export interface HttpExecutionRequest {
   headers: Record<string, string>;
   query_params: [string, string][];
   body?: string;
-  body_type?: 'none' | 'json' | 'text' | 'form';
+  body_type?: 'none' | 'json' | 'text' | 'form' | 'multipart' | 'binary';
   auth?: HttpAuth;
   timeout_ms?: number;
 }
@@ -169,6 +170,7 @@ export interface GrpcExecutionRequest {
   payload: any;
   timeout_ms?: number;
   use_tls?: boolean;
+  auth?: HttpAuth;
 }
 
 export interface GrpcExecutionResponse {
