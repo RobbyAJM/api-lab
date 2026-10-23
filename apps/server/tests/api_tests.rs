@@ -12,6 +12,8 @@ use tower::ServiceExt;
 use uuid::Uuid;
 
 async fn setup_app() -> axum::Router {
+    dotenvy::dotenv().ok();
+
     let db_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://root:root@localhost:5432/api_lab?sslmode=disable".into());
 
