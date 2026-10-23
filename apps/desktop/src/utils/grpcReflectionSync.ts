@@ -147,6 +147,7 @@ export interface SyncPlan {
     endpoint: Endpoint;
     newPayload: any;
     newStreamType: string;
+    newServerAddress?: string;
   }[];
 }
 
@@ -160,7 +161,8 @@ export function planReflectionSync(
   existingFolders: CollectionFolder[],
   existingEndpoints: Endpoint[],
   freshServices: GrpcServiceSummary[],
-  freshPayloads: Record<string, any> // key format: "{service}/{method}"
+  freshPayloads: Record<string, any> = {}, // key format: "{service}/{method}"
+  targetServerAddress?: string
 ): SyncPlan {
   const foldersById = new Map<string, CollectionFolder>(existingFolders.map((f) => [f.id, f]));
   const descendantIds = getDescendantFolderIds(existingFolders, rootFolderId);
@@ -273,12 +275,18 @@ export function planReflectionSync(
           freshPayload
         );
         const currentStreamType = existingEp.config?.stream_type || 'unary';
+        const cleanTargetAddr = targetServerAddress && targetServerAddress.trim() ? targetServerAddress.trim() : undefined;
+        const addressChanged = Boolean(
+          cleanTargetAddr &&
+          existingEp.config?.server_address !== cleanTargetAddr
+        );
 
-        if (changed || currentStreamType !== streamType) {
+        if (changed || currentStreamType !== streamType || addressChanged) {
           methodsToUpdate.push({
             endpoint: existingEp,
             newPayload: updatedPayload,
             newStreamType: streamType,
+            newServerAddress: cleanTargetAddr,
           });
         }
       }
@@ -454,15 +462,20 @@ export async function executeReflectionSync(
     methodsCreated++;
   }
 
-  // 5. Update changed method payloads & stream types
+  // 5. Update changed method payloads & stream types & server_address
   for (const u of plan.methodsToUpdate) {
+    const updatedConfig: Record<string, any> = {
+      ...u.endpoint.config,
+      stream_type: u.newStreamType,
+      payload: u.newPayload,
+    };
+    const effectiveAddr = u.newServerAddress || (serverAddress && serverAddress.trim() ? serverAddress.trim() : undefined);
+    if (effectiveAddr) {
+      updatedConfig.server_address = effectiveAddr;
+    }
     await api.patch(`/endpoints/${u.endpoint.id}`, {
       version: u.endpoint.version,
-      config: {
-        ...u.endpoint.config,
-        stream_type: u.newStreamType,
-        payload: u.newPayload,
-      },
+      config: updatedConfig,
     });
     methodsUpdated++;
   }

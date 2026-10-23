@@ -559,3 +559,101 @@ test('executeReflectionSync: preserves folder settings and newly created endpoin
   assert.equal(header?.key, 'X-API-KEY'); // exact case
   assert.equal(header?.value, 'sub-folder-key');
 });
+
+test('planReflectionSync & executeReflectionSync: detects stale dev server_address and updates to local variable', async () => {
+  const rootId = 'root-grpc';
+  const existingFolders: CollectionFolder[] = [
+    {
+      id: rootId,
+      collection_id: 'col-1',
+      parent_folder_id: null,
+      name: 'Services',
+      grpc_url: 'dev.grpc.internal:50051',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-order',
+      collection_id: 'col-1',
+      parent_folder_id: rootId,
+      name: 'OrderService',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  // Endpoints currently holding stale dev URL in config
+  const existingEndpoints: Endpoint[] = [
+    {
+      id: 'ep-get-order',
+      collection_id: 'col-1',
+      folder_id: 'f-order',
+      name: 'GetOrder',
+      protocol: 'grpc',
+      config: {
+        server_address: 'dev.grpc.internal:50051',
+        service: 'OrderService',
+        method: 'GetOrder',
+        stream_type: 'unary',
+        payload: { order_id: '123' },
+      },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const freshServices: GrpcServiceSummary[] = [
+    {
+      name: 'OrderService',
+      methods: [
+        { name: 'GetOrder', input_type: 'GetOrderRequest', output_type: 'GetOrderResponse', stream_type: 'unary' },
+      ],
+    },
+  ];
+
+  // 1. Plan sync with target local variable URL: {{LOCAL_GRPC_URL}}
+  const targetAddress = '{{LOCAL_GRPC_URL}}';
+  const plan = planReflectionSync(
+    rootId,
+    existingFolders,
+    existingEndpoints,
+    freshServices,
+    { 'OrderService/GetOrder': { order_id: '123' } },
+    targetAddress
+  );
+
+  // Even though payload and stream_type didn't change, server address mismatch must trigger update!
+  assert.equal(plan.methodsToUpdate.length, 1);
+  assert.equal(plan.methodsToUpdate[0].endpoint.id, 'ep-get-order');
+  assert.equal(plan.methodsToUpdate[0].newServerAddress, '{{LOCAL_GRPC_URL}}');
+
+  // 2. Execute sync and verify patch updates config.server_address
+  const patchCalls: any[] = [];
+  const mockApi = {
+    post: async () => ({ id: 'mock' }),
+    patch: async (path: string, body: any) => {
+      patchCalls.push({ path, body });
+      return body;
+    },
+    delete: async () => ({}),
+  };
+
+  const result = await executeReflectionSync(
+    'col-1',
+    rootId,
+    targetAddress,
+    plan,
+    {},
+    mockApi,
+    existingFolders
+  );
+
+  assert.equal(result.methodsUpdated, 1);
+  assert.equal(patchCalls.length, 1);
+  assert.equal(patchCalls[0].path, '/endpoints/ep-get-order');
+  assert.equal(patchCalls[0].body.config.server_address, '{{LOCAL_GRPC_URL}}');
+});
