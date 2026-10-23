@@ -14,7 +14,11 @@ pub fn substitute_variables(
     let mut missing = Vec::new();
     let result = re.replace_all(input, |caps: &regex::Captures| {
         let key = &caps[1];
-        if let Some(val) = variables.get(key) {
+        if let Some(val) = variables
+            .get(key)
+            .or_else(|| variables.get(&key.to_lowercase()))
+            .or_else(|| variables.get(&key.to_uppercase()))
+        {
             val.clone()
         } else {
             missing.push(key.to_string());
@@ -85,5 +89,20 @@ mod tests {
             res,
             Err(CoreError::UndefinedVariable("MISSING_VAR".to_string()))
         );
+    }
+
+    #[test]
+    fn test_variable_substitution_case_insensitive_fallback() {
+        let mut vars = HashMap::new();
+        vars.insert("grpc_url".to_string(), "localhost:50051".to_string());
+        vars.insert("API_HOST".to_string(), "127.0.0.1".to_string());
+
+        // Uppercase template matches lowercase var
+        let res1 = substitute_variables("{{GRPC_URL}}", &vars).unwrap();
+        assert_eq!(res1, "localhost:50051");
+
+        // Lowercase template matches uppercase var
+        let res2 = substitute_variables("{{api_host}}:8080", &vars).unwrap();
+        assert_eq!(res2, "127.0.0.1:8080");
     }
 }

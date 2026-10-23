@@ -387,12 +387,14 @@ export function resolveInheritedGrpcAddress(
 
   if (targetFolder && isReflectionFolder(targetFolder, collectionSettings)) {
     const addr = getFolderGrpcUrl(targetFolder, collectionSettings);
-    return {
-      isInherited: true,
-      inheritedAddress: addr,
-      folderId: targetFolder.id,
-      folderName: targetFolder.name,
-    };
+    if (addr && addr.trim().length > 0) {
+      return {
+        isInherited: true,
+        inheritedAddress: addr.trim(),
+        folderId: targetFolder.id,
+        folderName: targetFolder.name,
+      };
+    }
   }
 
   // 2. Check immediate or intermediate ancestors if root was not reflection
@@ -400,12 +402,14 @@ export function resolveInheritedGrpcAddress(
   while (curr) {
     if (isReflectionFolder(curr, collectionSettings)) {
       const addr = getFolderGrpcUrl(curr, collectionSettings);
-      return {
-        isInherited: true,
-        inheritedAddress: addr,
-        folderId: curr.id,
-        folderName: curr.name,
-      };
+      if (addr && addr.trim().length > 0) {
+        return {
+          isInherited: true,
+          inheritedAddress: addr.trim(),
+          folderId: curr.id,
+          folderName: curr.name,
+        };
+      }
     }
     if (!curr.parent_folder_id) break;
     curr = folders.find((f) => f.id === curr!.parent_folder_id);
@@ -417,6 +421,48 @@ export function resolveInheritedGrpcAddress(
     folderId: null,
     folderName: null,
   };
+}
+
+export interface EndpointPatchCaller {
+  patch: (path: string, body: any) => Promise<any>;
+}
+
+/**
+ * Cascades updated gRPC address to all descendant gRPC endpoints under a folder hierarchy.
+ * Returns count of endpoints updated.
+ */
+export async function cascadeUpdateFolderGrpcAddress(
+  folderId: string,
+  newAddress: string,
+  folders: CollectionFolder[],
+  endpoints: Endpoint[],
+  api: EndpointPatchCaller
+): Promise<number> {
+  const cleanAddr = newAddress.trim();
+  if (!cleanAddr) return 0;
+
+  const targetFolderIds = getDescendantFolderIds(folders, folderId);
+  const matchingEndpoints = endpoints.filter(
+    (ep) =>
+      ep.protocol === 'grpc' &&
+      ep.folder_id &&
+      targetFolderIds.has(ep.folder_id) &&
+      ep.config?.server_address !== cleanAddr
+  );
+
+  let updatedCount = 0;
+  for (const ep of matchingEndpoints) {
+    await api.patch(`/endpoints/${ep.id}`, {
+      version: ep.version,
+      config: {
+        ...ep.config,
+        server_address: cleanAddr,
+      },
+    });
+    updatedCount++;
+  }
+
+  return updatedCount;
 }
 
 /**

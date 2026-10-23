@@ -14,6 +14,7 @@ import {
   resolveInheritedGrpcAddress,
   getAncestorFolderIds,
   isCollectionHighlighted,
+  cascadeUpdateFolderGrpcAddress,
 } from './folderTree.ts';
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
 
@@ -446,6 +447,121 @@ test('isCollectionHighlighted: matches collection containing active endpoint', (
   assert.equal(isCollectionHighlighted('col-2', activeEp), false);
   assert.equal(isCollectionHighlighted('col-1', null), false);
   assert.equal(isCollectionHighlighted('col-1', undefined), false);
+});
+
+test('cascadeUpdateFolderGrpcAddress: cascades new gRPC URL to descendant gRPC endpoints only', async () => {
+  const folders: CollectionFolder[] = [
+    { id: 'f-root', collection_id: 'c', parent_folder_id: null, name: 'Root gRPC', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-sub1', collection_id: 'c', parent_folder_id: 'f-root', name: 'Service1', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-sub2', collection_id: 'c', parent_folder_id: 'f-sub1', name: 'SubService', sort_order: 0, created_at: '', updated_at: '' },
+    { id: 'f-other', collection_id: 'c', parent_folder_id: null, name: 'Other Folder', sort_order: 1, created_at: '', updated_at: '' },
+  ];
+
+  const endpoints: Endpoint[] = [
+    {
+      id: 'ep-1',
+      collection_id: 'c',
+      folder_id: 'f-sub1',
+      name: 'Method1',
+      protocol: 'grpc',
+      config: { server_address: 'dev.domain.com:50051' },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'ep-2',
+      collection_id: 'c',
+      folder_id: 'f-sub2',
+      name: 'Method2',
+      protocol: 'grpc',
+      config: { server_address: 'dev.domain.com:50051' },
+      sort_order: 0,
+      version: 2,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'ep-http',
+      collection_id: 'c',
+      folder_id: 'f-sub1',
+      name: 'HTTP Endpoint',
+      protocol: 'http',
+      config: { url: 'https://dev.domain.com' },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'ep-other',
+      collection_id: 'c',
+      folder_id: 'f-other',
+      name: 'Other Method',
+      protocol: 'grpc',
+      config: { server_address: 'dev.domain.com:50051' },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const patchCalls: { path: string; body: any }[] = [];
+  const mockApi = {
+    patch: async (path: string, body: any) => {
+      patchCalls.push({ path, body });
+      return body;
+    },
+  };
+
+  const updatedCount = await cascadeUpdateFolderGrpcAddress(
+    'f-root',
+    '{{LOCAL_URL}}',
+    folders,
+    endpoints,
+    mockApi
+  );
+
+  // Exactly 2 gRPC endpoints inside f-root hierarchy updated (ep-1, ep-2)
+  // HTTP endpoint ignored, other folder endpoint ignored
+  assert.equal(updatedCount, 2);
+  assert.equal(patchCalls.length, 2);
+  assert.equal(patchCalls[0].path, '/endpoints/ep-1');
+  assert.equal(patchCalls[0].body.config.server_address, '{{LOCAL_URL}}');
+  assert.equal(patchCalls[1].path, '/endpoints/ep-2');
+  assert.equal(patchCalls[1].body.config.server_address, '{{LOCAL_URL}}');
+});
+
+test('resolveInheritedGrpcAddress: updates address when folder reflection grpc_url is changed to variable', () => {
+  const folders: CollectionFolder[] = [
+    {
+      id: 'f-refl',
+      collection_id: 'c',
+      parent_folder_id: null,
+      name: 'Reflection Root',
+      grpc_url: '{{LOCAL_GRPC_PORT}}',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-child',
+      collection_id: 'c',
+      parent_folder_id: 'f-refl',
+      name: 'ChildService',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const ep = { folder_id: 'f-child' };
+  const res = resolveInheritedGrpcAddress(ep, folders);
+  assert.equal(res.isInherited, true);
+  assert.equal(res.inheritedAddress, '{{LOCAL_GRPC_PORT}}');
+  assert.equal(res.folderId, 'f-refl');
 });
 
 
