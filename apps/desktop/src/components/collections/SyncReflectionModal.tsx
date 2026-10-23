@@ -219,7 +219,8 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         folders,
         endpoints,
         res.services,
-        payloads
+        payloads,
+        serverAddress.trim()
       );
 
       setPlan(calculatedPlan);
@@ -286,6 +287,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
 
       queryClient.invalidateQueries({ queryKey: ['folders', collection.id] });
       queryClient.invalidateQueries({ queryKey: ['endpoints', collection.id] });
+      queryClient.invalidateQueries({ queryKey: ['collection', collection.id] });
       queryClient.invalidateQueries({ queryKey: ['collections'] });
 
       setSuccessInfo(
