@@ -111,6 +111,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     if (initialConfig.use_tls !== undefined) return Boolean(initialConfig.use_tls);
     return shouldAutoDetectTls(initialConfig.server_address || 'localhost:50051');
   });
+  const [explicitTlsToggled, setExplicitTlsToggled] = useState(false);
   const [selectedService, setSelectedService] = useState(initialConfig.service || '');
   const [selectedMethod, setSelectedMethod] = useState(initialConfig.method || '');
 
@@ -137,19 +138,21 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   async function resolveVariables(): Promise<Record<string, string>> {
     const activeVars: Record<string, string> = {};
     if (activeEnvironmentId) {
-      const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
-      if (envVars) {
-        for (const v of envVars) {
+      try {
+        const fetched = await queryClient.fetchQuery({
+          queryKey: ['variables', activeEnvironmentId],
+          queryFn: () => apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`),
+          staleTime: 5_000,
+        });
+        for (const v of fetched) {
           activeVars[v.key] = v.value;
         }
-      } else {
-        try {
-          const fetched = await apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`);
-          for (const v of fetched) {
+      } catch {
+        const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
+        if (envVars) {
+          for (const v of envVars) {
             activeVars[v.key] = v.value;
           }
-        } catch {
-          // fallback
         }
       }
     }
@@ -204,7 +207,17 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     ? (inheritedInfo.inheritedAddress || '')
     : serverAddress;
 
-  const effectiveTls = useTls || shouldAutoDetectTls(effectiveServerAddress, activeVariables);
+  const effectiveTls = explicitTlsToggled
+    ? useTls
+    : (inheritedInfo.isInherited
+      ? shouldAutoDetectTls(effectiveServerAddress, activeVariables)
+      : (useTls || shouldAutoDetectTls(effectiveServerAddress, activeVariables)));
+
+  useEffect(() => {
+    if (inheritedInfo.isInherited && inheritedInfo.inheritedAddress) {
+      setServerAddress(inheritedInfo.inheritedAddress);
+    }
+  }, [inheritedInfo.isInherited, inheritedInfo.inheritedAddress]);
 
   // Auto-discover & cache reflection per server address (Fix for Bug 1)
   const {
@@ -275,6 +288,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   useEffect(() => {
     if (prevEndpointIdRef.current !== endpoint.id) {
       prevEndpointIdRef.current = endpoint.id;
+      setExplicitTlsToggled(false);
       setCurrentVersion(endpoint.version);
       currentVersionRef.current = endpoint.version;
       const currentDraft = useAppStore.getState().endpointDrafts[endpoint.id];
@@ -506,7 +520,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
 
     return {
-      server_address: serverAddress,
+      server_address: inheritedInfo.isInherited ? (inheritedInfo.inheritedAddress || serverAddress) : serverAddress,
       service: selectedService,
       method: selectedMethod,
       use_tls: useTls,
@@ -998,7 +1012,10 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           <div className="flex-1 flex items-center pl-2 min-w-0">
             <button
               type="button"
-              onClick={() => setUseTls(!effectiveTls)}
+              onClick={() => {
+                setExplicitTlsToggled(true);
+                setUseTls(!effectiveTls);
+              }}
               className="p-1 text-zinc-500 hover:text-zinc-300 transition mr-1 flex-shrink-0"
               title={effectiveTls ? 'TLS Enabled (Click to disable)' : 'TLS Disabled (Click to enable)'}
             >

@@ -4,12 +4,20 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
-import { isReflectionFolder, getFolderGrpcUrl, isSwaggerFolder, getFolderSwaggerUrl } from '../../utils/folderTree';
+import {
+  isReflectionFolder,
+  getFolderGrpcUrl,
+  isSwaggerFolder,
+  getFolderSwaggerUrl,
+  cascadeUpdateFolderGrpcAddress,
+  getDescendantFolderIds,
+} from '../../utils/folderTree';
 import { resolveInheritedAuth } from '../../utils/folderSettings';
 import type {
   Collection,
   CollectionFolder,
   CollectionAuthSettings,
+  Endpoint,
   VariableResponse,
 } from '@api-lab/api-types';
 import { X, Settings, Shield, Save, Folder } from 'lucide-react';
@@ -20,6 +28,7 @@ export const FolderSettingsModal: React.FC = () => {
     folderSettingsModal,
     closeFolderSettingsModal,
     activeEnvironmentId,
+    clearEndpointDraft,
   } = useAppStore();
 
   const folderId = folderSettingsModal?.folderId;
@@ -30,6 +39,13 @@ export const FolderSettingsModal: React.FC = () => {
   const { data: folders = [] } = useQuery<CollectionFolder[]>({
     queryKey: ['folders', collectionId],
     queryFn: () => apiRequest<CollectionFolder[]>(`/collections/${collectionId}/folders`),
+    enabled: isOpen,
+  });
+
+  // Fetch endpoints of collection to cascade address updates
+  const { data: endpoints = [] } = useQuery<Endpoint[]>({
+    queryKey: ['endpoints', collectionId],
+    queryFn: () => apiRequest<Endpoint[]>(`/collections/${collectionId}/endpoints`),
     enabled: isOpen,
   });
 
@@ -196,9 +212,27 @@ export const FolderSettingsModal: React.FC = () => {
         }
       }
 
+      // Cascade gRPC address to all child endpoints under this reflection folder
+      if (isReflection && folderId) {
+        const apiCaller = {
+          patch: (path: string, body: any) =>
+            apiRequest(path, { method: 'PATCH', body: JSON.stringify(body) }),
+        };
+        await cascadeUpdateFolderGrpcAddress(folderId, serverAddress.trim(), folders, endpoints, apiCaller);
+      }
+
       return updated;
     },
     onSuccess: () => {
+      // Clear stale drafts for endpoints in this reflection folder hierarchy
+      if (isReflection && folderId) {
+        const descendantIds = getDescendantFolderIds(folders, folderId);
+        for (const ep of endpoints) {
+          if (ep.folder_id && descendantIds.has(ep.folder_id)) {
+            clearEndpointDraft(ep.id);
+          }
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['folders', collectionId] });
       queryClient.invalidateQueries({ queryKey: ['collection', collectionId] });
       queryClient.invalidateQueries({ queryKey: ['endpoints', collectionId] });
