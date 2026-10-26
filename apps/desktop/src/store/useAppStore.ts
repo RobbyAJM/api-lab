@@ -101,6 +101,10 @@ interface AppState {
   stopStreaming: () => Promise<void>;
 
   // Modals
+  appSettingsOpen: boolean;
+  appSettingsTab: 'profile' | 'appearance' | 'general' | 'shortcuts';
+  setAppSettingsOpen: (open: boolean) => void;
+  setAppSettingsTab: (tab: 'profile' | 'appearance' | 'general' | 'shortcuts') => void;
   authModalOpen: boolean;
   authModalTab: 'login' | 'register' | 'forgot' | 'reset';
   envModalOpen: boolean;
@@ -193,6 +197,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   token: getAuthToken(),
   user: null,
   activeThemeId: initialTheme,
+  appSettingsOpen: false,
+  appSettingsTab: 'profile',
+  setAppSettingsOpen: (open: boolean) => set({ appSettingsOpen: open }),
+  setAppSettingsTab: (tab) => set({ appSettingsTab: tab }),
   themeModalOpen: false,
   setThemeModalOpen: (open: boolean) => set({ themeModalOpen: open }),
   setTheme: (themeId: string) => {
