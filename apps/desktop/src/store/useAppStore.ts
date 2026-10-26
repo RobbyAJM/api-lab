@@ -73,17 +73,6 @@ interface AppState {
   addOnlineUser: (user: PresenceUser) => void;
   removeOnlineUser: (userId: string) => void;
 
-  onlineUsers: [],
-  setOnlineUsers: (users) => set({ onlineUsers: users }),
-  addOnlineUser: (user) =>
-    set((state) => ({
-      onlineUsers: [...state.onlineUsers.filter((u) => u.user_id !== user.user_id), user],
-    })),
-  removeOnlineUser: (userId) =>
-    set((state) => ({
-      onlineUsers: state.onlineUsers.filter((u) => u.user_id !== userId),
-    })),
-
   // Streaming state
   isStreaming: boolean;
   activeStreamId: string | null;
@@ -197,6 +186,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   token: getAuthToken(),
   user: null,
   activeThemeId: initialTheme,
+  onlineUsers: [],
+  setOnlineUsers: (users) => set({ onlineUsers: users }),
+  addOnlineUser: (user) =>
+    set((state) => ({
+      onlineUsers: [...state.onlineUsers.filter((u) => u.user_id !== user.user_id), user],
+    })),
+  removeOnlineUser: (userId) =>
+    set((state) => ({
+      onlineUsers: state.onlineUsers.filter((u) => u.user_id !== userId),
+    })),
   appSettingsOpen: false,
   appSettingsTab: 'profile',
   setAppSettingsOpen: (open: boolean) => set({ appSettingsOpen: open }),

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Settings, LogOut, User as UserIcon } from 'lucide-react';
+import { Settings, LogOut } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { Avatar } from '../common/Avatar';
 
