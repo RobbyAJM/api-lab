@@ -3,6 +3,7 @@ import appLogo from '../../assets/api-lab-logo.png';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
+import { Avatar } from '../common/Avatar';
 import type {
   Collection,
   CollectionFolder,
@@ -16,13 +17,10 @@ import {
   ChevronDown,
   Plus,
   Trash2,
-  Users,
   Settings,
-  LogOut,
   Radio,
   ArrowDownUp,
   ArrowLeftRight,
-  Search,
   X,
   Shield,
   Edit2,
@@ -30,8 +28,6 @@ import {
   FolderPlus,
   ChevronsDownUp,
   RefreshCw,
-  Keyboard,
-  Palette,
   Globe,
 } from 'lucide-react';
 import { GenerateGrpcModal } from './GenerateGrpcModal';
@@ -58,37 +54,17 @@ export const Sidebar: React.FC = () => {
   const queryClient = useQueryClient();
   const {
     user,
-    workspaces,
     activeWorkspaceId,
-    setActiveWorkspaceId,
     activeEnvironmentId,
     setActiveEnvironmentId,
-    logout,
-    setMembersModalOpen,
-    setWorkspaceModalOpen,
-    setCommandPaletteOpen,
-    setShortcutsHelpOpen,
-    setThemeModalOpen,
+    setAppSettingsOpen,
+    setAppSettingsTab,
   } = useAppStore();
 
   const [newCollectionName, setNewCollectionName] = useState('');
   const [showAddCollection, setShowAddCollection] = useState(false);
-  const [isWsDropdownOpen, setIsWsDropdownOpen] = useState(false);
-  const wsDropdownRef = useRef<HTMLDivElement>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const searchQuery = '';
   const [collapseSignal, setCollapseSignal] = useState(0);
-
-  // Close workspace dropdown on outside click
-  useEffect(() => {
-    if (!isWsDropdownOpen) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (wsDropdownRef.current && !wsDropdownRef.current.contains(e.target as Node)) {
-        setIsWsDropdownOpen(false);
-      }
-    }
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [isWsDropdownOpen]);
 
   // Resizable sidebar state (New Feature 2)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -178,8 +154,6 @@ export const Sidebar: React.FC = () => {
     },
   });
 
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
-
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
@@ -194,137 +168,6 @@ export const Sidebar: React.FC = () => {
         <span className="text-[10px] font-mono text-zinc-500 font-medium">
           v0.1.0
         </span>
-      </div>
-
-      {/* Workspace Switcher */}
-      <div className="px-2 py-1.5 border-b border-zinc-800/60 flex items-center gap-1 relative select-none">
-        {/* Minimalist Dropdown Button */}
-        <div className="flex-1 relative min-w-0" ref={wsDropdownRef}>
-          <button
-            type="button"
-            onClick={() => setIsWsDropdownOpen(!isWsDropdownOpen)}
-            className="w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-zinc-900/80 text-xs text-zinc-200 transition group"
-            title={activeWorkspace ? `${activeWorkspace.name} (${activeWorkspace.role})` : 'Select Workspace'}
-          >
-            <div className="flex items-center gap-2 truncate min-w-0">
-              <span className="w-5 h-5 rounded bg-zinc-800 flex items-center justify-center text-[10px] text-zinc-300 font-mono font-semibold flex-shrink-0">
-                {activeWorkspace?.name?.[0]?.toUpperCase() || 'W'}
-              </span>
-              <span className="font-semibold text-zinc-200 truncate">
-                {activeWorkspace?.name || 'Select Workspace'}
-              </span>
-              {activeWorkspace && (
-                <span className="text-[10px] text-zinc-500 font-mono lowercase flex-shrink-0">
-                  {activeWorkspace.role}
-                </span>
-              )}
-            </div>
-            <ChevronDown
-              size={12}
-              className={`text-zinc-500 group-hover:text-zinc-300 transition-transform flex-shrink-0 ml-1 ${
-                isWsDropdownOpen ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-
-          {/* Minimalist Floating Dropdown Menu */}
-          {isWsDropdownOpen && (
-            <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-zinc-950 border border-zinc-800 rounded-md shadow-xl p-1 space-y-0.5 font-sans">
-              <div className="px-2 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-                Workspaces
-              </div>
-              <div className="max-h-52 overflow-y-auto space-y-0.5 pr-0.5">
-                {workspaces.map((ws) => {
-                  const isCurrent = ws.id === activeWorkspaceId;
-                  return (
-                    <button
-                      key={ws.id}
-                      type="button"
-                      onClick={() => {
-                        setActiveWorkspaceId(ws.id);
-                        setIsWsDropdownOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition text-left ${
-                        isCurrent
-                          ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
-                          : 'text-zinc-300 hover:text-white hover:bg-zinc-900/60 border border-transparent'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="w-5 h-5 rounded bg-zinc-850 border border-zinc-800 flex items-center justify-center text-[10px] text-zinc-400 font-mono font-medium flex-shrink-0">
-                          {ws.name?.[0]?.toUpperCase() || 'W'}
-                        </span>
-                        <span className="truncate">{ws.name}</span>
-                        <span className="text-[10px] text-zinc-500 font-mono">
-                          ({ws.role})
-                        </span>
-                      </div>
-                      {isCurrent && (
-                        <Check size={12} className="text-primary flex-shrink-0 ml-1" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="h-px bg-zinc-850 my-1" />
-
-              <button
-                type="button"
-                onClick={() => {
-                  setIsWsDropdownOpen(false);
-                  setWorkspaceModalOpen(true);
-                }}
-                className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-zinc-300 hover:text-white hover:bg-zinc-900/60 transition text-left"
-              >
-                <Settings size={12} className="text-zinc-400" />
-                <span>Workspace Settings...</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Setting Button */}
-        <button
-          type="button"
-          onClick={() => setWorkspaceModalOpen(true)}
-          className="p-1.5 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900/80 rounded-md transition flex-shrink-0"
-          title="Workspace Settings"
-        >
-          <Settings size={14} />
-        </button>
-      </div>
-
-      {/* Searchbar in Collection */}
-      <div className="px-2.5 pt-2 pb-1">
-        <div className="relative flex items-center">
-          <Search size={12} className="absolute left-2.5 text-zinc-500 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search..."
-            className="w-full bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/60 focus:border-zinc-700 focus:bg-zinc-900 rounded-md pl-7 pr-12 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition"
-          />
-          {searchQuery ? (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 text-zinc-500 hover:text-zinc-300"
-            >
-              <X size={11} />
-            </button>
-          ) : (
-            <button
-              onClick={() => setCommandPaletteOpen(true)}
-              className="absolute right-1.5 flex items-center hover:opacity-80 transition"
-              title="Open Command Palette (Ctrl+K)"
-            >
-              <kbd className="text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-800 text-zinc-500 select-none">
-                Ctrl+K
-              </kbd>
-            </button>
-          )}
-        </div>
       </div>
 
       {/* Collections Header */}
@@ -385,45 +228,24 @@ export const Sidebar: React.FC = () => {
       {/* Footer / User Profile */}
       <div className="p-2 border-t border-zinc-800/60 flex items-center justify-between text-xs bg-zinc-950 flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="w-6 h-6 rounded-md bg-zinc-800 flex items-center justify-center font-medium text-zinc-300 text-[11px] flex-shrink-0">
-            {user?.name?.slice(0, 2).toUpperCase() || 'AD'}
-          </div>
+          <Avatar avatar={user?.avatar} name={user?.name} size={24} />
           <div className="truncate min-w-0">
             <div className="font-medium text-zinc-200 text-xs truncate leading-tight">{user?.name || 'Admin'}</div>
             <div className="text-[10px] text-zinc-500 font-mono truncate leading-tight">{user?.email || 'admin@nutrade.internal'}</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-0.5 text-zinc-400 flex-shrink-0">
-          <button
-            onClick={() => setThemeModalOpen(true)}
-            className="p-1 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
-            title="Themes (Colors)"
-          >
-            <Palette size={13} />
-          </button>
-          <button
-            onClick={() => setShortcutsHelpOpen(true)}
-            className="p-1 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
-            title="Keyboard Shortcuts (Ctrl+/)"
-          >
-            <Keyboard size={13} />
-          </button>
-          <button
-            onClick={() => setMembersModalOpen(true)}
-            className="p-1 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
-            title="Workspace Members"
-          >
-            <Users size={13} />
-          </button>
-          <button
-            onClick={logout}
-            className="p-1 hover:text-red-400 hover:bg-zinc-900 rounded transition"
-            title="Logout"
-          >
-            <LogOut size={13} />
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setAppSettingsTab('profile');
+            setAppSettingsOpen(true);
+          }}
+          className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 rounded transition flex-shrink-0"
+          title="App settings"
+        >
+          <Settings size={14} />
+        </button>
       </div>
 
       {/* Horizontal Resizable Splitter Handle (New Feature 2) */}
