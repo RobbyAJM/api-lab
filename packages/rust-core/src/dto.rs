@@ -47,6 +47,27 @@ pub struct UpdateProfileDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotificationItem {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub workspace_id: Option<Uuid>,
+    pub title: String,
+    pub message: String,
+    pub category: String,
+    pub read: bool,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateNotificationDto {
+    pub user_id: Uuid,
+    pub workspace_id: Option<Uuid>,
+    pub title: String,
+    pub message: String,
+    pub category: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateThemeDto {
     pub theme: String,
 }
