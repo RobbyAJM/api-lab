@@ -21,7 +21,6 @@ import {
   Radio,
   ArrowDownUp,
   ArrowLeftRight,
-  Search,
   X,
   Shield,
   Edit2,
@@ -58,12 +57,13 @@ export const Sidebar: React.FC = () => {
     activeWorkspaceId,
     activeEnvironmentId,
     setActiveEnvironmentId,
-    setCommandPaletteOpen,
+    setAppSettingsOpen,
+    setAppSettingsTab,
   } = useAppStore();
 
   const [newCollectionName, setNewCollectionName] = useState('');
   const [showAddCollection, setShowAddCollection] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const searchQuery = '';
   const [collapseSignal, setCollapseSignal] = useState(0);
 
   // Resizable sidebar state (New Feature 2)
@@ -170,38 +170,6 @@ export const Sidebar: React.FC = () => {
         </span>
       </div>
 
-      {/* Searchbar in Collection */}
-      <div className="px-2.5 pt-2 pb-1">
-        <div className="relative flex items-center">
-          <Search size={12} className="absolute left-2.5 text-zinc-500 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search..."
-            className="w-full bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/60 focus:border-zinc-700 focus:bg-zinc-900 rounded-md pl-7 pr-12 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none transition"
-          />
-          {searchQuery ? (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 text-zinc-500 hover:text-zinc-300"
-            >
-              <X size={11} />
-            </button>
-          ) : (
-            <button
-              onClick={() => setCommandPaletteOpen(true)}
-              className="absolute right-1.5 flex items-center hover:opacity-80 transition"
-              title="Open Command Palette (Ctrl+K)"
-            >
-              <kbd className="text-[9px] font-mono px-1 py-0.5 rounded bg-zinc-800 text-zinc-500 select-none">
-                Ctrl+K
-              </kbd>
-            </button>
-          )}
-        </div>
-      </div>
-
       {/* Collections Header */}
       <div className="flex items-center justify-between px-3 pt-2.5 pb-1 text-[10px] font-semibold text-zinc-500 tracking-wider uppercase select-none">
         <span>Collections</span>
@@ -266,6 +234,18 @@ export const Sidebar: React.FC = () => {
             <div className="text-[10px] text-zinc-500 font-mono truncate leading-tight">{user?.email || 'admin@nutrade.internal'}</div>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setAppSettingsTab('profile');
+            setAppSettingsOpen(true);
+          }}
+          className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80 rounded transition flex-shrink-0"
+          title="App settings"
+        >
+          <Settings size={14} />
+        </button>
       </div>
 
       {/* Horizontal Resizable Splitter Handle (New Feature 2) */}
