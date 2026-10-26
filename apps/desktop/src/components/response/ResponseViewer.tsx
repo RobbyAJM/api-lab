@@ -31,7 +31,11 @@ import {
   isLifecyclePayload,
   type MessageDirectionFilter,
 } from '../../utils/streamViewer';
-import { formatResponseSize, formatElapsedTime } from '../../utils/responseViewerUtils';
+import {
+  formatResponseSize,
+  formatElapsedTime,
+  formatCopyTrace,
+} from '../../utils/responseViewerUtils';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
@@ -40,6 +44,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   const {
     getHttpResponse,
     getGrpcResponse,
+    getExecutedRequest,
     isStreaming,
     streamMessages,
     clearStreamMessages,
@@ -559,7 +564,13 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                     <button
                       type="button"
                       onClick={() => {
-                        navigator.clipboard.writeText(activeResponse.error || '');
+                        const traceText = formatCopyTrace({
+                          endpoint,
+                          response: activeResponse,
+                          executedMeta: getExecutedRequest(endpoint.id),
+                          draftConfig: useAppStore.getState().endpointDrafts[endpoint.id],
+                        });
+                        navigator.clipboard.writeText(traceText);
                         setCopiedError(true);
                         setTimeout(() => setCopiedError(false), 2000);
                       }}

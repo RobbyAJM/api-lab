@@ -25,6 +25,7 @@ import {
   loadPaletteRecency,
   savePaletteRecency,
 } from '../utils/shortcuts';
+import type { ExecutedRequestMeta } from '../utils/responseViewerUtils';
 
 export interface StreamMessageItem {
   id: string;
@@ -59,8 +60,11 @@ interface AppState {
   lastGrpcResponse: GrpcExecutionResponse | null;
   httpResponses: Record<string, HttpExecutionResponse>;
   grpcResponses: Record<string, GrpcExecutionResponse>;
+  executedRequests: Record<string, ExecutedRequestMeta>;
   executingEndpoints: Record<string, { startTime: number }>;
   setEndpointExecuting: (endpointId: string, executing: boolean) => void;
+  setExecutedRequest: (endpointId: string, meta: ExecutedRequestMeta) => void;
+  getExecutedRequest: (endpointId: string) => ExecutedRequestMeta | null;
 
   // Streaming state
   isStreaming: boolean;
@@ -208,6 +212,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastGrpcResponse: null,
   httpResponses: {},
   grpcResponses: {},
+  executedRequests: {},
+  setExecutedRequest: (endpointId, meta) =>
+    set((state) => ({
+      executedRequests: {
+        ...state.executedRequests,
+        [endpointId]: meta,
+      },
+    })),
+  getExecutedRequest: (endpointId) => get().executedRequests[endpointId] || null,
   executingEndpoints: {},
   setEndpointExecuting: (endpointId, executing) =>
     set((state) => {
