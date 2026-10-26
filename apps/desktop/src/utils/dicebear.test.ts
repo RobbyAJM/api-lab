@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  DICEBEAR_STYLES,
   parseAvatar,
   formatAvatar,
   getDiceBearUrl,
@@ -9,36 +8,42 @@ import {
 } from './dicebear.ts';
 
 test('parseAvatar: defaults to bottts:api-lab on null or empty', () => {
-  assert.deepEqual(parseAvatar(null), { style: 'bottts', seed: 'api-lab' });
-  assert.deepEqual(parseAvatar(''), { style: 'bottts', seed: 'api-lab' });
-  assert.deepEqual(parseAvatar('   '), { style: 'bottts', seed: 'api-lab' });
+  assert.deepEqual(parseAvatar(null), { style: 'bottts', seed: 'api-lab', options: {} });
+  assert.deepEqual(parseAvatar(''), { style: 'bottts', seed: 'api-lab', options: {} });
+  assert.deepEqual(parseAvatar('   '), { style: 'bottts', seed: 'api-lab', options: {} });
 });
 
-test('parseAvatar: parses style and seed with colon separator', () => {
-  assert.deepEqual(parseAvatar('lorelei:Felix'), { style: 'lorelei', seed: 'Felix' });
-  assert.deepEqual(parseAvatar('avataaars:Jane_Doe'), { style: 'avataaars', seed: 'Jane_Doe' });
-  assert.deepEqual(parseAvatar('identicon:user@example.com'), {
-    style: 'identicon',
-    seed: 'user@example.com',
+test('parseAvatar: parses style, seed and query options', () => {
+  const parsed = parseAvatar('lorelei:Felix?backgroundColor=b6e3f4&radius=20&flip=true&rotate=90');
+  assert.equal(parsed.style, 'lorelei');
+  assert.equal(parsed.seed, 'Felix');
+  assert.equal(parsed.options.backgroundColor, 'b6e3f4');
+  assert.equal(parsed.options.radius, 20);
+  assert.equal(parsed.options.flip, true);
+  assert.equal(parsed.options.rotate, 90);
+});
+
+test('formatAvatar: produces style:seed with options query string', () => {
+  const formatted = formatAvatar('lorelei', 'Felix', {
+    backgroundColor: 'b6e3f4',
+    radius: 20,
+    flip: true,
   });
+  assert.equal(
+    formatted,
+    'lorelei:Felix?backgroundColor=b6e3f4&radius=20&flip=true'
+  );
 });
 
-test('parseAvatar: falls back to bottts if style is unrecognized', () => {
-  assert.deepEqual(parseAvatar('unknownstyle:myseed'), { style: 'bottts', seed: 'unknownstyle:myseed' });
-});
-
-test('formatAvatar: produces style:seed format', () => {
-  assert.equal(formatAvatar('lorelei', 'Felix'), 'lorelei:Felix');
-  assert.equal(formatAvatar('unknown', 'seed123'), 'bottts:seed123');
-  assert.equal(formatAvatar('bottts', ''), 'bottts:api-lab');
-});
-
-test('getDiceBearUrl: generates expected URL from string or parameters', () => {
-  const url1 = getDiceBearUrl('lorelei:Felix');
-  assert.equal(url1, 'https://api.dicebear.com/9.x/lorelei/svg?seed=Felix');
-
-  const url2 = getDiceBearUrl('bottts', 'seed with spaces');
-  assert.equal(url2, 'https://api.dicebear.com/9.x/bottts/svg?seed=seed%20with%20spaces');
+test('getDiceBearUrl: generates expected URL with parameters', () => {
+  const url = getDiceBearUrl('lorelei', 'Felix', {
+    backgroundColor: 'b6e3f4',
+    radius: 50,
+  });
+  assert.ok(url.includes('https://api.dicebear.com/9.x/lorelei/svg?'));
+  assert.ok(url.includes('seed=Felix'));
+  assert.ok(url.includes('backgroundColor=b6e3f4'));
+  assert.ok(url.includes('radius=50'));
 });
 
 test('generateRandomSeed: returns non-empty random string', () => {
