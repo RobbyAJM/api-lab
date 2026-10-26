@@ -18,10 +18,43 @@ export const TopBar: React.FC = () => {
   const setMembersModalOpen = useAppStore((s) => s.setMembersModalOpen);
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
 
+  const handleMouseDown = async (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, select, textarea, [data-tauri-no-drag]')) {
+      return;
+    }
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+      try {
+        const { getCurrentWindow } = await import('@tauri-apps/api/window');
+        await getCurrentWindow().startDragging();
+      } catch {
+        // fallback
+      }
+    }
+  };
+
+  const handleDoubleClick = async (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('button, input, select, textarea, [data-tauri-no-drag]')) {
+      return;
+    }
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('toggle_maximize_window');
+      } catch {
+        // fallback
+      }
+    }
+  };
+
   return (
     <header
       data-tauri-drag-region
-      className="h-9 w-full bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between px-2 select-none flex-shrink-0 z-30"
+      onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
+      className="h-9 w-full bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between px-2 select-none flex-shrink-0 z-30 cursor-default"
     >
       {/* Left: Navigation & Workspace */}
       <div className="flex items-center gap-1 min-w-0" data-tauri-no-drag>
@@ -57,8 +90,14 @@ export const TopBar: React.FC = () => {
         <WorkspaceDropdown />
       </div>
 
+      {/* Flexible Drag Region between left and center */}
+      <div
+        data-tauri-drag-region
+        className="flex-1 h-full min-w-4 cursor-default"
+      />
+
       {/* Center: Global Search Bar */}
-      <div className="flex-1 max-w-md mx-4" data-tauri-no-drag>
+      <div className="w-80 max-w-sm mx-2" data-tauri-no-drag>
         <button
           type="button"
           onClick={() => setCommandPaletteOpen(true)}
@@ -74,6 +113,12 @@ export const TopBar: React.FC = () => {
           </kbd>
         </button>
       </div>
+
+      {/* Flexible Drag Region between center and right */}
+      <div
+        data-tauri-drag-region
+        className="flex-1 h-full min-w-4 cursor-default"
+      />
 
       {/* Right: Presence, Invite, Notification, Profile, Window Controls */}
       <div className="flex items-center gap-1.5 h-full" data-tauri-no-drag>
