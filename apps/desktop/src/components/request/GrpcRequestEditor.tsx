@@ -94,6 +94,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     openFolderSettingsModal,
     openCollectionSettingsModal,
     setEndpointExecuting,
+    setExecutedRequest,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -689,6 +690,18 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       auth,
     };
 
+    setExecutedRequest(endpoint.id, {
+      timestamp: new Date().toISOString(),
+      protocol: 'grpc',
+      grpc: {
+        serverAddress: effectiveServerAddress,
+        service: selectedService,
+        method: selectedMethod,
+        metadata: metaMap,
+        payload: parsedPayload,
+      },
+    });
+
     try {
       const currentVars = await resolveVariables();
 
@@ -738,6 +751,18 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           },
         };
       }
+
+      setExecutedRequest(endpoint.id, {
+        timestamp: new Date().toISOString(),
+        protocol: 'grpc',
+        grpc: {
+          serverAddress: finalReq.server_address,
+          service: finalReq.service,
+          method: finalReq.method,
+          metadata: finalReq.metadata,
+          payload: finalReq.payload,
+        },
+      });
 
       // 3. Execute gRPC Request
       const resp = await executeNativeGrpc(finalReq, beforeResult.variables);
