@@ -31,6 +31,7 @@ import {
   isLifecyclePayload,
   type MessageDirectionFilter,
 } from '../../utils/streamViewer';
+import { formatResponseSize } from '../../utils/responseViewerUtils';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
@@ -51,9 +52,10 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     isGrpc &&
     Boolean(endpoint.config?.stream_type && endpoint.config.stream_type !== 'unary');
 
-  const [activeTab, setActiveTab] = useState<'body' | 'stream' | 'headers' | 'saved'>(
+  const [activeTab, setActiveTab] = useState<'body' | 'stream' | 'headers' | 'trailers' | 'saved'>(
     isStreamRpc ? 'stream' : 'body'
   );
+  const [showSearchInput, setShowSearchInput] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [streamSearchQuery, setStreamSearchQuery] = useState('');
@@ -267,174 +269,27 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
 
   return (
     <div className="w-full flex-1 flex flex-col min-h-0 bg-zinc-950 text-zinc-300 overflow-hidden">
-      {/* Top Status & Search Header (Result V3 Sleek Bar) */}
-      <div className="px-4 py-2 bg-zinc-900/60 border-b border-zinc-800/80 flex flex-wrap items-center justify-between text-xs gap-3 select-none flex-shrink-0">
-        {/* Left: Status Badge, Metrics, Stream Indicator */}
-        <div className="flex items-center gap-2.5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Response</span>
-
-          {isStreaming && (
-            <div className="flex items-center gap-1.5">
-              <span className="flex items-center text-[10px] text-white font-semibold bg-blue-600 px-2 py-0.5 rounded shadow-sm tracking-wider uppercase">
-                STREAMING
-              </span>
-            </div>
-          )}
-
-          {activeResponse || streamMessages.length > 0 ? (
-            <div className="flex items-center gap-2.5 text-xs">
-              {/* Status Badge */}
-              {isHttp && lastHttpResponse ? (
-                <span
-                  title={lastHttpResponse.status_text}
-                  className={`font-mono font-bold px-2.5 py-0.5 rounded text-xs inline-flex items-center gap-1.5 flex-shrink-0 ${
-                    lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
-                      ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/60'
-                      : lastHttpResponse.status_code >= 400
-                      ? 'bg-red-950/50 text-red-400 border border-red-800/60'
-                      : 'bg-zinc-800 text-zinc-300'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
-                        ? 'bg-emerald-400'
-                        : 'bg-red-400'
-                    }`}
-                  />
-                  <span>
-                    {lastHttpResponse.status_code}
-                    {lastHttpResponse.status_text && lastHttpResponse.status_text.length <= 24
-                      ? ` ${lastHttpResponse.status_text}`
-                      : ''}
-                  </span>
-                </span>
-              ) : !isHttp && lastGrpcResponse ? (
-                <span
-                  title={lastGrpcResponse.status_message}
-                  className={`font-mono font-bold px-2.5 py-0.5 rounded text-xs inline-flex items-center gap-1.5 flex-shrink-0 ${
-                    lastGrpcResponse.status_code === 0
-                      ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-800/60'
-                      : 'bg-red-950/50 text-red-400 border border-red-800/60'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      lastGrpcResponse.status_code === 0 ? 'bg-emerald-400' : 'bg-red-400'
-                    }`}
-                  />
-                  <span>
-                    gRPC [{lastGrpcResponse.status_code}]{' '}
-                    {getGrpcStatusLabel(lastGrpcResponse.status_code, lastGrpcResponse.status_message)}
-                  </span>
-                </span>
-              ) : null}
-
-              {/* Time */}
-              {activeResponse && (
-                <span className="flex items-center gap-1 text-zinc-400 font-mono text-[11px]">
-                  <Clock size={11} className="text-zinc-500" />
-                  <span>{activeResponse.response_time_ms} ms</span>
-                </span>
-              )}
-
-              {activeResponse && <span className="text-zinc-600">•</span>}
-
-              {/* Size */}
-              {activeResponse && (
-                <span className="flex items-center gap-1 text-zinc-400 font-mono text-[11px]">
-                  <HardDrive size={11} className="text-zinc-500" />
-                  <span>{activeResponse.response_size_bytes} B</span>
-                </span>
-              )}
-            </div>
-          ) : (
-            <span className="text-xs text-zinc-500">No response executed yet</span>
-          )}
-
-          {saveMessage && (
-            <span className="text-[11px] text-emerald-400 font-mono ml-1">{saveMessage}</span>
-          )}
-        </div>
-
-        {/* Right: Search Filter Input & Save Button */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex items-center">
-            <Search size={12} className="w-3 h-3 text-zinc-500 absolute left-2.5 top-2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={
-                activeTab === 'stream'
-                  ? 'Filter stream messages...'
-                  : activeTab === 'saved'
-                  ? 'Filter saved response...'
-                  : 'Filter response...'
-              }
-              className="w-44 lg:w-56 bg-zinc-900 border border-zinc-800 focus:border-zinc-700 rounded py-1 pl-7 pr-12 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none"
-            />
-            {searchQuery && (
-              <div className="absolute right-1.5 flex items-center gap-1">
-                {activeTab === 'body' && bodyMatchesCount > 0 && (
-                  <span className="text-[10px] text-zinc-400 font-mono">
-                    {bodyMatchesCount}
-                  </span>
-                )}
-                {activeTab === 'saved' && savedMatchesCount > 0 && (
-                  <span className="text-[10px] text-zinc-400 font-mono">
-                    {savedMatchesCount}
-                  </span>
-                )}
-                {activeTab === 'stream' && (
-                  <span className="text-[10px] text-zinc-400 font-mono">
-                    {filteredStreamMessages.length}/{streamMessages.length}
-                  </span>
-                )}
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="text-zinc-500 hover:text-zinc-300 p-0.5"
-                >
-                  <X size={11} />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {(activeResponse || streamMessages.length > 0) && (
-            <button
-              onClick={handleSaveCurrent}
-              disabled={saveResponseMutation.isPending}
-              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-              title="Save response to workspace"
-            >
-              <Save size={12} className="text-primary" />
-              <span>Save Response</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Navigation Tabs Bar */}
-      <div className="px-4 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none bg-zinc-950 flex-shrink-0">
-        <div className="flex items-center gap-4">
+      {/* Unified Compact Header Bar (Postman Style) */}
+      <div className="h-10 px-3 bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none flex-shrink-0 gap-3">
+        {/* Left: Navigation Tabs */}
+        <div className="flex items-center gap-1 sm:gap-2 h-full">
           {!isStreamRpc && (
             <button
               onClick={() => setActiveTab('body')}
-              className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              className={`h-full px-2.5 flex items-center gap-1.5 font-medium border-b-2 transition ${
                 activeTab === 'body'
                   ? 'border-zinc-200 text-zinc-100'
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
               }`}
             >
-              <span>Body</span>
+              <span>{isGrpc ? 'Response' : 'Body'}</span>
             </button>
           )}
 
           {isStreamRpc && (
             <button
               onClick={() => setActiveTab('stream')}
-              className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+              className={`h-full px-2.5 flex items-center gap-1.5 font-medium border-b-2 transition ${
                 activeTab === 'stream'
                   ? 'border-zinc-200 text-zinc-100'
                   : 'border-transparent text-zinc-400 hover:text-zinc-200'
@@ -451,18 +306,36 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
 
           <button
             onClick={() => setActiveTab('headers')}
-            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+            className={`h-full px-2.5 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'headers'
                 ? 'border-zinc-200 text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
             }`}
           >
             <span>{isHttp ? 'Headers' : 'Metadata'}</span>
+            {Object.keys(headersDisplay).length > 0 && (
+              <span className="text-[10px] font-mono text-zinc-500">
+                ({Object.keys(headersDisplay).length})
+              </span>
+            )}
           </button>
+
+          {isGrpc && (
+            <button
+              onClick={() => setActiveTab('trailers')}
+              className={`h-full px-2.5 flex items-center gap-1.5 font-medium border-b-2 transition ${
+                activeTab === 'trailers'
+                  ? 'border-zinc-200 text-zinc-100'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <span>Trailers</span>
+            </button>
+          )}
 
           <button
             onClick={() => setActiveTab('saved')}
-            className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+            className={`h-full px-2.5 flex items-center gap-1.5 font-medium border-b-2 transition ${
               activeTab === 'saved'
                 ? 'border-zinc-200 text-zinc-100'
                 : 'border-transparent text-zinc-400 hover:text-zinc-200'
@@ -475,40 +348,149 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           </button>
         </div>
 
-        {/* Output Controls (Format indicator & Copy & Save Response) */}
-        {!isStreamRpc && activeTab === 'body' && formattedBody && (
-          <div className="flex items-center gap-2 py-1">
-            <span className="text-[10px] font-mono uppercase text-zinc-500 tracking-wider">
-              {detectedFormat} Formatted
+        {/* Right: Status Pill, Latency, Size & Compact Actions */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {isStreaming && (
+            <span className="flex items-center text-[10px] text-white font-semibold bg-blue-600 px-2 py-0.5 rounded shadow-sm tracking-wider uppercase">
+              STREAMING
             </span>
-            <button
-              onClick={handleCopyBody}
-              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1.5 shadow-sm"
-              title="Copy response body to clipboard"
-            >
-              {copied ? (
+          )}
+
+          {activeResponse || streamMessages.length > 0 ? (
+            <div className="flex items-center gap-2 text-xs">
+              {/* Status Badge */}
+              {isHttp && lastHttpResponse ? (
+                <span
+                  title={lastHttpResponse.status_text}
+                  className={`font-mono font-bold px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1.5 flex-shrink-0 ${
+                    lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
+                      ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
+                      : lastHttpResponse.status_code >= 400
+                      ? 'bg-red-950/60 text-red-400 border border-red-800/60'
+                      : 'bg-zinc-800 text-zinc-300'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
+                        ? 'bg-emerald-400'
+                        : 'bg-red-400'
+                    }`}
+                  />
+                  <span>
+                    {lastHttpResponse.status_code}
+                    {lastHttpResponse.status_text ? ` ${lastHttpResponse.status_text}` : ''}
+                  </span>
+                </span>
+              ) : !isHttp && lastGrpcResponse ? (
+                <span
+                  title={lastGrpcResponse.status_message}
+                  className={`font-mono font-bold px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1.5 flex-shrink-0 ${
+                    lastGrpcResponse.status_code === 0
+                      ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                      : 'bg-red-950/60 text-red-400 border border-red-800/60'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      lastGrpcResponse.status_code === 0 ? 'bg-emerald-400' : 'bg-red-400'
+                    }`}
+                  />
+                  <span>
+                    {lastGrpcResponse.status_code === 0
+                      ? '0 OK'
+                      : `[${lastGrpcResponse.status_code}] ${getGrpcStatusLabel(lastGrpcResponse.status_code)}`}
+                  </span>
+                </span>
+              ) : null}
+
+              {/* Time */}
+              {activeResponse && (
                 <>
-                  <Check size={11} className="text-emerald-400" />
-                  <span className="text-emerald-400">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Copy size={11} className="text-zinc-400" />
-                  <span>Copy</span>
+                  <span className="text-zinc-600">•</span>
+                  <span className="flex items-center gap-1 text-zinc-400 font-mono text-[11px]">
+                    <Clock size={11} className="text-zinc-500" />
+                    <span>{activeResponse.response_time_ms} ms</span>
+                  </span>
                 </>
               )}
-            </button>
-            <button
-              onClick={handleSaveCurrent}
-              disabled={saveResponseMutation.isPending}
-              className="px-2.5 py-1 text-xs text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
-              title="Save response to workspace"
-            >
-              <Save size={12} className="text-primary" />
-              <span>Save Response</span>
-            </button>
-          </div>
-        )}
+
+              {/* Size */}
+              {activeResponse && (
+                <>
+                  <span className="text-zinc-600">•</span>
+                  <span className="flex items-center gap-1 text-zinc-400 font-mono text-[11px]">
+                    <HardDrive size={11} className="text-zinc-500" />
+                    <span>{formatResponseSize(activeResponse.response_size_bytes)}</span>
+                  </span>
+                </>
+              )}
+
+              {/* Actions Divider */}
+              <div className="h-3.5 w-px bg-zinc-800 mx-0.5" />
+
+              {/* Inline Search / Filter */}
+              {showSearchInput || searchQuery ? (
+                <div className="relative flex items-center">
+                  <Search size={11} className="w-3 h-3 text-zinc-500 absolute left-2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    autoFocus
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Filter..."
+                    className="w-28 sm:w-36 bg-zinc-900 border border-zinc-800 focus:border-zinc-700 rounded py-0.5 pl-6 pr-5 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setShowSearchInput(false);
+                    }}
+                    className="absolute right-1 text-zinc-500 hover:text-zinc-300 p-0.5"
+                    title="Close search"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowSearchInput(true)}
+                  className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
+                  title="Filter response"
+                >
+                  <Search size={12} />
+                </button>
+              )}
+
+              {/* Copy Body */}
+              {!isStreamRpc && formattedBody && (
+                <button
+                  onClick={handleCopyBody}
+                  className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
+                  title="Copy response body"
+                >
+                  {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                </button>
+              )}
+
+              {/* Save Response Button */}
+              <button
+                onClick={handleSaveCurrent}
+                disabled={saveResponseMutation.isPending}
+                className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded transition disabled:opacity-50"
+                title="Save response to workspace"
+              >
+                <Save size={12} className="text-primary" />
+              </button>
+            </div>
+          ) : (
+            <span className="text-xs text-zinc-500">No response executed yet</span>
+          )}
+
+          {saveMessage && (
+            <span className="text-[11px] text-emerald-400 font-mono">{saveMessage}</span>
+          )}
+        </div>
       </div>
 
       {/* Content */}
@@ -793,6 +775,15 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                 </div>
               ))
             )}
+          </div>
+        )}
+
+        {/* Trailers Tab */}
+        {activeTab === 'trailers' && (
+          <div className="space-y-1 select-text">
+            <div className="text-zinc-500 py-6 text-center select-none text-xs">
+              No trailers returned
+            </div>
           </div>
         )}
 
