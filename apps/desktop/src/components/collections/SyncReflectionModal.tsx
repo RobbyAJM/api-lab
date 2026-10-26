@@ -10,7 +10,11 @@ import {
   executeReflectionSync,
   type SyncPlan,
 } from '../../utils/grpcReflectionSync';
-import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
+import {
+  shouldAutoDetectTls,
+  DEFAULT_GRPC_SERVER_ADDRESS,
+  DEFAULT_GRPC_USE_TLS,
+} from '../../utils/grpcReflectionGenerator';
 import { resolveRootFolderId, getDescendantFolderIds } from '../../utils/folderTree';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
@@ -95,8 +99,8 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
   const [selectedRootFolderId, setSelectedRootFolderId] = useState<string>(
     rootFolders[0]?.id || ''
   );
-  const [serverAddress, setServerAddress] = useState<string>('localhost:9091');
-  const [useTls, setUseTls] = useState<boolean>(false);
+  const [serverAddress, setServerAddress] = useState<string>(DEFAULT_GRPC_SERVER_ADDRESS);
+  const [useTls, setUseTls] = useState<boolean>(DEFAULT_GRPC_USE_TLS);
 
   const [scanning, setScanning] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -371,7 +375,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
                   }
                 }}
                 variables={effectiveVariables}
-                placeholder="localhost:9091, grpcb.in:9001, or {{GRPC_HOST}}"
+                placeholder={`${DEFAULT_GRPC_SERVER_ADDRESS} or {{GRPC_HOST}}`}
                 className="w-full h-full"
               />
             </div>

@@ -8,6 +8,10 @@ import {
   generateSamplePayloadsBatch,
   generateGrpcCollection,
   GrpcGenerationError,
+  DEFAULT_GRPC_SERVER_ADDRESS,
+  DEFAULT_GRPC_FOLDER_NAME,
+  DEFAULT_GRPC_USE_TLS,
+  getDefaultGrpcConfig,
   type PlannedHierarchy,
   type PlannedFolderNode,
 } from './grpcReflectionGenerator.ts';
@@ -370,3 +374,24 @@ test('generateGrpcCollection: fails with timeout error during sample payload gen
     }
   );
 });
+
+test('getDefaultGrpcConfig: returns public grpcb.in test url default with TLS enabled', () => {
+  const cfg = getDefaultGrpcConfig();
+  assert.equal(cfg.serverAddress, 'https://grpcb.in:9001/');
+  assert.equal(cfg.folderName, 'gRPC Services');
+  assert.equal(cfg.useTls, true);
+  assert.equal(DEFAULT_GRPC_SERVER_ADDRESS, 'https://grpcb.in:9001/');
+  assert.equal(DEFAULT_GRPC_FOLDER_NAME, 'gRPC Services');
+  assert.equal(DEFAULT_GRPC_USE_TLS, true);
+
+  assert.equal(shouldAutoDetectTls(DEFAULT_GRPC_SERVER_ADDRESS), true);
+
+  const planned = planGrpcHierarchy({
+    ...cfg,
+    services: mockServices,
+  });
+  assert.equal(planned.serverAddress, 'https://grpcb.in:9001/');
+  const endpoint = planned.serviceFolders[0].children[0].children[0].endpoints[0];
+  assert.equal(endpoint.config.use_tls, true);
+});
+
