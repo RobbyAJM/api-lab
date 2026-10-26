@@ -20,9 +20,12 @@ import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSetting
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
 import { ThemePickerModal } from './components/common/ThemePickerModal';
+import { BackendUnavailableModal } from './components/common/BackendUnavailableModal';
 import { EmptyWorkspaceView } from './components/common/EmptyWorkspaceView';
 import { matchesShortcut, getTabNumberFromEvent } from './utils/shortcuts';
 import { getAdjacentEndpoint } from './utils/tabManager';
+import { BACKEND_STATUS_EVENT } from './api/client';
+import { testServerConnection, getServerUrl } from './utils/serverConfig';
 import type { UserSummary, WorkspaceSummary } from '@api-lab/api-types';
 
 interface MeApiResponse {
@@ -55,6 +58,8 @@ export const App: React.FC = () => {
     setShortcutsHelpOpen,
     themeModalOpen,
     setThemeModalOpen,
+    backendUnavailable,
+    setBackendUnavailable,
   } = useAppStore();
 
   // Vertical resizer state between Request & Response
@@ -99,6 +104,27 @@ export const App: React.FC = () => {
   // Real-time synchronization hook
   useWorkspaceSync();
 
+  // Initial backend health check on application boot
+  useEffect(() => {
+    testServerConnection(getServerUrl()).then((res) => {
+      if (!res.ok) {
+        setBackendUnavailable(true);
+      }
+    });
+  }, [setBackendUnavailable]);
+
+  // Synchronize backend reachability status across network requests
+  useEffect(() => {
+    const handleStatus = (e: Event) => {
+      const custom = e as CustomEvent<{ unavailable: boolean }>;
+      if (custom.detail) {
+        setBackendUnavailable(custom.detail.unavailable);
+      }
+    };
+    window.addEventListener(BACKEND_STATUS_EVENT, handleStatus);
+    return () => window.removeEventListener(BACKEND_STATUS_EVENT, handleStatus);
+  }, [setBackendUnavailable]);
+
   // Validate session on boot
   const { data: meData, error: meError } = useQuery<MeApiResponse>({
     queryKey: ['auth_me', token],
@@ -123,6 +149,7 @@ export const App: React.FC = () => {
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (backendUnavailable) return;
       // 1. Open / Toggle Command Palette (Ctrl + K)
       if (matchesShortcut(e, 'open_command')) {
         e.preventDefault();
@@ -228,11 +255,13 @@ export const App: React.FC = () => {
     closeEndpoint,
     closeOtherEndpoints,
     closeAllEndpoints,
+    backendUnavailable,
   ]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
       {/* Modals */}
+      <BackendUnavailableModal />
       <AuthModal />
       <EnvironmentModal />
       <EditVariableModal />
