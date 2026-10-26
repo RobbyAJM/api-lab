@@ -208,19 +208,19 @@ test('executeGrpcHierarchyCreation: recursively creates nested folders and child
 });
 
 test('shouldAutoDetectTls: accurately detects remote domains vs local', () => {
-  assert.equal(shouldAutoDetectTls('grpcb.in:9001'), true);
+  assert.equal(shouldAutoDetectTls('grpcb.in'), true);
   assert.equal(shouldAutoDetectTls('grpcb.in:9001'), true);
   assert.equal(shouldAutoDetectTls('https://my-service.com'), true);
   assert.equal(shouldAutoDetectTls('http://my-service.com'), false);
   assert.equal(shouldAutoDetectTls('grpc://localhost:50051'), false);
   assert.equal(shouldAutoDetectTls('grpc://grpcb.in:9001'), true);
-  assert.equal(shouldAutoDetectTls('grpc://grpcb.in:9001'), true);
+  assert.equal(shouldAutoDetectTls('grpc://grpcb.in'), true);
   assert.equal(shouldAutoDetectTls('grpcs://localhost:50051'), true);
   assert.equal(shouldAutoDetectTls('localhost:50051'), false);
   assert.equal(shouldAutoDetectTls('127.0.0.1:3100'), false);
   // Variables resolution support
-  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'grpc://grpcb.in:9001' }), true);
-  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'grpc://localhost:9091' }), false);
+  assert.equal(shouldAutoDetectTls('{{GRPC_URL}}', { GRPC_URL: 'grpc://grpcb.in:9001' }), true);
+  assert.equal(shouldAutoDetectTls('{{LOCAL_GRPC_URL}}', { LOCAL_GRPC_URL: 'grpc://localhost:9091' }), false);
   assert.equal(shouldAutoDetectTls('{{URL}}', { url: 'https://custom.rpc.io' }), true);
 });
 
