@@ -1,4 +1,6 @@
-import { getGrpcStatusLabel } from './grpcSpecification.ts';
+import type { Endpoint, HttpExecutionResponse, GrpcExecutionResponse } from '@api-lab/api-types';
+import { getGrpcStatusLabel, formatExecutionError } from './grpcSpecification.ts';
+import { getEffectiveEndpointConfig } from './tabManager.ts';
 
 /**
  * Formats byte size into human-readable B / KB / MB.
@@ -59,3 +61,217 @@ export function formatStatusCode(
     isError,
   };
 }
+
+export interface ExecutedRequestMeta {
+  timestamp: string;
+  protocol: 'http' | 'grpc';
+  http?: {
+    url: string;
+    method: string;
+    headers?: Record<string, string>;
+    queryParams?: [string, string][];
+    body?: string;
+    bodyType?: string;
+  };
+  grpc?: {
+    serverAddress: string;
+    service?: string;
+    method?: string;
+    metadata?: Record<string, string>;
+    payload?: any;
+  };
+}
+
+/**
+ * Formats request body for copy trace diagnostics.
+ * When payload is multipart, suppresses base64 file buffers and reveals only filename and filesize.
+ */
+export function formatTraceRequestBody(
+  body?: string | null,
+  bodyType?: string | null
+): string {
+  if (!body || bodyType === 'none') {
+    return '  (empty)';
+  }
+
+  if (bodyType === 'multipart') {
+    let fields: any[] = [];
+    try {
+      fields = typeof body === 'string' ? JSON.parse(body) : (Array.isArray(body) ? body : []);
+    } catch {
+      fields = [];
+    }
+    if (!Array.isArray(fields) || fields.length === 0) {
+      return '  (empty multipart)';
+    }
+
+    return fields
+      .map((f) => {
+        const fieldName = f.name?.trim() || '(unnamed)';
+        if (f.filename) {
+          let sizeStr = '0 B (0 bytes)';
+          if (typeof f.data === 'string' && f.data.length > 0) {
+            const byteLen = Math.round((f.data.length * 3) / 4);
+            sizeStr = `${formatResponseSize(byteLen)} (${byteLen.toLocaleString()} bytes)`;
+          } else if (typeof f.filesize === 'number' || typeof f.size === 'number') {
+            const byteLen = f.filesize ?? f.size;
+            sizeStr = `${formatResponseSize(byteLen)} (${byteLen.toLocaleString()} bytes)`;
+          }
+          const typeStr = f.content_type ? `, type=${f.content_type}` : '';
+          return `  - ${fieldName}: filename="${f.filename}", filesize=${sizeStr}${typeStr}`;
+        }
+        return `  - ${fieldName}: ${JSON.stringify(f.value ?? '')}`;
+      })
+      .join('\n');
+  }
+
+  if (bodyType === 'binary') {
+    try {
+      const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+      if (parsed && typeof parsed === 'object' && parsed.filename) {
+        let sizeStr = '0 B (0 bytes)';
+        if (typeof parsed.data === 'string' && parsed.data.length > 0) {
+          const byteLen = Math.round((parsed.data.length * 3) / 4);
+          sizeStr = `${formatResponseSize(byteLen)} (${byteLen.toLocaleString()} bytes)`;
+        } else if (typeof parsed.filesize === 'number' || typeof parsed.size === 'number') {
+          const byteLen = parsed.filesize ?? parsed.size;
+          sizeStr = `${formatResponseSize(byteLen)} (${byteLen.toLocaleString()} bytes)`;
+        }
+        const typeStr = parsed.content_type ? `, type=${parsed.content_type}` : '';
+        return `  filename="${parsed.filename}", filesize=${sizeStr}${typeStr}`;
+      }
+    } catch {
+      // Fall through to plain text formatting
+    }
+    return '  (binary data)';
+  }
+
+  if (bodyType === 'json') {
+    try {
+      const parsed = typeof body === 'string' ? JSON.parse(body) : body;
+      const pretty = JSON.stringify(parsed, null, 2);
+      return pretty.split('\n').map((l) => `  ${l}`).join('\n');
+    } catch {
+      return body.split('\n').map((l) => `  ${l}`).join('\n');
+    }
+  }
+
+  return body.split('\n').map((l) => `  ${l}`).join('\n');
+}
+
+export interface FormatCopyTraceOptions {
+  endpoint: Endpoint;
+  response?: (HttpExecutionResponse & { error?: string }) | (GrpcExecutionResponse & { error?: string }) | null;
+  executedMeta?: ExecutedRequestMeta | null;
+  draftConfig?: Record<string, any> | null;
+}
+
+/**
+ * Formats full execution trace for clipboard copy.
+ * Captures endpoint, method/protocol, timestamp, status code, request params,
+ * request headers, sanitized request body (filename/filesize only for multipart/binary),
+ * and error details.
+ */
+export function formatCopyTrace(options: FormatCopyTraceOptions): string {
+  const { endpoint, response, executedMeta, draftConfig } = options;
+  const effectiveConfig = getEffectiveEndpointConfig(endpoint, draftConfig);
+  const isHttp = endpoint.protocol === 'http';
+  const lines: string[] = [];
+
+  if (isHttp) {
+    const url = executedMeta?.http?.url || effectiveConfig.url || 'https://httpbin.org/get';
+    lines.push(`Endpoint: ${url}`);
+
+    const method = (executedMeta?.http?.method || effectiveConfig.method || 'GET').toUpperCase();
+    lines.push(`HTTP Method: ${method}`);
+
+    const time = executedMeta?.timestamp || new Date().toISOString();
+    lines.push(`Time: ${time}`);
+
+    const code = response?.status_code ?? 0;
+    const statusText =
+      (response as HttpExecutionResponse)?.status_text ||
+      (code === 0 ? 'Execution Failed' : '');
+    const statusInfo = formatStatusCode('http', code, statusText);
+    lines.push(`Status: ${statusInfo.label}`);
+
+    lines.push('Request Body:');
+    const body = executedMeta?.http?.body ?? effectiveConfig.body;
+    const bodyType = executedMeta?.http?.bodyType ?? effectiveConfig.body_type;
+    lines.push(formatTraceRequestBody(body, bodyType));
+
+    lines.push('Request Param:');
+    const params = executedMeta?.http?.queryParams || effectiveConfig.query_params || [];
+    const validParams = (params as [string, string][]).filter(([k]) => k && String(k).trim());
+    if (validParams.length > 0) {
+      for (const [k, v] of validParams) {
+        lines.push(`  ${k}: ${v}`);
+      }
+    } else {
+      lines.push('  (none)');
+    }
+
+    lines.push('Request Header:');
+    const headers = executedMeta?.http?.headers || effectiveConfig.headers || {};
+    const headerEntries = Object.entries(headers).filter(([k]) => k && k.trim());
+    if (headerEntries.length > 0) {
+      for (const [k, v] of headerEntries) {
+        lines.push(`  ${k}: ${v}`);
+      }
+    } else {
+      lines.push('  (none)');
+    }
+  } else {
+    // gRPC
+    const server = executedMeta?.grpc?.serverAddress || effectiveConfig.server_address || '';
+    lines.push(`Endpoint: ${server}`);
+    lines.push('Protocol: gRPC');
+
+    const service = executedMeta?.grpc?.service || effectiveConfig.service || '';
+    const rpcMethod = executedMeta?.grpc?.method || effectiveConfig.method || '';
+    if (service) lines.push(`RPC Service: ${service}`);
+    if (rpcMethod) lines.push(`RPC Method: ${rpcMethod}`);
+
+    const time = executedMeta?.timestamp || new Date().toISOString();
+    lines.push(`Time: ${time}`);
+
+    const code = response?.status_code ?? 14;
+    const statusText =
+      (response as GrpcExecutionResponse)?.status_message ||
+      (code === 0 ? 'OK' : 'Execution Failed');
+    const statusInfo = formatStatusCode('grpc', code, statusText);
+    lines.push(`Status: ${statusInfo.label}`);
+
+    lines.push('Request Body:');
+    const payload = executedMeta?.grpc?.payload ?? effectiveConfig.payload;
+    if (payload !== undefined && payload !== null) {
+      const jsonStr = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+      lines.push(jsonStr.split('\n').map((l) => `  ${l}`).join('\n'));
+    } else {
+      lines.push('  (empty)');
+    }
+
+    lines.push('Request Header:');
+    const meta = executedMeta?.grpc?.metadata || effectiveConfig.metadata || {};
+    const metaEntries = Object.entries(meta).filter(([k]) => k && k.trim());
+    if (metaEntries.length > 0) {
+      for (const [k, v] of metaEntries) {
+        lines.push(`  ${k}: ${v}`);
+      }
+    } else {
+      lines.push('  (none)');
+    }
+  }
+
+  if (response?.error) {
+    const parsedErr = formatExecutionError(response.error, response.status_code);
+    lines.push(`Error: ${parsedErr.title} - ${parsedErr.summary}`);
+    if (parsedErr.details || response.error) {
+      lines.push('Details:');
+      lines.push(parsedErr.details || response.error);
+    }
+  }
+
+  return lines.join('\n');
+}
+
