@@ -9,6 +9,16 @@ export function filterWorkspaces(
   return workspaces.filter((w) => w.name.toLowerCase().includes(trimmed));
 }
 
+export function getWorkspaceInitials(name: string): string {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return 'WS';
+  const words = trimmed.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return trimmed.slice(0, 2).toUpperCase();
+}
+
 export function sortWorkspaces(
   workspaces: WorkspaceSummary[],
   activeId?: string | null,
