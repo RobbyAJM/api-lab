@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Endpoint, Environment } from '@api-lab/api-types';
-import { X, Radio, ArrowDownUp, ArrowLeftRight, AlertTriangle, Plus, Settings } from 'lucide-react';
+import { X, Radio, ArrowDownUp, ArrowLeftRight, AlertTriangle, Plus } from 'lucide-react';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
 
@@ -18,7 +18,6 @@ export const EndpointTabBar: React.FC = () => {
     isEndpointDirty,
     activeWorkspaceId,
     setCommandPaletteOpen,
-    setEnvModalOpen,
   } = useAppStore();
 
   const [contextMenu, setContextMenu] = useState<{
@@ -61,16 +60,8 @@ export const EndpointTabBar: React.FC = () => {
 
   function renderEnvironmentDropdown() {
     return (
-      <div className="flex items-center gap-1.5 ml-auto pl-2 flex-shrink-0">
+      <div className="flex items-center ml-auto pl-2 flex-shrink-0">
         <EnvironmentDropdown environments={environments} align="right" />
-        <button
-          type="button"
-          onClick={() => setEnvModalOpen(true)}
-          className="p-1 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 rounded transition"
-          title="Manage Environments (Ctrl+E)"
-        >
-          <Settings size={13} />
-        </button>
       </div>
     );
   }
