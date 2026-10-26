@@ -13,6 +13,8 @@ import {
   getDescendantFolderIds,
 } from '../../utils/folderTree';
 import { resolveInheritedAuth } from '../../utils/folderSettings';
+import { DEFAULT_GRPC_SERVER_ADDRESS } from '../../utils/grpcReflectionGenerator';
+import { DEFAULT_SWAGGER_URL } from '../../utils/swaggerGenerator';
 import type {
   Collection,
   CollectionFolder,
@@ -350,7 +352,7 @@ export const FolderSettingsModal: React.FC = () => {
                     <VariableInput
                       value={serverAddress}
                       onChange={setServerAddress}
-                      placeholder="e.g. localhost:50051 or {{GRPC_HOST}}"
+                      placeholder={`e.g. ${DEFAULT_GRPC_SERVER_ADDRESS} or {{GRPC_HOST}}`}
                       variables={activeVariables}
                       className="px-2.5 py-1.5 text-xs font-mono"
                     />
@@ -368,7 +370,7 @@ export const FolderSettingsModal: React.FC = () => {
                     <VariableInput
                       value={swaggerUrl}
                       onChange={setSwaggerUrl}
-                      placeholder="https://petstore.swagger.io/v2/swagger.json"
+                      placeholder={DEFAULT_SWAGGER_URL}
                       variables={activeVariables}
                       className="px-2.5 py-1.5 text-xs font-mono"
                     />
