@@ -1,4 +1,4 @@
-import type { NotificationItem, NotificationCategory } from '@api-lab/api-types';
+import type { NotificationItem } from '@api-lab/api-types';
 
 export function filterNotifications(
   notifications: NotificationItem[],
