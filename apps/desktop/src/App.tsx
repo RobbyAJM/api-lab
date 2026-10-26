@@ -20,6 +20,8 @@ import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSetting
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
 import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
 import { ThemePickerModal } from './components/common/ThemePickerModal';
+import { AppSettingsModal } from './components/settings/AppSettingsModal';
+import { TopBar } from './components/topbar/TopBar';
 import { BackendUnavailableModal } from './components/common/BackendUnavailableModal';
 import { EmptyWorkspaceView } from './components/common/EmptyWorkspaceView';
 import { matchesShortcut, getTabNumberFromEvent } from './utils/shortcuts';
@@ -58,6 +60,8 @@ export const App: React.FC = () => {
     setShortcutsHelpOpen,
     themeModalOpen,
     setThemeModalOpen,
+    appSettingsOpen,
+    setAppSettingsOpen,
     backendUnavailable,
     setBackendUnavailable,
   } = useAppStore();
@@ -215,6 +219,9 @@ export const App: React.FC = () => {
         if (commandPaletteOpen) {
           e.preventDefault();
           setCommandPaletteOpen(false);
+        } else if (appSettingsOpen) {
+          e.preventDefault();
+          setAppSettingsOpen(false);
         } else if (shortcutsHelpOpen) {
           e.preventDefault();
           setShortcutsHelpOpen(false);
@@ -238,6 +245,7 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [
     commandPaletteOpen,
+    appSettingsOpen,
     shortcutsHelpOpen,
     themeModalOpen,
     envModalOpen,
@@ -247,6 +255,7 @@ export const App: React.FC = () => {
     openEndpoint,
     activeEndpointId,
     setCommandPaletteOpen,
+    setAppSettingsOpen,
     setShortcutsHelpOpen,
     setThemeModalOpen,
     setEnvModalOpen,
@@ -259,7 +268,7 @@ export const App: React.FC = () => {
   ]);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-zinc-950 text-zinc-100 font-sans">
       {/* Modals */}
       <BackendUnavailableModal />
       <AuthModal />
@@ -274,27 +283,32 @@ export const App: React.FC = () => {
       <CommandPaletteModal />
       <ShortcutsHelpModal />
       <ThemePickerModal />
+      <AppSettingsModal />
 
-      {/* Left Sidebar */}
-      <Sidebar />
+      {/* Top Bar spanning full width */}
+      <TopBar />
 
-      {/* Right Main Area: Tab Bar + Vertical Split (Request Top, Response Bottom) */}
-      <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
-        <EndpointTabBar />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Left Sidebar */}
+        <Sidebar />
 
-        {activeEndpoint ? (
-          <div ref={mainContainerRef} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            {/* Top: Request Section */}
-            <section
-              style={{ height: `${requestHeightPercent}%` }}
-              className="flex flex-col min-h-[220px] overflow-hidden"
-            >
-              {activeEndpoint.protocol === 'http' ? (
-                <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
-              ) : (
-                <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
-              )}
-            </section>
+        {/* Right Main Area: Tab Bar + Vertical Split (Request Top, Response Bottom) */}
+        <main className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
+          <EndpointTabBar />
+
+          {activeEndpoint ? (
+            <div ref={mainContainerRef} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* Top: Request Section */}
+              <section
+                style={{ height: `${requestHeightPercent}%` }}
+                className="flex flex-col min-h-[220px] overflow-hidden"
+              >
+                {activeEndpoint.protocol === 'http' ? (
+                  <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+                ) : (
+                  <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+                )}
+              </section>
 
               {/* Vertical Resizable Split Handle */}
               <div
@@ -305,15 +319,16 @@ export const App: React.FC = () => {
                 <div className="w-8 h-0.5 rounded-full bg-zinc-700 group-hover:bg-zinc-400 transition" />
               </div>
 
-            {/* Bottom: Response Section */}
-            <section className="flex-1 min-h-[160px] flex flex-col overflow-hidden bg-zinc-950">
-              <ResponseViewer key={activeEndpoint.id} endpoint={activeEndpoint} />
-            </section>
-          </div>
-        ) : (
-          <EmptyWorkspaceView />
-        )}
-      </main>
+              {/* Bottom: Response Section */}
+              <section className="flex-1 min-h-[160px] flex flex-col overflow-hidden bg-zinc-950">
+                <ResponseViewer key={activeEndpoint.id} endpoint={activeEndpoint} />
+              </section>
+            </div>
+          ) : (
+            <EmptyWorkspaceView />
+          )}
+        </main>
+      </div>
     </div>
   );
 };
