@@ -39,6 +39,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     openFolderSettingsModal,
     openCollectionSettingsModal,
     setEndpointExecuting,
+    setExecutedRequest,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -374,6 +375,19 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       timeout_ms: 30000,
     };
 
+    setExecutedRequest(endpoint.id, {
+      timestamp: new Date().toISOString(),
+      protocol: 'http',
+      http: {
+        url: execReq.url,
+        method: execReq.method,
+        headers: execReq.headers,
+        queryParams: execReq.query_params,
+        body: execReq.body,
+        bodyType: execReq.body_type,
+      },
+    });
+
     try {
       const currentVars = await resolveVariables();
 
@@ -402,6 +416,19 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
          mergeFolderSettings(currentColl?.settings, folders, endpoint.folder_id),
         beforeResult.variables
       );
+
+      setExecutedRequest(endpoint.id, {
+        timestamp: new Date().toISOString(),
+        protocol: 'http',
+        http: {
+          url: finalReq.url,
+          method: finalReq.method,
+          headers: finalReq.headers,
+          queryParams: finalReq.query_params,
+          body: finalReq.body,
+          bodyType: finalReq.body_type,
+        },
+      });
 
       // 3. Execute HTTP Request
       const resp = await executeNativeHttp(finalReq, beforeResult.variables);
