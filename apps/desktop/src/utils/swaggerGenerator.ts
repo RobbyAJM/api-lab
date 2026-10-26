@@ -39,6 +39,16 @@ export interface PlannedSwaggerHierarchy {
   totalEndpoints: number;
 }
 
+export const DEFAULT_SWAGGER_URL = 'https://httpbin.dmuth.org/openapi.json';
+export const DEFAULT_SWAGGER_FOLDER_NAME = 'Swagger APIs';
+
+export function getDefaultSwaggerConfig() {
+  return {
+    swaggerUrl: DEFAULT_SWAGGER_URL,
+    folderName: DEFAULT_SWAGGER_FOLDER_NAME,
+  };
+}
+
 export interface ApiCaller {
   post: (path: string, body: any) => Promise<any>;
 }
