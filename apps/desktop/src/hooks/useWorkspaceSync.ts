@@ -8,6 +8,9 @@ export function useWorkspaceSync() {
   const queryClient = useQueryClient();
   const token = useAppStore((s) => s.token);
   const workspaceId = useAppStore((s) => s.activeWorkspaceId);
+  const setOnlineUsers = useAppStore((s) => s.setOnlineUsers);
+  const addOnlineUser = useAppStore((s) => s.addOnlineUser);
+  const removeOnlineUser = useAppStore((s) => s.removeOnlineUser);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
@@ -16,6 +19,7 @@ export function useWorkspaceSync() {
         wsRef.current.close();
         wsRef.current = null;
       }
+      setOnlineUsers([]);
       return;
     }
 
@@ -31,7 +35,23 @@ export function useWorkspaceSync() {
 
       ws.onmessage = (event) => {
         try {
-          const syncEvent: WsSyncEvent = JSON.parse(event.data);
+          const data = JSON.parse(event.data);
+
+          // Presence messages
+          if (data.type === 'presence_state' && Array.isArray(data.users)) {
+            setOnlineUsers(data.users);
+            return;
+          }
+          if (data.type === 'presence_join' && data.user) {
+            addOnlineUser(data.user);
+            return;
+          }
+          if (data.type === 'presence_leave' && data.user_id) {
+            removeOnlineUser(data.user_id);
+            return;
+          }
+
+          const syncEvent: WsSyncEvent = data;
           if (syncEvent.workspace_id === workspaceId) {
             // Invalidate relevant TanStack queries
             if (syncEvent.entity === 'workspace') {

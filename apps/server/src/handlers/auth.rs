@@ -5,8 +5,8 @@ use rust_core::crypto::{
     generate_token_hex, hash_password, hash_token_sha256, verify_password,
 };
 use rust_core::dto::{
-    AuthResponse, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, UpdateThemeDto,
-    UserSummary, WorkspaceSummary,
+    AuthResponse, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, UpdateProfileDto,
+    UpdateThemeDto, UserSummary, WorkspaceSummary,
 };
 use rust_core::models::{Role, User};
 use serde::{Deserialize, Serialize};
@@ -130,6 +130,7 @@ pub async fn register(
             name: dto.name.trim().to_string(),
             role: "admin".into(),
             theme: "api-lab".into(),
+            avatar: "bottts:api-lab".into(),
         },
         workspace: Some(WorkspaceSummary {
             id: workspace_id,
@@ -163,7 +164,7 @@ pub async fn accept_invitation(
     // Validate invitation
     let invite = sqlx::query!(
         r#"
-        SELECT id, workspace_id, role, expires_at, status
+        SELECT id, workspace_id, inviter_id, role, expires_at, status
         FROM invitations
         WHERE token_hash = $1
         FOR UPDATE
@@ -240,6 +241,22 @@ pub async fn accept_invitation(
         .await
         .map_err(ApiError::Database)?;
 
+    // Create notification for inviter
+    let notif_title = "Team member joined";
+    let notif_message = format!("{} accepted your invitation to join {}", dto.name.trim(), ws.name);
+    let _ = sqlx::query!(
+        r#"
+        INSERT INTO notifications (user_id, workspace_id, title, message, category)
+        VALUES ($1, $2, $3, $4, 'direct')
+        "#,
+        invite.inviter_id,
+        invite.workspace_id,
+        notif_title,
+        notif_message
+    )
+    .execute(&mut *tx)
+    .await;
+
     // Create session
     let session_token = generate_token_hex();
     let sess_token_hash = hash_token_sha256(&session_token);
@@ -268,6 +285,7 @@ pub async fn accept_invitation(
             name: dto.name.trim().to_string(),
             role: assigned_role.as_str().into(),
             theme: "api-lab".into(),
+            avatar: "bottts:api-lab".into(),
         },
         workspace: Some(WorkspaceSummary {
             id: invite.workspace_id,
@@ -285,7 +303,7 @@ pub async fn login(
     let user = sqlx::query_as!(
         User,
         r#"
-        SELECT id, email, name, password_hash, role, theme, created_at, updated_at
+        SELECT id, email, name, password_hash, role, theme, avatar, created_at, updated_at
         FROM users
         WHERE email = $1
         "#,
@@ -350,6 +368,7 @@ pub async fn login(
             name: user.name,
             role: user.role,
             theme: user.theme,
+            avatar: user.avatar,
         },
         workspace: workspace_summary,
     }))
@@ -525,6 +544,7 @@ pub async fn get_me(
             name: auth.user.name,
             role: auth.user.role,
             theme: auth.user.theme,
+            avatar: auth.user.avatar,
         },
         workspaces,
     }))
@@ -545,7 +565,7 @@ pub async fn update_theme(
         UPDATE users
         SET theme = $1, updated_at = NOW()
         WHERE id = $2
-        RETURNING id, email, name, role, theme
+        RETURNING id, email, name, role, theme, avatar
         "#,
         theme,
         auth.user.id
@@ -560,5 +580,49 @@ pub async fn update_theme(
         name: updated.name,
         role: updated.role,
         theme: updated.theme,
+        avatar: updated.avatar,
+    }))
+}
+
+pub async fn update_profile(
+    auth: AuthUser,
+    State(state): State<SharedState>,
+    Json(dto): Json<UpdateProfileDto>,
+) -> Result<Json<UserSummary>, ApiError> {
+    let new_name = dto
+        .name
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&auth.user.name);
+    let new_avatar = dto
+        .avatar
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&auth.user.avatar);
+
+    let updated = sqlx::query!(
+        r#"
+        UPDATE users
+        SET name = $1, avatar = $2, updated_at = NOW()
+        WHERE id = $3
+        RETURNING id, email, name, role, theme, avatar
+        "#,
+        new_name,
+        new_avatar,
+        auth.user.id
+    )
+    .fetch_one(&state.pool)
+    .await
+    .map_err(ApiError::Database)?;
+
+    Ok(Json(UserSummary {
+        id: updated.id,
+        email: updated.email,
+        name: updated.name,
+        role: updated.role,
+        theme: updated.theme,
+        avatar: updated.avatar,
     }))
 }

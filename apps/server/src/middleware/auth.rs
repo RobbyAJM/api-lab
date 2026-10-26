@@ -35,7 +35,7 @@ impl FromRequestParts<SharedState> for AuthUser {
 
         let row = sqlx::query!(
             r#"
-            SELECT u.id, u.email, u.name, u.password_hash, u.role, u.theme, u.created_at, u.updated_at
+            SELECT u.id, u.email, u.name, u.password_hash, u.role, u.theme, u.avatar, u.created_at, u.updated_at
             FROM sessions s
             JOIN users u ON s.user_id = u.id
             WHERE s.token_hash = $1 AND s.expires_at > NOW()
@@ -54,6 +54,7 @@ impl FromRequestParts<SharedState> for AuthUser {
             password_hash: row.password_hash,
             role: row.role,
             theme: row.theme,
+            avatar: row.avatar,
             created_at: row.created_at,
             updated_at: row.updated_at,
         };
