@@ -39,11 +39,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!("../../migrations").run(&pool).await?;
 
     let (tx_ws, _) = broadcast::channel(1024);
+    let (tx_presence, _) = broadcast::channel(1024);
+    let presence = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
     let state = Arc::new(AppState {
         pool,
         encryption_key,
         tx_ws,
+        tx_presence,
+        presence,
     });
 
     let app = create_router(state);

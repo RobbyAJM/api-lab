@@ -69,6 +69,37 @@ mod commands {
     ) -> Result<(), String> {
         grpc_runner::send_stream_message(&stream_id, payload).await
     }
+
+    #[tauri::command]
+    pub fn minimize_window(window: tauri::Window) {
+        let _ = window.minimize();
+    }
+
+    #[tauri::command]
+    pub fn toggle_maximize_window(window: tauri::Window) {
+        if let Ok(is_max) = window.is_maximized() {
+            if is_max {
+                let _ = window.unmaximize();
+            } else {
+                let _ = window.maximize();
+            }
+        }
+    }
+
+    #[tauri::command]
+    pub fn close_window(window: tauri::Window) {
+        let _ = window.close();
+    }
+
+    #[tauri::command]
+    pub fn is_window_maximized(window: tauri::Window) -> bool {
+        window.is_maximized().unwrap_or(false)
+    }
+
+    #[tauri::command]
+    pub fn start_dragging_window(window: tauri::Window) {
+        let _ = window.start_dragging();
+    }
 }
 
 #[cfg(not(feature = "desktop"))]
@@ -121,6 +152,14 @@ mod commands {
     ) -> Result<(), String> {
         grpc_runner::send_stream_message(&stream_id, payload).await
     }
+
+    pub fn minimize_window() {}
+    pub fn toggle_maximize_window() {}
+    pub fn close_window() {}
+    pub fn is_window_maximized() -> bool {
+        false
+    }
+    pub fn start_dragging_window() {}
 }
 
 pub use commands::*;
@@ -136,7 +175,12 @@ pub fn run() {
             generate_grpc_sample_payload,
             execute_grpc_stream,
             cancel_grpc_stream,
-            send_grpc_stream_message
+            send_grpc_stream_message,
+            minimize_window,
+            toggle_maximize_window,
+            close_window,
+            is_window_maximized,
+            start_dragging_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

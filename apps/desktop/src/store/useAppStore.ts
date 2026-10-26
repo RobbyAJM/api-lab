@@ -5,6 +5,7 @@ import type {
   Endpoint,
   HttpExecutionResponse,
   GrpcExecutionResponse,
+  PresenceUser,
 } from '@api-lab/api-types';
 import { getAuthToken, setAuthToken, apiRequest } from '../api/client';
 import { applyTheme, getThemeById, DEFAULT_THEME_ID } from '../utils/theme';
@@ -66,6 +67,12 @@ interface AppState {
   setExecutedRequest: (endpointId: string, meta: ExecutedRequestMeta) => void;
   getExecutedRequest: (endpointId: string) => ExecutedRequestMeta | null;
 
+  // Presence & Online Users
+  onlineUsers: PresenceUser[];
+  setOnlineUsers: (users: PresenceUser[]) => void;
+  addOnlineUser: (user: PresenceUser) => void;
+  removeOnlineUser: (userId: string) => void;
+
   // Streaming state
   isStreaming: boolean;
   activeStreamId: string | null;
@@ -83,6 +90,10 @@ interface AppState {
   stopStreaming: () => Promise<void>;
 
   // Modals
+  appSettingsOpen: boolean;
+  appSettingsTab: 'profile' | 'appearance' | 'general' | 'shortcuts';
+  setAppSettingsOpen: (open: boolean) => void;
+  setAppSettingsTab: (tab: 'profile' | 'appearance' | 'general' | 'shortcuts') => void;
   authModalOpen: boolean;
   authModalTab: 'login' | 'register' | 'forgot' | 'reset';
   envModalOpen: boolean;
@@ -175,6 +186,20 @@ export const useAppStore = create<AppState>((set, get) => ({
   token: getAuthToken(),
   user: null,
   activeThemeId: initialTheme,
+  onlineUsers: [],
+  setOnlineUsers: (users) => set({ onlineUsers: users }),
+  addOnlineUser: (user) =>
+    set((state) => ({
+      onlineUsers: [...state.onlineUsers.filter((u) => u.user_id !== user.user_id), user],
+    })),
+  removeOnlineUser: (userId) =>
+    set((state) => ({
+      onlineUsers: state.onlineUsers.filter((u) => u.user_id !== userId),
+    })),
+  appSettingsOpen: false,
+  appSettingsTab: 'profile',
+  setAppSettingsOpen: (open: boolean) => set({ appSettingsOpen: open }),
+  setAppSettingsTab: (tab) => set({ appSettingsTab: tab }),
   themeModalOpen: false,
   setThemeModalOpen: (open: boolean) => set({ themeModalOpen: open }),
   setTheme: (themeId: string) => {
