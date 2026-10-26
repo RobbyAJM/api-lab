@@ -16,6 +16,7 @@ import { syncEnvironmentVariables } from '../../utils/envSync';
 import { getEffectiveEndpointConfig, isConfigDirty } from '../../utils/tabManager';
 import { stripJsonComments } from '../../utils/jsonComments';
 import { splitUrlQuery, type HttpBodyType } from '../../utils/httpRequest';
+import { substituteVariables } from '../../utils/responseViewerUtils';
 import {
   extractPathVariables,
   interpolatePathVariables,
@@ -417,14 +418,23 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         beforeResult.variables
       );
 
+      const resolvedUrl = substituteVariables(finalReq.url, beforeResult.variables);
+      const resolvedHeaders: Record<string, string> = {};
+      for (const [k, v] of Object.entries(finalReq.headers)) {
+        resolvedHeaders[substituteVariables(k, beforeResult.variables)] = substituteVariables(v, beforeResult.variables);
+      }
+      const resolvedQueryParams = finalReq.query_params.map(
+        ([k, v]) => [substituteVariables(k, beforeResult.variables), substituteVariables(v, beforeResult.variables)] as [string, string]
+      );
+
       setExecutedRequest(endpoint.id, {
         timestamp: new Date().toISOString(),
         protocol: 'http',
         http: {
-          url: finalReq.url,
+          url: resolvedUrl,
           method: finalReq.method,
-          headers: finalReq.headers,
-          queryParams: finalReq.query_params,
+          headers: resolvedHeaders,
+          queryParams: resolvedQueryParams,
           body: finalReq.body,
           bodyType: finalReq.body_type,
         },

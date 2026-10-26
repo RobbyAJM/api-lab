@@ -752,14 +752,17 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         };
       }
 
+      const resolvedAddress = substituteVars(finalReq.server_address, beforeResult.variables);
+      const resolvedMetadata = substituteVars(finalReq.metadata, beforeResult.variables);
+
       setExecutedRequest(endpoint.id, {
         timestamp: new Date().toISOString(),
         protocol: 'grpc',
         grpc: {
-          serverAddress: finalReq.server_address,
+          serverAddress: resolvedAddress,
           service: finalReq.service,
           method: finalReq.method,
-          metadata: finalReq.metadata,
+          metadata: resolvedMetadata,
           payload: finalReq.payload,
         },
       });
@@ -902,6 +905,21 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           },
         };
       }
+
+      const streamResolvedAddress = substituteVars(finalReq.server_address, beforeResult.variables);
+      const streamResolvedMetadata = substituteVars(finalReq.metadata, beforeResult.variables);
+
+      setExecutedRequest(endpoint.id, {
+        timestamp: new Date().toISOString(),
+        protocol: 'grpc',
+        grpc: {
+          serverAddress: streamResolvedAddress,
+          service: finalReq.service,
+          method: finalReq.method,
+          metadata: streamResolvedMetadata,
+          payload: null,
+        },
+      });
 
       const resp = await executeNativeGrpcStream(
         finalReq,
