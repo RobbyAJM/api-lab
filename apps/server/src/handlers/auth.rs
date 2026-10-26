@@ -164,7 +164,7 @@ pub async fn accept_invitation(
     // Validate invitation
     let invite = sqlx::query!(
         r#"
-        SELECT id, workspace_id, role, expires_at, status
+        SELECT id, workspace_id, inviter_id, role, expires_at, status
         FROM invitations
         WHERE token_hash = $1
         FOR UPDATE
@@ -240,6 +240,22 @@ pub async fn accept_invitation(
         .fetch_one(&mut *tx)
         .await
         .map_err(ApiError::Database)?;
+
+    // Create notification for inviter
+    let notif_title = "Team member joined";
+    let notif_message = format!("{} accepted your invitation to join {}", dto.name.trim(), ws.name);
+    let _ = sqlx::query!(
+        r#"
+        INSERT INTO notifications (user_id, workspace_id, title, message, category)
+        VALUES ($1, $2, $3, $4, 'direct')
+        "#,
+        invite.inviter_id,
+        invite.workspace_id,
+        notif_title,
+        notif_message
+    )
+    .execute(&mut *tx)
+    .await;
 
     // Create session
     let session_token = generate_token_hex();
