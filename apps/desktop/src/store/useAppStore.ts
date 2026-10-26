@@ -5,6 +5,7 @@ import type {
   Endpoint,
   HttpExecutionResponse,
   GrpcExecutionResponse,
+  PresenceUser,
 } from '@api-lab/api-types';
 import { getAuthToken, setAuthToken, apiRequest } from '../api/client';
 import { applyTheme, getThemeById, DEFAULT_THEME_ID } from '../utils/theme';
@@ -65,6 +66,23 @@ interface AppState {
   setEndpointExecuting: (endpointId: string, executing: boolean) => void;
   setExecutedRequest: (endpointId: string, meta: ExecutedRequestMeta) => void;
   getExecutedRequest: (endpointId: string) => ExecutedRequestMeta | null;
+
+  // Presence & Online Users
+  onlineUsers: PresenceUser[];
+  setOnlineUsers: (users: PresenceUser[]) => void;
+  addOnlineUser: (user: PresenceUser) => void;
+  removeOnlineUser: (userId: string) => void;
+
+  onlineUsers: [],
+  setOnlineUsers: (users) => set({ onlineUsers: users }),
+  addOnlineUser: (user) =>
+    set((state) => ({
+      onlineUsers: [...state.onlineUsers.filter((u) => u.user_id !== user.user_id), user],
+    })),
+  removeOnlineUser: (userId) =>
+    set((state) => ({
+      onlineUsers: state.onlineUsers.filter((u) => u.user_id !== userId),
+    })),
 
   // Streaming state
   isStreaming: boolean;

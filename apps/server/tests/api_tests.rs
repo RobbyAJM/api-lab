@@ -31,11 +31,15 @@ async fn setup_app() -> axum::Router {
     let encryption_key =
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string();
     let (tx_ws, _) = broadcast::channel(100);
+    let (tx_presence, _) = broadcast::channel(100);
+    let presence = Arc::new(tokio::sync::RwLock::new(std::collections::HashMap::new()));
 
     let state = Arc::new(AppState {
         pool,
         encryption_key,
         tx_ws,
+        tx_presence,
+        presence,
     });
 
     create_router(state)

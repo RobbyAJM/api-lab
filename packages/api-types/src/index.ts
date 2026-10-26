@@ -28,6 +28,13 @@ export interface AuthResponse {
   workspace?: WorkspaceSummary;
 }
 
+export interface PresenceUser {
+  user_id: string;
+  name: string;
+  email: string;
+  avatar: string;
+}
+
 export interface MemberResponse {
   id: string;
   user_id: string;
