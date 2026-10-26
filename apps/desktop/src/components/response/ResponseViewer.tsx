@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
-import type { Endpoint, SavedResponse } from '@api-lab/api-types';
+import type { Endpoint, SavedResponse, VariableResponse } from '@api-lab/api-types';
 import {
   Save,
   Clock,
@@ -53,6 +53,13 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   const lastGrpcResponse = getGrpcResponse(endpoint.id);
   const executionInfo = useAppStore((s) => s.executingEndpoints[endpoint.id]);
   const isExecuting = Boolean(executionInfo);
+  const activeEnvironmentId = useAppStore((s) => s.activeEnvironmentId);
+
+  const { data: envVars = [] } = useQuery<VariableResponse[]>({
+    queryKey: ['variables', activeEnvironmentId],
+    queryFn: () => (activeEnvironmentId ? apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`) : []),
+    enabled: !!activeEnvironmentId,
+  });
 
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -564,11 +571,16 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                     <button
                       type="button"
                       onClick={() => {
+                        const varsMap: Record<string, string> = {};
+                        for (const v of envVars) {
+                          if (v.key) varsMap[v.key] = v.value;
+                        }
                         const traceText = formatCopyTrace({
                           endpoint,
                           response: activeResponse,
                           executedMeta: getExecutedRequest(endpoint.id),
                           draftConfig: useAppStore.getState().endpointDrafts[endpoint.id],
+                          variables: varsMap,
                         });
                         navigator.clipboard.writeText(traceText);
                         setCopiedError(true);
