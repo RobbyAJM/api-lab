@@ -8,6 +8,9 @@ import {
 import {
   generateGrpcCollection,
   shouldAutoDetectTls,
+  DEFAULT_GRPC_SERVER_ADDRESS,
+  DEFAULT_GRPC_FOLDER_NAME,
+  DEFAULT_GRPC_USE_TLS,
 } from '../../utils/grpcReflectionGenerator';
 import { VariableInput } from '../common/VariableInput';
 import { X, RefreshCw, FolderPlus, Radio, CheckCircle2 } from 'lucide-react';
@@ -27,9 +30,9 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
   activeEnvironmentId,
 }) => {
   const queryClient = useQueryClient();
-  const [serverAddress, setServerAddress] = useState('localhost:9091');
-  const [folderName, setFolderName] = useState('gRPC Services');
-  const [useTls, setUseTls] = useState(false);
+  const [serverAddress, setServerAddress] = useState(DEFAULT_GRPC_SERVER_ADDRESS);
+  const [folderName, setFolderName] = useState(DEFAULT_GRPC_FOLDER_NAME);
+  const [useTls, setUseTls] = useState(DEFAULT_GRPC_USE_TLS);
   const [generatePayloads, setGeneratePayloads] = useState(true);
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
@@ -206,7 +209,7 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
                 }}
                 variables={activeVariables}
                 disabled={loading}
-                placeholder="localhost:9091, grpcb.in:9001, or {{GRPC_HOST}}"
+                placeholder={`${DEFAULT_GRPC_SERVER_ADDRESS} or {{GRPC_HOST}}`}
                 className="w-full h-8"
               />
             </div>

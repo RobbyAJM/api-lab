@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { VariableInput } from '../common/VariableInput';
 import { getFolderGrpcUrl, cascadeUpdateFolderGrpcAddress, getDescendantFolderIds } from '../../utils/folderTree';
+import { DEFAULT_GRPC_SERVER_ADDRESS } from '../../utils/grpcReflectionGenerator';
 import type { Collection, CollectionFolder, Endpoint, VariableResponse } from '@api-lab/api-types';
 import { X, Settings, Save, Info } from 'lucide-react';
 
@@ -204,7 +205,7 @@ export const ReflectionFolderSettingsModal: React.FC = () => {
                 value={serverAddress}
                 onChange={setServerAddress}
                 variables={envVars}
-                placeholder="localhost:50051 or {{GRPC_HOST}}"
+                placeholder={`${DEFAULT_GRPC_SERVER_ADDRESS} or {{GRPC_HOST}}`}
                 className="w-full h-8 px-2.5"
                 inputClassName="text-xs"
               />
