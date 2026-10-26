@@ -168,7 +168,7 @@ export const TopBar: React.FC = () => {
         {activeWorkspaceId && (
           <button
             type="button"
-            onClick={() => setMembersModalOpen(true)}
+            onClick={() => setMembersModalOpen(true, 'members')}
             className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-zinc-300 hover:text-zinc-100 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition"
             title="Invite collaborators to workspace"
           >

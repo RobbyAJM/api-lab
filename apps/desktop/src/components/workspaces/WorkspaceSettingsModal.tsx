@@ -3,18 +3,16 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { Avatar } from '../common/Avatar';
+import { filterWorkspaces, getWorkspaceInitials } from '../../utils/workspacePicker';
 import type { WorkspaceSummary } from '@api-lab/api-types';
 import {
   X,
   Plus,
   Search,
-  SlidersHorizontal,
   Star,
   MoreHorizontal,
-  Users,
-  Lock,
+  Settings,
   Trash2,
-  Edit2,
 } from 'lucide-react';
 
 export const WorkspaceSettingsModal: React.FC = () => {
@@ -29,7 +27,6 @@ export const WorkspaceSettingsModal: React.FC = () => {
     user,
   } = useAppStore();
 
-  const [category, setCategory] = useState<'all' | 'project' | 'external'>('all');
   const [search, setSearch] = useState('');
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
@@ -47,10 +44,6 @@ export const WorkspaceSettingsModal: React.FC = () => {
   // Create workspace dialog state
   const [showCreateWs, setShowCreateWs] = useState(false);
   const [newWsName, setNewWsName] = useState('');
-
-  // Rename workspace dialog state
-  const [renamingWs, setRenamingWs] = useState<WorkspaceSummary | null>(null);
-  const [renameInput, setRenameInput] = useState('');
 
   // Delete workspace dialog state
   const [deletingWs, setDeletingWs] = useState<WorkspaceSummary | null>(null);
@@ -86,23 +79,6 @@ export const WorkspaceSettingsModal: React.FC = () => {
     },
   });
 
-  // Rename Workspace Mutation
-  const renameMutation = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
-      apiRequest<WorkspaceSummary>(`/workspaces/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ name }),
-      }),
-    onSuccess: (updated) => {
-      queryClient.setQueryData<WorkspaceSummary[]>(['workspaces'], (prev) =>
-        prev ? prev.map((w) => (w.id === updated.id ? { ...w, name: updated.name } : w)) : [updated]
-      );
-      queryClient.invalidateQueries({ queryKey: ['auth_me'] });
-      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
-      setRenamingWs(null);
-    },
-  });
-
   // Delete Workspace Mutation
   const deleteWsMutation = useMutation({
     mutationFn: (id: string) =>
@@ -135,13 +111,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
     }
   };
 
-  const filteredWorkspaces = workspaces.filter((w) => {
-    const matchesSearch = w.name.toLowerCase().includes(search.trim().toLowerCase());
-    if (!matchesSearch) return false;
-    if (category === 'project') return w.role === 'admin';
-    if (category === 'external') return w.role === 'developer';
-    return true;
-  });
+  const filteredWorkspaces = filterWorkspaces(workspaces, search);
 
   return (
     <div
@@ -162,7 +132,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 setNewWsName('');
                 setShowCreateWs(true);
               }}
-              className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded font-medium text-xs shadow transition flex items-center gap-1.5"
+              className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white rounded font-medium text-xs shadow transition flex items-center gap-1.5"
             >
               <Plus size={14} />
               <span>Create workspace</span>
@@ -179,65 +149,18 @@ export const WorkspaceSettingsModal: React.FC = () => {
           </div>
         </div>
 
-        {/* Categories Bar */}
-        <div className="flex items-center px-6 pt-2 border-b border-zinc-800/60 bg-zinc-950 text-xs">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setCategory('all')}
-              className={`px-3 py-1.5 rounded-t font-medium transition ${
-                category === 'all'
-                  ? 'bg-zinc-900 text-white border-t border-x border-zinc-800'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              onClick={() => setCategory('project')}
-              className={`px-3 py-1.5 rounded-t font-medium transition ${
-                category === 'project'
-                  ? 'bg-zinc-900 text-white border-t border-x border-zinc-800'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              Project Workspaces
-            </button>
-            <button
-              type="button"
-              onClick={() => setCategory('external')}
-              className={`px-3 py-1.5 rounded-t font-medium transition ${
-                category === 'external'
-                  ? 'bg-zinc-900 text-white border-t border-x border-zinc-800'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              External
-            </button>
-          </div>
-        </div>
-
-        {/* Filter & Search Bar */}
-        <div className="px-6 py-3 border-b border-zinc-800/60 bg-zinc-950 flex items-center gap-2">
-          <div className="relative w-72">
+        {/* Search Bar */}
+        <div className="px-6 py-3 border-b border-zinc-800/60 bg-zinc-950 flex items-center">
+          <div className="relative w-80">
             <Search size={13} className="absolute left-2.5 top-2.5 text-zinc-500" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search workspaces"
-              className="w-full bg-zinc-900 border border-zinc-800 rounded pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 font-sans"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded pl-8 pr-3 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-primary font-sans"
             />
           </div>
-
-          <button
-            type="button"
-            className="p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-zinc-800 rounded transition"
-            title="Filter options"
-          >
-            <SlidersHorizontal size={14} />
-          </button>
         </div>
 
         {/* Workspaces Data Table */}
@@ -245,16 +168,13 @@ export const WorkspaceSettingsModal: React.FC = () => {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-zinc-800/80 text-zinc-400 text-[11px] font-medium bg-zinc-900/40">
-                <th className="py-2.5 px-4 w-10 text-center">
-                  <input type="checkbox" className="rounded border-zinc-700 bg-zinc-900" />
-                </th>
-                <th className="py-2.5 px-3">Name ↑</th>
+                <th className="py-2.5 pl-6 pr-3">Name ↑</th>
                 <th className="py-2.5 px-3">Creator</th>
                 <th className="py-2.5 px-3">Contributors</th>
                 <th className="py-2.5 px-3">Last activity</th>
                 <th className="py-2.5 px-3">Access</th>
                 <th className="py-2.5 px-3">Your role</th>
-                <th className="py-2.5 px-4 text-right">Actions</th>
+                <th className="py-2.5 pr-6 pl-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/40">
@@ -274,27 +194,17 @@ export const WorkspaceSettingsModal: React.FC = () => {
                       isActive ? 'bg-zinc-900/90' : 'hover:bg-zinc-900/50'
                     }`}
                   >
-                    {/* Checkbox */}
-                    <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={isActive}
-                        readOnly
-                        className="rounded border-zinc-700 bg-zinc-900"
-                      />
-                    </td>
-
                     {/* Name */}
-                    <td className="py-3 px-3">
+                    <td className="py-3 pl-6 pr-3">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 flex-shrink-0">
-                          {isPersonal ? <Lock size={13} /> : <Users size={13} />}
+                        <div className="w-7 h-7 rounded bg-zinc-800 border border-zinc-700/80 flex items-center justify-center text-xs font-semibold text-zinc-200 flex-shrink-0 tracking-wider font-mono">
+                          {getWorkspaceInitials(ws.name)}
                         </div>
                         <div>
                           <div className="font-semibold text-zinc-200 group-hover:text-white flex items-center gap-1.5">
                             <span>{ws.name}</span>
                             {isActive && (
-                              <span className="text-[10px] text-blue-400 font-mono font-normal">
+                              <span className="text-[10px] text-primary font-mono font-medium">
                                 (Active)
                               </span>
                             )}
@@ -331,7 +241,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3 pr-6 pl-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <button
                           type="button"
@@ -363,27 +273,14 @@ export const WorkspaceSettingsModal: React.FC = () => {
                                 type="button"
                                 onClick={() => {
                                   setMenuWsId(null);
-                                  setRenamingWs(ws);
-                                  setRenameInput(ws.name);
-                                }}
-                                className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-zinc-800 text-zinc-300 hover:text-white transition"
-                              >
-                                <Edit2 size={12} />
-                                <span>Rename workspace</span>
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMenuWsId(null);
                                   setActiveWorkspaceId(ws.id);
                                   setWorkspaceModalOpen(false);
-                                  setMembersModalOpen(true);
+                                  setMembersModalOpen(true, 'general');
                                 }}
                                 className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-zinc-800 text-zinc-300 hover:text-white transition"
                               >
-                                <Users size={12} />
-                                <span>Manage members</span>
+                                <Settings size={12} />
+                                <span>Configure workspace</span>
                               </button>
 
                               {workspaces.length > 1 && (
@@ -442,7 +339,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                   onChange={(e) => setNewWsName(e.target.value)}
                   placeholder="e.g. Acme API Services"
                   autoFocus
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-primary"
                 />
               </div>
 
@@ -450,7 +347,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowCreateWs(false)}
-                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded text-xs transition"
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 rounded text-xs transition"
                 >
                   Cancel
                 </button>
@@ -460,62 +357,9 @@ export const WorkspaceSettingsModal: React.FC = () => {
                     if (newWsName.trim()) createWsMutation.mutate(newWsName.trim());
                   }}
                   disabled={!newWsName.trim() || createWsMutation.isPending}
-                  className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded text-xs font-medium transition disabled:opacity-50"
+                  className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition disabled:opacity-50"
                 >
                   {createWsMutation.isPending ? 'Creating...' : 'Create'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Rename Workspace Sub-dialog */}
-        {renamingWs && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
-            <div className="w-96 rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-white">Rename workspace</h3>
-                <button
-                  type="button"
-                  onClick={() => setRenamingWs(null)}
-                  className="text-zinc-500 hover:text-zinc-300"
-                >
-                  <X size={15} />
-                </button>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">
-                  Workspace name
-                </label>
-                <input
-                  type="text"
-                  value={renameInput}
-                  onChange={(e) => setRenameInput(e.target.value)}
-                  autoFocus
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setRenamingWs(null)}
-                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded text-xs transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (renameInput.trim()) {
-                      renameMutation.mutate({ id: renamingWs.id, name: renameInput.trim() });
-                    }
-                  }}
-                  disabled={!renameInput.trim() || renameMutation.isPending}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition disabled:opacity-50"
-                >
-                  {renameMutation.isPending ? 'Saving...' : 'Save'}
                 </button>
               </div>
             </div>
@@ -545,7 +389,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setDeletingWs(null)}
-                  className="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 rounded text-xs transition"
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 rounded text-xs transition"
                 >
                   Cancel
                 </button>
@@ -553,7 +397,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                   type="button"
                   onClick={() => deleteWsMutation.mutate(deletingWs.id)}
                   disabled={deleteWsMutation.isPending}
-                  className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-medium transition disabled:opacity-50"
+                  className="px-3.5 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded text-xs font-medium transition disabled:opacity-50"
                 >
                   {deleteWsMutation.isPending ? 'Deleting...' : 'Delete'}
                 </button>
