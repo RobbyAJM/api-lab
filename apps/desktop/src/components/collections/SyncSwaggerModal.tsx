@@ -6,6 +6,7 @@ import {
 } from '../../utils/swaggerParser';
 import {
   fetchSwaggerSpec,
+  DEFAULT_SWAGGER_URL,
 } from '../../utils/swaggerGenerator';
 import {
   planSwaggerSync,
@@ -314,7 +315,7 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                   }}
                   variables={envVars}
                   disabled={scanning || syncing}
-                  placeholder="http://localhost:9090/swagger/combined/nutrade.swagger.json"
+                  placeholder={DEFAULT_SWAGGER_URL}
                   className="w-full h-full"
                 />
               </div>
