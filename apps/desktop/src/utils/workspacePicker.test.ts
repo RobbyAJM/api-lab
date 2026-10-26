@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { filterWorkspaces, sortWorkspaces } from './workspacePicker.ts';
+import { filterWorkspaces, sortWorkspaces, getWorkspaceInitials } from './workspacePicker.ts';
 import type { WorkspaceSummary } from '@api-lab/api-types';
 
 const ws1: WorkspaceSummary = { id: 'w1', name: 'RND', role: 'admin' };
@@ -18,4 +18,19 @@ test('sortWorkspaces: prioritizes active workspace, then favorites, then alphabe
   assert.equal(sorted[0].id, 'w2'); // active
   assert.equal(sorted[1].id, 'w3'); // favorite
   assert.equal(sorted[2].id, 'w1'); // alphabetical
+});
+
+test('getWorkspaceInitials: extracts max 2 uppercase letters from workspace name', () => {
+  // Spec example
+  assert.equal(getWorkspaceInitials('Dev Team Only'), 'DT');
+  // Two words
+  assert.equal(getWorkspaceInitials('Personal Workspace'), 'PW');
+  // Single word
+  assert.equal(getWorkspaceInitials('Engineering'), 'EN');
+  // Single letter
+  assert.equal(getWorkspaceInitials('X'), 'X');
+  // Extra whitespace
+  assert.equal(getWorkspaceInitials('  frontend  core  '), 'FC');
+  // Empty or missing
+  assert.equal(getWorkspaceInitials(''), 'WS');
 });

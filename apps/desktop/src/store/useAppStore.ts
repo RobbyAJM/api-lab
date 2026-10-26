@@ -98,6 +98,7 @@ interface AppState {
   authModalTab: 'login' | 'register' | 'forgot' | 'reset';
   envModalOpen: boolean;
   membersModalOpen: boolean;
+  membersModalTab: 'general' | 'members';
   workspaceModalOpen: boolean;
   commandPaletteOpen: boolean;
   shortcutsHelpOpen: boolean;
@@ -150,7 +151,8 @@ interface AppState {
   openAuthModal: (tab?: 'login' | 'register' | 'forgot' | 'reset') => void;
   closeAuthModal: () => void;
   setEnvModalOpen: (open: boolean) => void;
-  setMembersModalOpen: (open: boolean) => void;
+  setMembersModalOpen: (open: boolean, tab?: 'general' | 'members') => void;
+  setMembersModalTab: (tab: 'general' | 'members') => void;
   setWorkspaceModalOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setShortcutsHelpOpen: (open: boolean) => void;
@@ -326,6 +328,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   authModalTab: 'login',
   envModalOpen: false,
   membersModalOpen: false,
+  membersModalTab: 'general',
   workspaceModalOpen: false,
 
   setAuth: (token, user, workspace) => {
@@ -604,7 +607,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   openAuthModal: (tab = 'login') => set({ authModalOpen: true, authModalTab: tab }),
   closeAuthModal: () => set({ authModalOpen: false }),
   setEnvModalOpen: (open) => set({ envModalOpen: open }),
-  setMembersModalOpen: (open) => set({ membersModalOpen: open }),
+  setMembersModalOpen: (open, tab) =>
+    set((state) => ({
+      membersModalOpen: open,
+      membersModalTab: tab !== undefined ? tab : (open ? state.membersModalTab : 'general'),
+    })),
+  setMembersModalTab: (tab) => set({ membersModalTab: tab }),
   setWorkspaceModalOpen: (open) => set({ workspaceModalOpen: open }),
   commandPaletteOpen: false,
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),

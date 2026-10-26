@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
@@ -6,8 +6,9 @@ import type {
   InvitationResponse,
   MemberResponse,
   Role,
+  WorkspaceSummary,
 } from '@api-lab/api-types';
-import { X, UserPlus, Trash2, Copy, Check } from 'lucide-react';
+import { X, UserPlus, Trash2, Copy, Check, Settings, Users, Save } from 'lucide-react';
 import { Select } from '../common/Select';
 
 export const MembersModal: React.FC = () => {
@@ -15,11 +16,44 @@ export const MembersModal: React.FC = () => {
   const {
     membersModalOpen,
     setMembersModalOpen,
+    membersModalTab,
+    setMembersModalTab,
     activeWorkspaceId,
     activeWorkspaceRole,
+    workspaces,
   } = useAppStore();
 
   const isAdmin = activeWorkspaceRole === 'admin';
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+
+  // Workspace Name state
+  const [workspaceName, setWorkspaceName] = useState(activeWorkspace?.name || '');
+  const [nameSuccess, setNameSuccess] = useState(false);
+
+  useEffect(() => {
+    if (activeWorkspace) {
+      setWorkspaceName(activeWorkspace.name);
+    }
+  }, [activeWorkspace?.name, membersModalOpen]);
+
+  // Rename Workspace Mutation
+  const renameMutation = useMutation({
+    mutationFn: (newName: string) =>
+      apiRequest<WorkspaceSummary>(`/workspaces/${activeWorkspaceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: newName }),
+      }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData<WorkspaceSummary[]>(['workspaces'], (prev) =>
+        prev ? prev.map((w) => (w.id === updated.id ? { ...w, name: updated.name } : w)) : [updated]
+      );
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+      queryClient.invalidateQueries({ queryKey: ['auth_me'] });
+      setNameSuccess(true);
+      setTimeout(() => setNameSuccess(false), 2500);
+    },
+    onError: (err: any) => setErrorMsg(err.message),
+  });
 
   // State for invitation creation
   const [inviteRole, setInviteRole] = useState<Role>('developer');
@@ -120,9 +154,11 @@ export const MembersModal: React.FC = () => {
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-800">
           <div>
-            <h2 className="font-semibold text-base">Workspace Members & RBAC</h2>
+            <h2 className="font-semibold text-base text-white">Configure Workspace</h2>
             <p className="text-xs text-zinc-400">
-              Role permissions: Admins manage members and invites. Developers execute requests and edit collections.
+              {activeWorkspace?.name
+                ? `Settings and member access for "${activeWorkspace.name}".`
+                : 'Manage workspace settings and members.'}
             </p>
           </div>
           <button
@@ -133,145 +169,241 @@ export const MembersModal: React.FC = () => {
           </button>
         </div>
 
+        {/* Tab Switcher */}
+        <div className="flex items-center gap-4 px-4 border-b border-zinc-800 bg-zinc-950/40 text-xs flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setMembersModalTab('general')}
+            className={`py-2.5 font-medium border-b-2 flex items-center gap-1.5 transition ${
+              membersModalTab === 'general'
+                ? 'border-primary text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Settings size={13} />
+            <span>General</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMembersModalTab('members')}
+            className={`py-2.5 font-medium border-b-2 flex items-center gap-1.5 transition ${
+              membersModalTab === 'members'
+                ? 'border-primary text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Users size={13} />
+            <span>Members & RBAC</span>
+            {members.length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+                {members.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         {errorMsg && (
           <div className="mx-4 mt-3 p-2.5 bg-red-950/60 border border-red-800 rounded text-red-300 text-xs">
             {errorMsg}
           </div>
         )}
 
-        <div className="p-4 space-y-4 overflow-y-auto flex-1">
-          {/* Admin Invite Generator */}
-          {isAdmin && (
-            <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-md space-y-2.5">
-              <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
-                <UserPlus size={14} /> Invite New Member
-              </span>
-              <div className="flex items-center gap-2">
-                <Select
-                  value={inviteRole}
-                  onChange={(val) => setInviteRole(val as Role)}
-                  options={[
-                    { value: 'developer', label: 'Role: Developer' },
-                    { value: 'admin', label: 'Role: Admin' },
-                  ]}
-                  size="sm"
-                  className="w-36"
-                />
-                <button
-                  onClick={() => inviteMutation.mutate()}
-                  disabled={inviteMutation.isPending}
-                  className="px-3 py-1 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-medium rounded text-xs transition"
-                >
-                  {inviteMutation.isPending ? 'Generating...' : 'Generate Invite Link'}
-                </button>
+        {/* Tab Content */}
+        {membersModalTab === 'general' && (
+          <div className="p-4 space-y-4 overflow-y-auto flex-1">
+            <div className="p-4 bg-zinc-950/70 border border-zinc-800 rounded-md space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-200 mb-1">
+                  Workspace Name
+                </label>
+                <p className="text-[11px] text-zinc-400 mb-2 leading-relaxed">
+                  {isAdmin
+                    ? 'Rename this workspace across all synced collections and environments.'
+                    : 'Only workspace admins can rename this workspace.'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={workspaceName}
+                    disabled={!isAdmin || renameMutation.isPending}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
+                    placeholder="e.g. Acme API Services"
+                    className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-primary disabled:opacity-50"
+                  />
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const trimmed = workspaceName.trim();
+                        if (trimmed && trimmed !== activeWorkspace?.name) {
+                          renameMutation.mutate(trimmed);
+                        }
+                      }}
+                      disabled={
+                        !workspaceName.trim() ||
+                        workspaceName.trim() === activeWorkspace?.name ||
+                        renameMutation.isPending
+                      }
+                      className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white rounded text-xs font-medium flex items-center gap-1.5 transition flex-shrink-0"
+                    >
+                      {nameSuccess ? <Check size={13} className="text-emerald-400" /> : <Save size={13} />}
+                      <span>{renameMutation.isPending ? 'Saving...' : nameSuccess ? 'Saved' : 'Save'}</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {generatedToken && (
-                <div className="mt-2 p-2.5 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-1">
-                  <div className="text-zinc-400 font-medium">Shareable Invitation Token:</div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      readOnly
-                      value={generatedToken}
-                      className="flex-1 bg-zinc-950 border border-zinc-800 px-2 py-1 rounded font-mono text-[11px] text-zinc-200 select-all"
-                    />
-                    <button
-                      onClick={() => copyToClipboard(generatedToken)}
-                      className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded flex items-center gap-1 text-xs"
-                    >
-                      {copiedToken ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                      <span>{copiedToken ? 'Copied' : 'Copy'}</span>
-                    </button>
-                  </div>
+              <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-[11px] text-zinc-400">
+                <div className="flex items-center gap-2">
+                  <span>Your Role:</span>
+                  <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono capitalize border border-zinc-700/60 text-[10px]">
+                    {activeWorkspaceRole}
+                  </span>
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* Members List */}
-          <div className="space-y-2">
-            <span className="text-xs font-semibold text-zinc-300">Active Members ({members.length})</span>
-            <div className="space-y-1.5">
-              {members.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex items-center justify-between p-2.5 bg-zinc-950/40 border border-zinc-800/80 rounded text-xs"
-                >
-                  <div>
-                    <div className="font-medium text-zinc-200">{m.name}</div>
-                    <div className="text-[11px] text-zinc-500">{m.email}</div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {isAdmin ? (
-                      <Select
-                        value={m.role}
-                        onChange={(val) =>
-                          updateRoleMutation.mutate({
-                            memberId: m.id,
-                            role: val as Role,
-                          })
-                        }
-                        options={[
-                          { value: 'developer', label: 'Developer' },
-                          { value: 'admin', label: 'Admin' },
-                        ]}
-                        size="xs"
-                        className="w-28"
-                      />
-                    ) : (
-                      <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-medium uppercase text-[10px]">
-                        {m.role}
-                      </span>
-                    )}
-
-                    {isAdmin && (
-                      <button
-                        onClick={() => removeMemberMutation.mutate(m.id)}
-                        title="Remove member from workspace"
-                        className="text-zinc-500 hover:text-red-400 p-1"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </div>
+                <div className="flex items-center gap-1.5 font-mono text-[10px] text-zinc-500">
+                  <span>ID:</span>
+                  <span>{activeWorkspaceId}</span>
                 </div>
-              ))}
+              </div>
             </div>
           </div>
+        )}
 
-          {/* Pending Invitations */}
-          {isAdmin && invitations.length > 0 && (
-            <div className="space-y-2 pt-2 border-t border-zinc-800">
-              <span className="text-xs font-semibold text-zinc-400">
-                Pending Invitations ({invitations.length})
-              </span>
-              <div className="space-y-1">
-                {invitations.map((inv) => (
+        {membersModalTab === 'members' && (
+          <div className="p-4 space-y-4 overflow-y-auto flex-1">
+            {/* Admin Invite Generator */}
+            {isAdmin && (
+              <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-md space-y-2.5">
+                <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
+                  <UserPlus size={14} /> Invite New Member
+                </span>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={inviteRole}
+                    onChange={(val) => setInviteRole(val as Role)}
+                    options={[
+                      { value: 'developer', label: 'Role: Developer' },
+                      { value: 'admin', label: 'Role: Admin' },
+                    ]}
+                    size="sm"
+                    className="w-36"
+                  />
+                  <button
+                    onClick={() => inviteMutation.mutate()}
+                    disabled={inviteMutation.isPending}
+                    className="px-3 py-1 bg-primary hover:bg-primary-hover disabled:opacity-50 text-white font-medium rounded text-xs transition"
+                  >
+                    {inviteMutation.isPending ? 'Generating...' : 'Generate Invite Link'}
+                  </button>
+                </div>
+
+                {generatedToken && (
+                  <div className="mt-2 p-2.5 bg-zinc-900 border border-zinc-800 rounded text-xs space-y-1">
+                    <div className="text-zinc-400 font-medium">Shareable Invitation Token:</div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        readOnly
+                        value={generatedToken}
+                        className="flex-1 bg-zinc-950 border border-zinc-800 px-2 py-1 rounded font-mono text-[11px] text-zinc-200 select-all"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(generatedToken)}
+                        className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded flex items-center gap-1 text-xs"
+                      >
+                        {copiedToken ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                        <span>{copiedToken ? 'Copied' : 'Copy'}</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Members List */}
+            <div className="space-y-2">
+              <span className="text-xs font-semibold text-zinc-300">Active Members ({members.length})</span>
+              <div className="space-y-1.5">
+                {members.map((m) => (
                   <div
-                    key={inv.id}
-                    className="flex items-center justify-between p-2 bg-zinc-950/30 border border-zinc-800/60 rounded text-xs"
+                    key={m.id}
+                    className="flex items-center justify-between p-2.5 bg-zinc-950/40 border border-zinc-800/80 rounded text-xs"
                   >
                     <div>
-                      <span className="font-medium text-zinc-300 uppercase text-[10px] px-1.5 py-0.5 bg-zinc-800 rounded">
-                        {inv.role}
-                      </span>
-                      <span className="text-[11px] text-zinc-500 ml-2">
-                        Expires {new Date(inv.expires_at).toLocaleDateString()}
-                      </span>
+                      <div className="font-medium text-zinc-200">{m.name}</div>
+                      <div className="text-[11px] text-zinc-500">{m.email}</div>
                     </div>
-                    <button
-                      onClick={() => revokeInviteMutation.mutate(inv.id)}
-                      className="text-xs text-red-400 hover:text-red-300"
-                    >
-                      Revoke
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      {isAdmin ? (
+                        <Select
+                          value={m.role}
+                          onChange={(val) =>
+                            updateRoleMutation.mutate({
+                              memberId: m.id,
+                              role: val as Role,
+                            })
+                          }
+                          options={[
+                            { value: 'developer', label: 'Developer' },
+                            { value: 'admin', label: 'Admin' },
+                          ]}
+                          size="xs"
+                          className="w-28"
+                        />
+                      ) : (
+                        <span className="px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-medium uppercase text-[10px]">
+                          {m.role}
+                        </span>
+                      )}
+
+                      {isAdmin && (
+                        <button
+                          onClick={() => removeMemberMutation.mutate(m.id)}
+                          title="Remove member from workspace"
+                          className="text-zinc-500 hover:text-red-400 p-1"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Pending Invitations */}
+            {isAdmin && invitations.length > 0 && (
+              <div className="space-y-2 pt-2 border-t border-zinc-800">
+                <span className="text-xs font-semibold text-zinc-400">
+                  Pending Invitations ({invitations.length})
+                </span>
+                <div className="space-y-1">
+                  {invitations.map((inv) => (
+                    <div
+                      key={inv.id}
+                      className="flex items-center justify-between p-2 bg-zinc-950/30 border border-zinc-800/60 rounded text-xs"
+                    >
+                      <div>
+                        <span className="font-medium text-zinc-300 uppercase text-[10px] px-1.5 py-0.5 bg-zinc-800 rounded">
+                          {inv.role}
+                        </span>
+                        <span className="text-[11px] text-zinc-500 ml-2">
+                          Expires {new Date(inv.expires_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => revokeInviteMutation.mutate(inv.id)}
+                        className="text-xs text-red-400 hover:text-red-300"
+                      >
+                        Revoke
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
