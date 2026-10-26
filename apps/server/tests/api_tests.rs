@@ -871,3 +871,62 @@ async fn test_user_theme_persistence() {
     let me: Value = parse_body(res.into_body()).await;
     assert_eq!(me["user"]["theme"].as_str().unwrap(), "dracula");
 }
+
+#[tokio::test]
+async fn test_user_avatar_and_profile_update() {
+    let app = setup_app().await;
+    let email = format!("avatar_user_{}@example.com", Uuid::new_v4());
+
+    // 1. Register user
+    let reg_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email,
+                "name": "Avatar Tester",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let auth: AuthResponse = parse_body(res.into_body()).await;
+    assert_eq!(auth.user.avatar, "bottts:api-lab");
+    let token = auth.token;
+
+    // 2. Update profile name and avatar
+    let update_req = Request::builder()
+        .method("PUT")
+        .uri("/api/v1/auth/profile")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "name": "Avatar Pro",
+                "avatar": "lorelei:cool-seed"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(update_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let updated: UserSummary = parse_body(res.into_body()).await;
+    assert_eq!(updated.name, "Avatar Pro");
+    assert_eq!(updated.avatar, "lorelei:cool-seed");
+
+    // 3. Verify /auth/me returns persisted avatar & name
+    let me_req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/auth/me")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(me_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let me: Value = parse_body(res.into_body()).await;
+    assert_eq!(me["user"]["name"].as_str().unwrap(), "Avatar Pro");
+    assert_eq!(me["user"]["avatar"].as_str().unwrap(), "lorelei:cool-seed");
+}
