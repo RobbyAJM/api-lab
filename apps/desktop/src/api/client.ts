@@ -34,6 +34,16 @@ export function setAuthToken(token: string | null) {
   }
 }
 
+export const BACKEND_STATUS_EVENT = 'api_lab:backend_status';
+
+export function notifyBackendStatus(unavailable: boolean) {
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    window.dispatchEvent(
+      new CustomEvent(BACKEND_STATUS_EVENT, { detail: { unavailable } })
+    );
+  }
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
@@ -47,10 +57,18 @@ export async function apiRequest<T>(
   }
 
   const apiBase = getApiBaseUrl();
-  const response = await fetch(`${apiBase}${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    notifyBackendStatus(true);
+    throw err;
+  }
+
+  notifyBackendStatus(false);
 
   if (!response.ok) {
     let errMsg = `Request failed: ${response.status} ${response.statusText}`;
