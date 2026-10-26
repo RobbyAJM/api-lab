@@ -6,6 +6,8 @@ import {
   formatStatusCode,
   formatTraceRequestBody,
   formatCopyTrace,
+  substituteVariables,
+  extractAddressFromError,
 } from './responseViewerUtils.ts';
 import type { Endpoint } from '@api-lab/api-types';
 
@@ -210,4 +212,94 @@ test('formatCopyTrace formats complete gRPC trace', () => {
   assert.ok(trace.includes('"id": 42'));
   assert.ok(trace.includes('Error: Connection Refused'));
 });
+
+test('substituteVariables replaces {{VAR}} case-insensitively', () => {
+  const vars = { NUCONNECTOR_GRPC_URL: '127.0.0.1:3100', ApiKey: 'secret_123' };
+  assert.equal(substituteVariables('{{NUCONNECTOR_GRPC_URL}}', vars), '127.0.0.1:3100');
+  assert.equal(substituteVariables('http://{{nuconnector_grpc_url}}/api', vars), 'http://127.0.0.1:3100/api');
+  assert.equal(substituteVariables('Bearer {{apikey}}', vars), 'Bearer secret_123');
+  assert.equal(substituteVariables('{{MISSING_VAR}}', vars), '{{MISSING_VAR}}');
+});
+
+test('extractAddressFromError parses target IP and port from transport errors', () => {
+  const rawErr = `Failed to retrieve service reflection: failed to connect to gRPC server: transport error (tonic::transport::Error(Transport, ConnectError(ConnectError("tcp connect error", 127.0.0.1:3100, Os { code: 10061, kind: ConnectionRefused, message: "No connection could be made because the target machine actively refused it." }))) -> tcp connect error -> tcp connect error -> No connection could be made because the target machine actively refused it. (os error 10061))`;
+  assert.equal(extractAddressFromError(rawErr), '127.0.0.1:3100');
+
+  const httpErr = `connect error: failed to connect to 192.168.1.50:8080: timed out`;
+  assert.equal(extractAddressFromError(httpErr), '192.168.1.50:8080');
+});
+
+test('formatCopyTrace resolves template variable to actual endpoint value', () => {
+  const endpoint: Endpoint = {
+    id: 'ep-var',
+    collection_id: 'col-1',
+    name: 'Variable Endpoint',
+    protocol: 'grpc',
+    config: {
+      server_address: '{{NUCONNECTOR_GRPC_URL}}',
+      service: 'grpc.health.v1.Health',
+      method: 'Check',
+    },
+    sort_order: 0,
+    version: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const trace = formatCopyTrace({
+    endpoint,
+    response: {
+      status_code: 14,
+      status_message: 'Unavailable',
+      response_time_ms: 0,
+      response_size_bytes: 0,
+      metadata: {},
+      body: null,
+      error: 'transport error ConnectError("tcp connect error", 127.0.0.1:3100)',
+    },
+    variables: {
+      NUCONNECTOR_GRPC_URL: '127.0.0.1:3100',
+    },
+  });
+
+  assert.ok(trace.includes('Endpoint: 127.0.0.1:3100'));
+  assert.equal(trace.includes('{{NUCONNECTOR_GRPC_URL}}'), false);
+});
+
+test('formatCopyTrace falls back to error details address if variable is not in dictionary', () => {
+  const endpoint: Endpoint = {
+    id: 'ep-fallback',
+    collection_id: 'col-1',
+    name: 'Unmapped Variable Endpoint',
+    protocol: 'grpc',
+    config: {
+      server_address: '{{NUCONNECTOR_GRPC_URL}}',
+      service: 'grpc.health.v1.Health',
+      method: 'Check',
+    },
+    sort_order: 0,
+    version: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const trace = formatCopyTrace({
+    endpoint,
+    response: {
+      status_code: 14,
+      status_message: 'Unavailable',
+      response_time_ms: 0,
+      response_size_bytes: 0,
+      metadata: {},
+      body: null,
+      error: 'Failed to connect: ConnectError("tcp connect error", 127.0.0.1:3100, Os { code: 10061 })',
+    },
+    variables: {}, // Empty variables
+  });
+
+  // Replaced via socket error fallback
+  assert.ok(trace.includes('Endpoint: 127.0.0.1:3100'));
+  assert.equal(trace.includes('{{NUCONNECTOR_GRPC_URL}}'), false);
+});
+
 
