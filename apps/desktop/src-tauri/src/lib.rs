@@ -95,6 +95,11 @@ mod commands {
     pub fn is_window_maximized(window: tauri::Window) -> bool {
         window.is_maximized().unwrap_or(false)
     }
+
+    #[tauri::command]
+    pub fn start_dragging_window(window: tauri::Window) {
+        let _ = window.start_dragging();
+    }
 }
 
 #[cfg(not(feature = "desktop"))]
@@ -154,6 +159,7 @@ mod commands {
     pub fn is_window_maximized() -> bool {
         false
     }
+    pub fn start_dragging_window() {}
 }
 
 pub use commands::*;
@@ -173,7 +179,8 @@ pub fn run() {
             minimize_window,
             toggle_maximize_window,
             close_window,
-            is_window_maximized
+            is_window_maximized,
+            start_dragging_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
