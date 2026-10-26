@@ -164,6 +164,38 @@ export interface FormatCopyTraceOptions {
   response?: (HttpExecutionResponse & { error?: string }) | (GrpcExecutionResponse & { error?: string }) | null;
   executedMeta?: ExecutedRequestMeta | null;
   draftConfig?: Record<string, any> | null;
+  variables?: Record<string, string>;
+}
+
+/**
+ * Substitutes {{VARIABLE_NAME}} tokens with values from the variables map (case-insensitive fallback).
+ */
+export function substituteVariables(
+  text: string,
+  variables?: Record<string, string>
+): string {
+  if (!text || !variables || Object.keys(variables).length === 0) return text;
+  return text.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (match, key) => {
+    const rawKey = key.trim();
+    if (rawKey in variables) return variables[rawKey];
+    const lowerKey = rawKey.toLowerCase();
+    for (const [k, v] of Object.entries(variables)) {
+      if (k.toLowerCase() === lowerKey) return v;
+    }
+    return match;
+  });
+}
+
+/**
+ * Extracts connected IP/host and port from underlying socket/transport error strings
+ * when template variables were unresolvable in the environment.
+ */
+export function extractAddressFromError(rawError?: string): string | null {
+  if (!rawError) return null;
+  const m =
+    rawError.match(/(?:tcp connect error|connect error|failed to connect to|target machine|failed to connect)\D*?(\b(?:\d{1,3}\.){3}\d{1,3}:\d+|\blocalhost:\d+|\[[a-fA-F0-9:]+\]:\d+)/i) ||
+    rawError.match(/(\b(?:\d{1,3}\.){3}\d{1,3}:\d+)/);
+  return m ? m[1] : null;
 }
 
 /**
@@ -173,13 +205,20 @@ export interface FormatCopyTraceOptions {
  * and error details.
  */
 export function formatCopyTrace(options: FormatCopyTraceOptions): string {
-  const { endpoint, response, executedMeta, draftConfig } = options;
+  const { endpoint, response, executedMeta, draftConfig, variables } = options;
   const effectiveConfig = getEffectiveEndpointConfig(endpoint, draftConfig);
   const isHttp = endpoint.protocol === 'http';
   const lines: string[] = [];
 
   if (isHttp) {
-    const url = executedMeta?.http?.url || effectiveConfig.url || 'https://httpbin.org/get';
+    const rawUrl = executedMeta?.http?.url || effectiveConfig.url || 'https://httpbin.org/get';
+    let url = substituteVariables(rawUrl, variables);
+    if (url.includes('{{')) {
+      const fallbackAddr = extractAddressFromError(response?.error);
+      if (fallbackAddr) {
+        url = url.replace(/\{\{\s*[\w.-]+\s*\}\}/g, fallbackAddr);
+      }
+    }
     lines.push(`Endpoint: ${url}`);
 
     const method = (executedMeta?.http?.method || effectiveConfig.method || 'GET').toUpperCase();
@@ -205,7 +244,9 @@ export function formatCopyTrace(options: FormatCopyTraceOptions): string {
     const validParams = (params as [string, string][]).filter(([k]) => k && String(k).trim());
     if (validParams.length > 0) {
       for (const [k, v] of validParams) {
-        lines.push(`  ${k}: ${v}`);
+        const paramKey = substituteVariables(k, variables);
+        const paramVal = substituteVariables(v, variables);
+        lines.push(`  ${paramKey}: ${paramVal}`);
       }
     } else {
       lines.push('  (none)');
@@ -216,14 +257,23 @@ export function formatCopyTrace(options: FormatCopyTraceOptions): string {
     const headerEntries = Object.entries(headers).filter(([k]) => k && k.trim());
     if (headerEntries.length > 0) {
       for (const [k, v] of headerEntries) {
-        lines.push(`  ${k}: ${v}`);
+        const headerKey = substituteVariables(k, variables);
+        const headerVal = substituteVariables(v, variables);
+        lines.push(`  ${headerKey}: ${headerVal}`);
       }
     } else {
       lines.push('  (none)');
     }
   } else {
     // gRPC
-    const server = executedMeta?.grpc?.serverAddress || effectiveConfig.server_address || '';
+    const rawServer = executedMeta?.grpc?.serverAddress || effectiveConfig.server_address || '';
+    let server = substituteVariables(rawServer, variables);
+    if (server.includes('{{')) {
+      const fallbackAddr = extractAddressFromError(response?.error);
+      if (fallbackAddr) {
+        server = fallbackAddr;
+      }
+    }
     lines.push(`Endpoint: ${server}`);
     lines.push('Protocol: gRPC');
 
@@ -256,7 +306,9 @@ export function formatCopyTrace(options: FormatCopyTraceOptions): string {
     const metaEntries = Object.entries(meta).filter(([k]) => k && k.trim());
     if (metaEntries.length > 0) {
       for (const [k, v] of metaEntries) {
-        lines.push(`  ${k}: ${v}`);
+        const metaKey = substituteVariables(k, variables);
+        const metaVal = substituteVariables(v, variables);
+        lines.push(`  ${metaKey}: ${metaVal}`);
       }
     } else {
       lines.push('  (none)');
