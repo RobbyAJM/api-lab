@@ -97,7 +97,24 @@ mod commands {
     }
 
     #[tauri::command]
-    pub fn start_dragging_window(window: tauri::Window) {
+    pub fn start_dragging_window(
+        window: tauri::Window,
+        screen_x: Option<f64>,
+        screen_y: Option<f64>,
+    ) {
+        if window.is_maximized().unwrap_or(false) {
+            let _ = window.unmaximize();
+            if let (Some(sx), Some(sy)) = (screen_x, screen_y) {
+                if let (Ok(size), Ok(scale)) = (window.outer_size(), window.scale_factor()) {
+                    let logical_width = size.width as f64 / scale;
+                    let target_x = (sx - logical_width / 2.0).max(0.0);
+                    let target_y = (sy - 18.0).max(0.0);
+                    let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(
+                        target_x, target_y,
+                    )));
+                }
+            }
+        }
         let _ = window.start_dragging();
     }
 }
@@ -159,7 +176,10 @@ mod commands {
     pub fn is_window_maximized() -> bool {
         false
     }
-    pub fn start_dragging_window() {}
+    pub fn start_dragging_window(
+        _screen_x: Option<f64>,
+        _screen_y: Option<f64>,
+    ) {}
 }
 
 pub use commands::*;
