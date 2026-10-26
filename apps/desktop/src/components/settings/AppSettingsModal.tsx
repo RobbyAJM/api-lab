@@ -8,7 +8,6 @@ import {
   Dices,
   Check,
   RefreshCw,
-  ExternalLink,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
@@ -20,7 +19,7 @@ import {
   generateRandomSeed,
   type DiceBearStyle,
 } from '../../utils/dicebear';
-import { THEMES, getThemeById, resolveThemeVariables, sortThemes } from '../../utils/theme';
+import { THEMES, resolveThemeVariables, sortThemes } from '../../utils/theme';
 import { getServerUrl, setServerUrl, testServerConnection } from '../../utils/serverConfig';
 import { getAllShortcuts } from '../../utils/shortcuts';
 import type { UserSummary } from '@api-lab/api-types';
@@ -117,7 +116,7 @@ export const AppSettingsModal: React.FC = () => {
       if (res.ok) {
         setConnStatus({ ok: true, message: 'Successfully connected to API Lab server.' });
       } else {
-        setConnStatus({ ok: false, message: res.error || 'Server responded with an error.' });
+        setConnStatus({ ok: false, message: res.message || 'Server responded with an error.' });
       }
     } catch (err: any) {
       setConnStatus({ ok: false, message: err?.message || 'Connection failed.' });
@@ -127,10 +126,12 @@ export const AppSettingsModal: React.FC = () => {
   };
 
   const allShortcuts = getAllShortcuts();
+  const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent || '');
   const filteredShortcuts = allShortcuts.filter(
     (s) =>
       s.description.toLowerCase().includes(shortcutSearch.toLowerCase()) ||
-      s.keys.toLowerCase().includes(shortcutSearch.toLowerCase())
+      s.keyLabel.toLowerCase().includes(shortcutSearch.toLowerCase()) ||
+      s.macKeyLabel.toLowerCase().includes(shortcutSearch.toLowerCase())
   );
 
   return (
@@ -349,7 +350,7 @@ export const AppSettingsModal: React.FC = () => {
                         <div className="flex-1 min-w-0">
                           <div className="text-xs font-medium text-zinc-200 truncate">{theme.name}</div>
                           <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">
-                            {theme.type}
+                            {theme.isLight ? 'light' : 'dark'}
                           </div>
                         </div>
                         {isSelected && <Check size={14} className="text-blue-400 flex-shrink-0" />}
@@ -421,11 +422,11 @@ export const AppSettingsModal: React.FC = () => {
                 />
 
                 <div className="max-h-[360px] overflow-y-auto divide-y divide-zinc-800/50">
-                  {filteredShortcuts.map((sc, i) => (
-                    <div key={i} className="py-2 px-1 flex items-center justify-between gap-4">
+                  {filteredShortcuts.map((sc) => (
+                    <div key={sc.id} className="py-2 px-1 flex items-center justify-between gap-4">
                       <span className="text-xs text-zinc-300">{sc.description}</span>
                       <kbd className="px-2 py-0.5 rounded bg-zinc-800 text-[11px] font-mono text-zinc-300 border border-zinc-700/60 shadow-xs">
-                        {sc.keys}
+                        {isMac ? sc.macKeyLabel : sc.keyLabel}
                       </kbd>
                     </div>
                   ))}
