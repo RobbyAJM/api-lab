@@ -6,6 +6,8 @@ import {
   Search,
   UserPlus,
 } from 'lucide-react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../store/useAppStore';
 import { WorkspaceDropdown } from './WorkspaceDropdown';
 import { OnlineUsersPopover } from './OnlineUsersPopover';
@@ -18,34 +20,28 @@ export const TopBar: React.FC = () => {
   const setMembersModalOpen = useAppStore((s) => s.setMembersModalOpen);
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
 
-  const handleMouseDown = async (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (target.closest('button, input, select, textarea, [data-tauri-no-drag]')) {
       return;
     }
     if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
-      try {
-        const { getCurrentWindow } = await import('@tauri-apps/api/window');
-        await getCurrentWindow().startDragging();
-      } catch {
-        // fallback
-      }
+      getCurrentWindow()
+        .startDragging()
+        .catch(() => {
+          invoke('start_dragging_window').catch(() => {});
+        });
     }
   };
 
-  const handleDoubleClick = async (e: React.MouseEvent) => {
+  const handleDoubleClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.closest('button, input, select, textarea, [data-tauri-no-drag]')) {
       return;
     }
     if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('toggle_maximize_window');
-      } catch {
-        // fallback
-      }
+      invoke('toggle_maximize_window').catch(() => {});
     }
   };
 
