@@ -4,6 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { VariableInput } from '../common/VariableInput';
 import { getFolderSwaggerUrl } from '../../utils/folderTree';
+import { DEFAULT_SWAGGER_URL } from '../../utils/swaggerGenerator';
 import type { Collection, CollectionFolder, VariableResponse } from '@api-lab/api-types';
 import { X, Settings, Save, Info } from 'lucide-react';
 
@@ -168,7 +169,7 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
                 onChange={setSwaggerUrl}
                 variables={envVars}
                 disabled={saveMutation.isPending}
-                placeholder="e.g. http://localhost:9090/swagger/combined/nutrade.swagger.json"
+                placeholder={`e.g. ${DEFAULT_SWAGGER_URL}`}
                 className="w-full h-full"
               />
             </div>

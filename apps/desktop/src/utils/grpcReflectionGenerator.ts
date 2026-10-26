@@ -37,6 +37,18 @@ export interface PlannedHierarchy {
   totalEndpoints: number;
 }
 
+export const DEFAULT_GRPC_SERVER_ADDRESS = 'https://grpcb.in:9001/';
+export const DEFAULT_GRPC_FOLDER_NAME = 'gRPC Services';
+export const DEFAULT_GRPC_USE_TLS = true;
+
+export function getDefaultGrpcConfig() {
+  return {
+    serverAddress: DEFAULT_GRPC_SERVER_ADDRESS,
+    folderName: DEFAULT_GRPC_FOLDER_NAME,
+    useTls: DEFAULT_GRPC_USE_TLS,
+  };
+}
+
 /**
  * Splits a full gRPC service name into dot-separated segments case-sensitively.
  * E.g. "nutrade.Client.ClientAccountAPI" -> ["nutrade", "Client", "ClientAccountAPI"]
