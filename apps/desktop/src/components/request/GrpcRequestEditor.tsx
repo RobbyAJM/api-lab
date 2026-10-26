@@ -93,6 +93,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     openReflectionSettingsModal,
     openFolderSettingsModal,
     openCollectionSettingsModal,
+    setEndpointExecuting,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -651,6 +652,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   async function handleSend() {
     saveChanges({ silent: true });
     setSending(true);
+    setEndpointExecuting(endpoint.id, true);
     setStatusMessage(null);
 
     const metaMap: Record<string, string> = {};
@@ -782,6 +784,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
        }, endpoint.id);
     } finally {
       setSending(false);
+      setEndpointExecuting(endpoint.id, false);
     }
   }
 
@@ -789,6 +792,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   async function handleStartStream() {
     saveChanges({ silent: true });
     setSending(true);
+    setEndpointExecuting(endpoint.id, true);
     setStatusMessage('Starting stream...');
     clearStreamMessages();
 
@@ -925,6 +929,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     } finally {
       setIsStreaming(false, null, null);
       setSending(false);
+      setEndpointExecuting(endpoint.id, false);
     }
   }
 

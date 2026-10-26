@@ -31,7 +31,7 @@ import {
   isLifecyclePayload,
   type MessageDirectionFilter,
 } from '../../utils/streamViewer';
-import { formatResponseSize } from '../../utils/responseViewerUtils';
+import { formatResponseSize, formatElapsedTime } from '../../utils/responseViewerUtils';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 
@@ -46,6 +46,23 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   } = useAppStore();
   const lastHttpResponse = getHttpResponse(endpoint.id);
   const lastGrpcResponse = getGrpcResponse(endpoint.id);
+  const executionInfo = useAppStore((s) => s.executingEndpoints[endpoint.id]);
+  const isExecuting = Boolean(executionInfo);
+
+  const [elapsedMs, setElapsedMs] = useState(0);
+
+  useEffect(() => {
+    if (!isExecuting || !executionInfo?.startTime) {
+      setElapsedMs(0);
+      return;
+    }
+    const start = executionInfo.startTime;
+    setElapsedMs(Date.now() - start);
+    const interval = setInterval(() => {
+      setElapsedMs(Date.now() - start);
+    }, 50);
+    return () => clearInterval(interval);
+  }, [isExecuting, executionInfo?.startTime]);
 
   const isGrpc = endpoint.protocol === 'grpc';
   const isStreamRpc =
@@ -269,6 +286,13 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
 
   return (
     <div className="w-full flex-1 flex flex-col min-h-0 bg-zinc-950 text-zinc-300 overflow-hidden">
+      {/* Moving Smooth Gradient Progress Bar (Active Theme Follower) */}
+      {isExecuting && (
+        <div className="relative w-full h-[2px] overflow-hidden bg-zinc-900 flex-shrink-0">
+          <div className="response-progress-gradient absolute inset-0 h-full w-full" />
+        </div>
+      )}
+
       {/* Unified Compact Header Bar (Compact Style) */}
       <div className="h-10 px-3 bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none flex-shrink-0 gap-3">
         {/* Left: Navigation Tabs */}
@@ -356,7 +380,19 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
             </span>
           )}
 
-          {activeResponse || streamMessages.length > 0 ? (
+          {isExecuting ? (
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-primary/20 text-primary border border-primary/30 inline-flex items-center gap-1.5 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                <span>{isGrpc ? 'Invoking...' : 'Sending...'}</span>
+              </span>
+              <span className="text-zinc-600">•</span>
+              <span className="flex items-center gap-1 text-zinc-300 font-mono text-[11px]">
+                <Clock size={11} className="text-primary animate-spin" />
+                <span>{formatElapsedTime(elapsedMs)}</span>
+              </span>
+            </div>
+          ) : activeResponse || streamMessages.length > 0 ? (
             <div className="flex items-center gap-2 text-xs">
               {/* Status Badge */}
               {isHttp && lastHttpResponse ? (
