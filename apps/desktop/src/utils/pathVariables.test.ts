@@ -31,7 +31,7 @@ test('convertSwaggerPathToApiPath: preserves environment variables', () => {
 });
 
 test('extractPathVariables: extracts keys from standard full URL', () => {
-  const url = 'https://nu-gateway.dev.dxtr.asia/manager/api/v1/emergency-contact-status/:id';
+  const url = 'https://httpbin.org/status/:id';
   assert.deepEqual(extractPathVariables(url), ['id']);
 });
 
@@ -56,11 +56,11 @@ test('extractPathVariables: returns empty when no path variable', () => {
 });
 
 test('interpolatePathVariables: replaces :key with value', () => {
-  const url = 'https://nu-gateway.dev.dxtr.asia/manager/api/v1/emergency-contact-status/:id';
+  const url = 'https://httpbin.org/status/:id';
   const res = interpolatePathVariables(url, [['id', '42']]);
   assert.equal(
     res,
-    'https://nu-gateway.dev.dxtr.asia/manager/api/v1/emergency-contact-status/42'
+    'https://httpbin.org/status/42'
   );
 });
 

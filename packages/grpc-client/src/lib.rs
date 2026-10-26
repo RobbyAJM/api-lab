@@ -106,14 +106,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_probe_nutrade_discovery() {
-        if std::net::TcpStream::connect("nu-trade.dev.dxtr.asia:443").is_err() {
+    async fn test_probe_grpcbin_discovery() {
+        if std::net::TcpStream::connect("grpcb.in:9001").is_err() {
             return;
         }
 
         // Test 1: use_tls: None with pure hostname
         let req_none = rust_core::dto::GrpcReflectionRequest {
-            server_address: "nu-trade.dev.dxtr.asia".into(),
+            server_address: "grpcb.in:9001".into(),
             use_tls: None,
         };
         let res_none = client::discover_services(req_none).await;
@@ -121,7 +121,7 @@ mod tests {
 
         // Test 2: use_tls: Some(false) with fallback to TLS
         let req_false = rust_core::dto::GrpcReflectionRequest {
-            server_address: "nu-trade.dev.dxtr.asia".into(),
+            server_address: "grpcb.in:9001".into(),
             use_tls: Some(false),
         };
         let res_false = client::discover_services(req_false).await;
@@ -129,7 +129,7 @@ mod tests {
 
         // Test 3: use_tls: Some(true)
         let req_true = rust_core::dto::GrpcReflectionRequest {
-            server_address: "nu-trade.dev.dxtr.asia".into(),
+            server_address: "grpcb.in:9001".into(),
             use_tls: Some(true),
         };
         let res_true = client::discover_services(req_true).await;
@@ -137,11 +137,11 @@ mod tests {
 
         // Test 4: execute_unary with use_tls: Some(false) recovers via fallback
         let exec_false = rust_core::dto::GrpcExecutionRequest {
-            server_address: "nu-trade.dev.dxtr.asia".into(),
-            service: "nutrade.HealthCheckAPI".into(),
-            method: "Health".into(),
+            server_address: "grpcb.in:9001".into(),
+            service: "hello.HelloService".into(),
+            method: "SayHello".into(),
             metadata: std::collections::HashMap::new(),
-            payload: serde_json::json!({}),
+            payload: serde_json::json!({"greeting": "test"}),
             timeout_ms: Some(5000),
             use_tls: Some(false),
             auth: None,
@@ -158,8 +158,8 @@ mod tests {
         assert_eq!(t1.use_tls, false);
         assert_eq!(t1.scheme_locked, false);
 
-        let t2 = client::parse_target_address("grpc://nu-trade.dev.dxtr.asia:443", None);
-        assert_eq!(t2.host_port, "nu-trade.dev.dxtr.asia:443");
+        let t2 = client::parse_target_address("grpc://grpcb.in:9001", None);
+        assert_eq!(t2.host_port, "grpcb.in:9001");
         assert_eq!(t2.use_tls, true);
         assert_eq!(t2.scheme_locked, false);
 
@@ -170,14 +170,14 @@ mod tests {
         assert_eq!(t3.scheme_locked, true);
 
         // http:// prefix forces plaintext
-        let t4 = client::parse_target_address("http://nu-trade.dev.dxtr.asia", None);
-        assert_eq!(t4.host_port, "nu-trade.dev.dxtr.asia");
+        let t4 = client::parse_target_address("http://grpcb.in:9001", None);
+        assert_eq!(t4.host_port, "grpcb.in:9001");
         assert_eq!(t4.use_tls, false);
         assert_eq!(t4.scheme_locked, true);
 
         // https:// prefix forces TLS
-        let t5 = client::parse_target_address("https://nu-trade.dev.dxtr.asia", None);
-        assert_eq!(t5.host_port, "nu-trade.dev.dxtr.asia");
+        let t5 = client::parse_target_address("https://grpcb.in:9001", None);
+        assert_eq!(t5.host_port, "grpcb.in:9001");
         assert_eq!(t5.use_tls, true);
         assert_eq!(t5.scheme_locked, true);
 
