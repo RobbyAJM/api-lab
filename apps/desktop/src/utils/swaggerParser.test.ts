@@ -277,7 +277,7 @@ test('parseSwaggerSpec: parses OpenAPI 3.x with requestBody', () => {
 test('parseSwaggerSpec: converts path variable {id} to :id and extracts path parameters', () => {
   const doc: SwaggerDoc = {
     swagger: '2.0',
-    host: 'nu-gateway.dev.dxtr.asia',
+    host: 'httpbin.org',
     basePath: '',
     schemes: ['https'],
     paths: {
@@ -307,13 +307,13 @@ test('parseSwaggerSpec: converts path variable {id} to :id and extracts path par
     },
   };
 
-  const parsed = parseSwaggerSpec(doc, 'https://nu-gateway.dev.dxtr.asia/swagger.json');
+  const parsed = parseSwaggerSpec(doc, 'https://httpbin.org/swagger.json');
   assert.equal(parsed.services.length, 1);
   const ep = parsed.services[0].endpoints[0];
   assert.equal(ep.path, '/manager/api/v1/emergency-contact-status/:id');
   assert.equal(
     ep.fullUrl,
-    'https://nu-gateway.dev.dxtr.asia/manager/api/v1/emergency-contact-status/:id'
+    'https://httpbin.org/manager/api/v1/emergency-contact-status/:id'
   );
   assert.deepEqual(ep.pathVariables, [
     ['id', '123', 'Contact identifier'],
