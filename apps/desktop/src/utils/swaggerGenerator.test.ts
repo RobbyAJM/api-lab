@@ -5,6 +5,9 @@ import {
   executeSwaggerHierarchyCreation,
   generateSwaggerCollection,
   substituteUrlVariables,
+  DEFAULT_SWAGGER_URL,
+  DEFAULT_SWAGGER_FOLDER_NAME,
+  getDefaultSwaggerConfig,
 } from './swaggerGenerator.ts';
 import type { ParsedSwaggerSpec } from './swaggerParser.ts';
 
@@ -161,3 +164,12 @@ test('generateSwaggerCollection: complete flow with mock fetch and api', async (
   assert.equal(result.createdEndpointsCount, 1);
   assert.ok(progressUpdates.length >= 3);
 });
+
+test('getDefaultSwaggerConfig: returns public httpbin test url default', () => {
+  const cfg = getDefaultSwaggerConfig();
+  assert.equal(cfg.swaggerUrl, 'https://httpbin.dmuth.org/openapi.json');
+  assert.equal(cfg.folderName, 'Swagger APIs');
+  assert.equal(DEFAULT_SWAGGER_URL, 'https://httpbin.dmuth.org/openapi.json');
+  assert.equal(DEFAULT_SWAGGER_FOLDER_NAME, 'Swagger APIs');
+});
+
