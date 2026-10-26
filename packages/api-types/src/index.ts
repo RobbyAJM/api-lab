@@ -28,6 +28,19 @@ export interface AuthResponse {
   workspace?: WorkspaceSummary;
 }
 
+export type NotificationCategory = 'direct' | 'watching' | 'all';
+
+export interface NotificationItem {
+  id: string;
+  user_id: string;
+  workspace_id?: string | null;
+  title: string;
+  message: string;
+  category: NotificationCategory;
+  read: boolean;
+  created_at: string;
+}
+
 export interface PresenceUser {
   user_id: string;
   name: string;

@@ -4,7 +4,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::{
-    auth, collections, environments, saved_responses, workspaces, ws,
+    auth, collections, environments, notifications, saved_responses, workspaces, ws,
 };
 use crate::state::SharedState;
 
@@ -26,6 +26,11 @@ pub fn create_router(state: SharedState) -> Router {
         .route("/auth/me", get(auth::get_me))
         .route("/auth/theme", patch(auth::update_theme))
         .route("/auth/profile", put(auth::update_profile).patch(auth::update_profile))
+        // Notifications
+        .route("/notifications", get(notifications::list_notifications))
+        .route("/notifications/{id}/read", patch(notifications::mark_notification_read))
+        .route("/notifications/mark-all-read", post(notifications::mark_all_notifications_read))
+        .route("/notifications/{id}", delete(notifications::delete_notification))
         // Workspaces
         .route("/workspaces", get(workspaces::list_workspaces).post(workspaces::create_workspace))
         .route(
