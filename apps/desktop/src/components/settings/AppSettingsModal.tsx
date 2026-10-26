@@ -5,36 +5,22 @@ import {
   Palette,
   Server,
   Keyboard,
-  Dices,
   Check,
   RefreshCw,
-  FlipHorizontal,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
-import { Avatar } from '../common/Avatar';
 import {
-  DICEBEAR_STYLES,
   parseAvatar,
   formatAvatar,
-  generateRandomSeed,
   type DiceBearStyle,
+  type AvatarOptions,
 } from '../../utils/dicebear';
+import { DiceBearPlayground } from './DiceBearPlayground';
 import { THEMES } from '../../utils/theme';
 import { getServerUrl, setServerUrl, testServerConnection } from '../../utils/serverConfig';
 import { getAllShortcuts } from '../../utils/shortcuts';
 import type { UserSummary } from '@api-lab/api-types';
-
-const BG_COLOR_PRESETS = [
-  { label: 'None', value: 'transparent' },
-  { label: 'Ice Blue', value: 'b6e3f4' },
-  { label: 'Lavender', value: 'c0aede' },
-  { label: 'Rose', value: 'ffd5dc' },
-  { label: 'Peach', value: 'ffdfbf' },
-  { label: 'Mint', value: 'd1fae5' },
-  { label: 'Slate', value: '1e293b' },
-  { label: 'Cobalt', value: '2563eb' },
-];
 
 export const AppSettingsModal: React.FC = () => {
   const {
@@ -53,12 +39,9 @@ export const AppSettingsModal: React.FC = () => {
 
   // Profile Form State
   const [name, setName] = useState('');
-  const [style, setStyle] = useState<DiceBearStyle>('bottts');
+  const [style, setStyle] = useState<DiceBearStyle>('croodles-neutral');
   const [seed, setSeed] = useState('api-lab');
-  const [bgColor, setBgColor] = useState('transparent');
-  const [radius, setRadius] = useState(0);
-  const [flip, setFlip] = useState(false);
-  const [rotate, setRotate] = useState(0);
+  const [avatarOptions, setAvatarOptions] = useState<AvatarOptions>({});
 
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState(false);
@@ -78,10 +61,7 @@ export const AppSettingsModal: React.FC = () => {
       const parsed = parseAvatar(user.avatar);
       setStyle(parsed.style);
       setSeed(parsed.seed);
-      setBgColor(parsed.options.backgroundColor || 'transparent');
-      setRadius(parsed.options.radius ?? 0);
-      setFlip(Boolean(parsed.options.flip));
-      setRotate(parsed.options.rotate ?? 0);
+      setAvatarOptions(parsed.options);
 
       setProfileSuccess(false);
       setProfileError(null);
@@ -93,12 +73,7 @@ export const AppSettingsModal: React.FC = () => {
   if (!appSettingsOpen) return null;
 
   const currentWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
-  const previewAvatar = formatAvatar(style, seed, {
-    backgroundColor: bgColor !== 'transparent' ? bgColor : undefined,
-    radius: radius > 0 ? radius : undefined,
-    flip,
-    rotate: rotate > 0 ? rotate : undefined,
-  });
+  const previewAvatar = formatAvatar(style, seed, avatarOptions);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,10 +99,6 @@ export const AppSettingsModal: React.FC = () => {
     } finally {
       setSavingProfile(false);
     }
-  };
-
-  const handleRandomizeSeed = () => {
-    setSeed(generateRandomSeed());
   };
 
   const handleSaveServerUrl = () => {
@@ -168,9 +139,9 @@ export const AppSettingsModal: React.FC = () => {
         if (e.target === e.currentTarget) setAppSettingsOpen(false);
       }}
     >
-      <div className="flex h-[560px] w-[820px] max-w-[95vw] rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="flex h-[650px] w-[960px] max-w-[96vw] max-h-[92vh] rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         {/* Left Sidebar Tabs */}
-        <div className="w-48 bg-zinc-900/60 border-r border-zinc-800/80 flex flex-col p-2 space-y-1">
+        <div className="w-48 bg-zinc-900/60 border-r border-zinc-800/80 flex flex-col p-2 space-y-1 flex-shrink-0">
           <div className="px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
             Settings
           </div>
@@ -229,9 +200,9 @@ export const AppSettingsModal: React.FC = () => {
         </div>
 
         {/* Right Main Content */}
-        <div className="flex-1 flex flex-col min-w-0 bg-zinc-950">
+        <div className="flex-1 flex flex-col min-w-0 bg-zinc-950 overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 flex-shrink-0">
             <h2 className="text-sm font-semibold text-zinc-100">
               {appSettingsTab === 'profile' && 'User Profile & DiceBear Playground'}
               {appSettingsTab === 'appearance' && 'Appearance & Themes'}
@@ -249,180 +220,61 @@ export const AppSettingsModal: React.FC = () => {
           </div>
 
           {/* Tab Panel */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6 min-h-0">
             {appSettingsTab === 'profile' && (
-              <form onSubmit={handleSaveProfile} className="space-y-5 max-w-lg">
-                {/* Avatar Preview Card */}
-                <div className="p-3.5 rounded-lg border border-zinc-800/80 bg-zinc-900/40 flex items-center gap-5">
-                  <div className="relative">
-                    <Avatar avatar={previewAvatar} name={name} size={72} className="ring-2 ring-zinc-700 shadow-md" />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-semibold text-zinc-200 truncate">{name || 'Your Name'}</div>
-                    <div className="text-[11px] text-zinc-500 font-mono mt-0.5 truncate">{user?.email}</div>
-                    <div className="text-[10px] text-zinc-400 bg-zinc-800/60 border border-zinc-700/60 px-2 py-0.5 rounded-full inline-block mt-2 font-mono">
-                      {style} : {seed}
-                    </div>
-                  </div>
-                </div>
-
-                {/* DiceBear Playground Controls */}
-                <div className="space-y-3.5 bg-zinc-900/20 p-4 rounded-lg border border-zinc-800/60">
-                  <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
-                    Avatar Customization (DiceBear Playground)
-                  </div>
-
-                  {/* Style & Seed */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1">
-                        Avatar Style
-                      </label>
-                      <select
-                        value={style}
-                        onChange={(e) => setStyle(e.target.value as DiceBearStyle)}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-blue-500 capitalize"
-                      >
-                        {DICEBEAR_STYLES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1">
-                        Seed
-                      </label>
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="text"
-                          value={seed}
-                          onChange={(e) => setSeed(e.target.value)}
-                          placeholder="Seed..."
-                          className="flex-1 bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-blue-500 font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleRandomizeSeed}
-                          className="px-2 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs flex items-center gap-1 transition"
-                          title="Generate random seed"
-                        >
-                          <Dices size={13} />
-                          <span>Roll</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Background Color Presets */}
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-300 mb-1.5">
-                      Background Color
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {BG_COLOR_PRESETS.map((p) => {
-                        const isSelected = bgColor === p.value;
-                        return (
-                          <button
-                            key={p.value}
-                            type="button"
-                            onClick={() => setBgColor(p.value)}
-                            className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs border transition ${
-                              isSelected
-                                ? 'border-blue-500 bg-zinc-800 text-zinc-100 ring-1 ring-blue-500'
-                                : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
-                            }`}
-                          >
-                            <span
-                              className="w-2.5 h-2.5 rounded-full border border-zinc-600 flex-shrink-0"
-                              style={{
-                                backgroundColor: p.value === 'transparent' ? 'transparent' : `#${p.value}`,
-                              }}
-                            />
-                            <span>{p.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Shape & Orientation (Radius, Flip, Rotate) */}
-                  <div className="grid grid-cols-3 gap-3 pt-1">
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1">
-                        Corner Radius ({radius}%)
+              <form onSubmit={handleSaveProfile} className="space-y-4">
+                {/* Top Profile Summary Bar */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3 bg-zinc-900/60 rounded border border-zinc-800">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-48 sm:w-64">
+                      <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+                        Display Name
                       </label>
                       <input
-                        type="range"
-                        min="0"
-                        max="50"
-                        value={radius}
-                        onChange={(e) => setRadius(parseInt(e.target.value, 10))}
-                        className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        required
+                        placeholder="Your display name"
+                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-blue-500"
                       />
                     </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-zinc-300 mb-1">
-                        Rotation
-                      </label>
-                      <select
-                        value={rotate}
-                        onChange={(e) => setRotate(parseInt(e.target.value, 10))}
-                        className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-200 focus:outline-none focus:border-blue-500 flex items-center gap-1"
-                      >
-                        <option value="0">0° Normal</option>
-                        <option value="90">90° Right</option>
-                        <option value="180">180° Inverted</option>
-                        <option value="270">270° Left</option>
-                      </select>
+                    <div className="hidden sm:block text-[11px] text-zinc-500 font-mono mt-4 truncate">
+                      {user?.email}
                     </div>
+                  </div>
 
-                    <div className="flex items-center pt-5">
-                      <label className="flex items-center gap-2 cursor-pointer text-xs text-zinc-300">
-                        <input
-                          type="checkbox"
-                          checked={flip}
-                          onChange={(e) => setFlip(e.target.checked)}
-                          className="rounded border-zinc-700 bg-zinc-900 text-blue-600 focus:ring-0"
-                        />
-                        <FlipHorizontal size={13} className="text-zinc-400" />
-                        <span>Flip Horiz.</span>
-                      </label>
-                    </div>
+                  <div className="flex items-center gap-3 justify-end flex-shrink-0">
+                    {profileError && <span className="text-xs text-red-400">{profileError}</span>}
+                    {profileSuccess && (
+                      <span className="text-xs text-emerald-400 flex items-center gap-1 font-medium">
+                        <Check size={13} />
+                        <span>Profile updated!</span>
+                      </span>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={savingProfile}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Check size={13} />
+                      <span>{savingProfile ? 'Saving...' : 'Save Profile & Avatar'}</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Display Name */}
-                <div>
-                  <label className="block text-xs font-medium text-zinc-300 mb-1">Display Name</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                {profileError && <p className="text-xs text-red-400">{profileError}</p>}
-                {profileSuccess && (
-                  <p className="text-xs text-emerald-400 flex items-center gap-1">
-                    <Check size={13} />
-                    <span>Profile updated successfully!</span>
-                  </p>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={savingProfile}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition disabled:opacity-50"
-                >
-                  {savingProfile ? 'Saving...' : 'Save Profile & Avatar'}
-                </button>
+                {/* Interactive DiceBear Playground */}
+                <DiceBearPlayground
+                  style={style}
+                  seed={seed}
+                  options={avatarOptions}
+                  onChange={(newStyle, newSeed, newOptions) => {
+                    setStyle(newStyle);
+                    setSeed(newSeed);
+                    setAvatarOptions(newOptions);
+                  }}
+                />
               </form>
             )}
 
