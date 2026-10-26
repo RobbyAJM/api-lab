@@ -244,8 +244,8 @@ export function formatCopyTrace(options: FormatCopyTraceOptions): string {
     const validParams = (params as [string, string][]).filter(([k]) => k && String(k).trim());
     if (validParams.length > 0) {
       for (const [k, v] of validParams) {
-        const paramKey = substituteVariables(k, variables);
-        const paramVal = substituteVariables(v, variables);
+        const paramKey = substituteVariables(String(k), variables);
+        const paramVal = substituteVariables(String(v ?? ''), variables);
         lines.push(`  ${paramKey}: ${paramVal}`);
       }
     } else {
@@ -257,8 +257,8 @@ export function formatCopyTrace(options: FormatCopyTraceOptions): string {
     const headerEntries = Object.entries(headers).filter(([k]) => k && k.trim());
     if (headerEntries.length > 0) {
       for (const [k, v] of headerEntries) {
-        const headerKey = substituteVariables(k, variables);
-        const headerVal = substituteVariables(v, variables);
+        const headerKey = substituteVariables(String(k), variables);
+        const headerVal = substituteVariables(String(v ?? ''), variables);
         lines.push(`  ${headerKey}: ${headerVal}`);
       }
     } else {
@@ -306,8 +306,8 @@ export function formatCopyTrace(options: FormatCopyTraceOptions): string {
     const metaEntries = Object.entries(meta).filter(([k]) => k && k.trim());
     if (metaEntries.length > 0) {
       for (const [k, v] of metaEntries) {
-        const metaKey = substituteVariables(k, variables);
-        const metaVal = substituteVariables(v, variables);
+        const metaKey = substituteVariables(String(k), variables);
+        const metaVal = substituteVariables(String(v ?? ''), variables);
         lines.push(`  ${metaKey}: ${metaVal}`);
       }
     } else {
