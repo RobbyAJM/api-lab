@@ -62,7 +62,7 @@ export function splitServiceName(serviceName: string): string[] {
 
 /**
  * Auto-detects whether an address should default to TLS.
- * Defaults to true for remote domain names (e.g. nu-trade.dev.dxtr.asia), https, and :443.
+ * Defaults to true for remote domain names (e.g. grpcb.in:9001), https, and :443.
  */
 export function shouldAutoDetectTls(addr: string, variables?: Record<string, string>): boolean {
   let clean = (addr || '').trim().toLowerCase();

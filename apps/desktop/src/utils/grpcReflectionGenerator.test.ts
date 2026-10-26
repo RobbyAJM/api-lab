@@ -70,7 +70,7 @@ test('planGrpcHierarchy: correctly builds nested folder structure case-sensitive
 
   const planned = planGrpcHierarchy({
     folderName: 'NuTrade',
-    serverAddress: 'nu-trade.dev.dxtr.asia:443',
+    serverAddress: 'grpcb.in:9001',
     services: userServices,
   });
 
@@ -208,26 +208,26 @@ test('executeGrpcHierarchyCreation: recursively creates nested folders and child
 });
 
 test('shouldAutoDetectTls: accurately detects remote domains vs local', () => {
-  assert.equal(shouldAutoDetectTls('nu-trade.dev.dxtr.asia'), true);
-  assert.equal(shouldAutoDetectTls('nu-trade.dev.dxtr.asia:443'), true);
+  assert.equal(shouldAutoDetectTls('grpcb.in'), true);
+  assert.equal(shouldAutoDetectTls('grpcb.in:9001'), true);
   assert.equal(shouldAutoDetectTls('https://my-service.com'), true);
   assert.equal(shouldAutoDetectTls('http://my-service.com'), false);
   assert.equal(shouldAutoDetectTls('grpc://localhost:50051'), false);
-  assert.equal(shouldAutoDetectTls('grpc://nu-trade.dev.dxtr.asia:443'), true);
-  assert.equal(shouldAutoDetectTls('grpc://nu-trade.dev.dxtr.asia'), true);
+  assert.equal(shouldAutoDetectTls('grpc://grpcb.in:9001'), true);
+  assert.equal(shouldAutoDetectTls('grpc://grpcb.in'), true);
   assert.equal(shouldAutoDetectTls('grpcs://localhost:50051'), true);
   assert.equal(shouldAutoDetectTls('localhost:50051'), false);
   assert.equal(shouldAutoDetectTls('127.0.0.1:3100'), false);
   // Variables resolution support
-  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'grpc://nu-trade.dev.dxtr.asia' }), true);
-  assert.equal(shouldAutoDetectTls('{{NUTRADE_GRPC_URL}}', { NUTRADE_GRPC_URL: 'grpc://localhost:9091' }), false);
+  assert.equal(shouldAutoDetectTls('{{GRPC_URL}}', { GRPC_URL: 'grpc://grpcb.in:9001' }), true);
+  assert.equal(shouldAutoDetectTls('{{LOCAL_GRPC_URL}}', { LOCAL_GRPC_URL: 'grpc://localhost:9091' }), false);
   assert.equal(shouldAutoDetectTls('{{URL}}', { url: 'https://custom.rpc.io' }), true);
 });
 
 test('planGrpcHierarchy: preserves useTls setting for remote endpoints', () => {
   const planned = planGrpcHierarchy({
     folderName: 'Remote gRPC',
-    serverAddress: 'nu-trade.dev.dxtr.asia',
+    serverAddress: 'grpcb.in:9001',
     services: mockServices,
   });
 
@@ -275,7 +275,7 @@ test('generateGrpcCollection: complete end-to-end success with mock reflection a
   const res = await generateGrpcCollection({
     collectionId: 'coll-999',
     folderName: 'NuTrade Root',
-    serverAddress: 'nu-trade.dev.dxtr.asia:443',
+    serverAddress: 'grpcb.in:9001',
     timeoutMs: 5000,
     discoverServices: async () => ({ services: mockServices }),
     generateSamplePayload: async (req) => ({ payload: { method: req.method } }),
