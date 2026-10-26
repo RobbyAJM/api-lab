@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
-import { generateSwaggerCollection } from '../../utils/swaggerGenerator';
+import {
+  generateSwaggerCollection,
+  DEFAULT_SWAGGER_URL,
+  DEFAULT_SWAGGER_FOLDER_NAME,
+} from '../../utils/swaggerGenerator';
 import { VariableInput } from '../common/VariableInput';
 import { X, RefreshCw, FolderPlus, Globe, CheckCircle2 } from 'lucide-react';
 import type { VariableResponse } from '@api-lab/api-types';
@@ -20,8 +24,8 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
   activeEnvironmentId,
 }) => {
   const queryClient = useQueryClient();
-  const [swaggerUrl, setSwaggerUrl] = useState('http://localhost:9090/swagger/combined/nutrade.swagger.json');
-  const [folderName, setFolderName] = useState('Swagger APIs');
+  const [swaggerUrl, setSwaggerUrl] = useState(DEFAULT_SWAGGER_URL);
+  const [folderName, setFolderName] = useState(DEFAULT_SWAGGER_FOLDER_NAME);
   const [loading, setLoading] = useState(false);
   const [statusText, setStatusText] = useState<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -197,7 +201,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
                 onChange={setSwaggerUrl}
                 variables={activeVariables}
                 disabled={loading}
-                placeholder="http://localhost:9090/swagger/combined/nutrade.swagger.json"
+                placeholder={DEFAULT_SWAGGER_URL}
                 className="w-full h-full"
               />
             </div>
