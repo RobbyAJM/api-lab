@@ -106,7 +106,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_probe_nutrade_discovery() {
+    async fn test_probe_grpcbin_discovery() {
         if std::net::TcpStream::connect("grpcb.in:9001").is_err() {
             return;
         }
@@ -138,10 +138,10 @@ mod tests {
         // Test 4: execute_unary with use_tls: Some(false) recovers via fallback
         let exec_false = rust_core::dto::GrpcExecutionRequest {
             server_address: "grpcb.in:9001".into(),
-            service: "nutrade.HealthCheckAPI".into(),
-            method: "Health".into(),
+            service: "hello.HelloService".into(),
+            method: "SayHello".into(),
             metadata: std::collections::HashMap::new(),
-            payload: serde_json::json!({}),
+            payload: serde_json::json!({"greeting": "test"}),
             timeout_ms: Some(5000),
             use_tls: Some(false),
             auth: None,
