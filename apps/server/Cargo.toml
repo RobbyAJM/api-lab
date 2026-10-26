@@ -2,6 +2,7 @@
 name = "api-lab-server"
 version = "0.1.0"
 edition = "2021"
+default-run = "api-lab-server"
 
 [dependencies]
 rust-core = { workspace = true }
