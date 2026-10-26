@@ -8,6 +8,12 @@ export interface UserSummary {
   name: string;
   role: string;
   theme?: string;
+  avatar?: string;
+}
+
+export interface UpdateProfileDto {
+  name?: string;
+  avatar?: string;
 }
 
 export interface WorkspaceSummary {

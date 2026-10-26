@@ -37,6 +37,13 @@ pub struct UserSummary {
     pub name: String,
     pub role: String,
     pub theme: String,
+    pub avatar: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProfileDto {
+    pub name: Option<String>,
+    pub avatar: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
