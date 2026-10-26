@@ -4,6 +4,12 @@ import { ChevronDown, Check, Settings } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Environment } from '@api-lab/api-types';
+import {
+  getEnvironmentDropdownSizeClass,
+  getEnvironmentDropdownTitle,
+  getEnvironmentDropdownLabel,
+  findActiveEnvironment,
+} from '../../utils/environmentDropdown';
 
 // ponytail: environment search filter skipped; add when workspaces exceed 20 environments.
 
@@ -51,7 +57,7 @@ export function EnvironmentDropdown({
   });
 
   const environments = propEnvironments || fetchedEnvironments;
-  const activeEnv = environments.find((e) => e.id === activeEnvironmentId);
+  const activeEnv = findActiveEnvironment(environments, activeEnvironmentId);
 
   // Close on outside click
   useEffect(() => {
@@ -78,12 +84,7 @@ export function EnvironmentDropdown({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  const sizeClasses =
-    size === 'xs'
-      ? 'px-2 py-0.5 text-[11px]'
-      : size === 'sm'
-      ? 'px-2.5 py-1 text-xs'
-      : 'px-3 py-1.5 text-xs';
+  const sizeClasses = getEnvironmentDropdownSizeClass(size);
 
   return (
     <div ref={containerRef} className={`relative inline-block ${className}`}>
@@ -94,7 +95,7 @@ export function EnvironmentDropdown({
         className={`flex items-center gap-2 bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-zinc-700 text-zinc-200 rounded-md font-mono transition cursor-pointer select-none group focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600/40 ${sizeClasses} ${
           isOpen ? 'border-zinc-700 bg-zinc-850 ring-1 ring-zinc-700/50' : ''
         }`}
-        title={activeEnv ? `Active Environment: ${activeEnv.name}` : 'No Environment active'}
+        title={getEnvironmentDropdownTitle(activeEnv)}
       >
         <div className="flex items-center gap-1.5 min-w-0">
           <span
@@ -105,7 +106,7 @@ export function EnvironmentDropdown({
             }`}
           />
           <span className={`truncate max-w-[120px] font-medium ${!activeEnv ? 'text-zinc-400' : 'text-zinc-200'}`}>
-            {activeEnv ? activeEnv.name : 'No Environment'}
+            {getEnvironmentDropdownLabel(activeEnv)}
           </span>
         </div>
         <ChevronDown
