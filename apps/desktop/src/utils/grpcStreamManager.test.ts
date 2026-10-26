@@ -162,7 +162,7 @@ test('createStreamMessage: distinguishes in vs out message entries and payloads'
   assert.deepEqual(inMsg.payload, inPayload);
 });
 
-test('prependStreamMessage: places newest message at index 0 (standard prepend)', () => {
+test('prependStreamMessage: places newest message at index 0 (newest-first prepend)', () => {
   const msg1 = createStreamMessage({ tick: 1 }, 'in', () => 'id-1', () => '2026-10-22T13:58:00.100Z');
   const msg2 = createStreamMessage({ tick: 2 }, 'in', () => 'id-2', () => '2026-10-22T13:58:00.200Z');
   const msg3 = createStreamMessage({ tick: 3 }, 'in', () => 'id-3', () => '2026-10-22T13:58:00.300Z');

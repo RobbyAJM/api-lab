@@ -42,7 +42,7 @@ test('formatStatusCode handles HTTP codes', () => {
   assert.equal(redirect.isWarning, true);
 });
 
-test('formatStatusCode handles gRPC codes standard', () => {
+test('formatStatusCode handles gRPC codes with standard status label', () => {
   const ok = formatStatusCode('grpc', 0, 'OK');
   assert.equal(ok.label, '0 OK');
   assert.equal(ok.isSuccess, true);

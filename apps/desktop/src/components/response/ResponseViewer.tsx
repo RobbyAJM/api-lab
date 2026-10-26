@@ -305,7 +305,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
         </div>
       )}
 
-      {/* Unified Compact Header Bar (Compact Style) */}
+      {/* Unified Compact Header Bar */}
       <div className="h-10 px-3 bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between text-xs select-none flex-shrink-0 gap-3">
         {/* Left: Navigation Tabs */}
         <div className="flex items-center gap-1 sm:gap-2 h-full">
@@ -630,7 +630,7 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           </div>
         )}
 
-        {/* Stream Messages Tab (High-Density Compact Style) */}
+        {/* Stream Messages Tab (High-Density Workbench Style) */}
         {activeTab === 'stream' && (
           <div className="relative flex flex-col h-full">
             {/* Sticky Stream Toolbar */}

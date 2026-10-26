@@ -133,18 +133,18 @@ test('sortThemes: pins api-lab to top, then dark themes A-Z, then light themes A
 });
 
 test('resolveThemeVariables: resolves sampled solar-dark and solar-light themes', () => {
-  const workbenchDark = getThemeById('solar-dark');
-  assert.equal(workbenchDark.id, 'solar-dark');
-  const darkVars = resolveThemeVariables(workbenchDark);
+  const solarDark = getThemeById('solar-dark');
+  assert.equal(solarDark.id, 'solar-dark');
+  const darkVars = resolveThemeVariables(solarDark);
   assert.equal(darkVars['--color-zinc-950'], '24 24 24'); // #181818
   assert.equal(darkVars['--color-zinc-900'], '33 33 33'); // #212121
   assert.equal(darkVars['--color-primary'], '2 101 220'); // #0265dc
   assert.equal(darkVars['--color-secondary'], '255 108 55'); // #ff6c37
 
-  const workbenchLight = getThemeById('solar-light');
-  assert.equal(workbenchLight.id, 'solar-light');
-  assert.equal(workbenchLight.isLight, true);
-  const lightVars = resolveThemeVariables(workbenchLight);
+  const solarLight = getThemeById('solar-light');
+  assert.equal(solarLight.id, 'solar-light');
+  assert.equal(solarLight.isLight, true);
+  const lightVars = resolveThemeVariables(solarLight);
   assert.equal(lightVars['--color-zinc-950'], '255 255 255'); // #ffffff
   assert.equal(lightVars['--color-zinc-900'], '247 247 247'); // #f7f7f7
   assert.equal(lightVars['--color-primary'], '2 101 220'); // #0265dc

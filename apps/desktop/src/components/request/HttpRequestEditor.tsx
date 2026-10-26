@@ -96,7 +96,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     initialConfig.auth || { auth_type: 'none' }
   );
 
-  // Hook Scripts state (standard JavaScript)
+  // Hook Scripts state (JavaScript hooks)
   const [preRequestScript, setPreRequestScript] = useState<string>(
     initialConfig.pre_request_script || ''
   );

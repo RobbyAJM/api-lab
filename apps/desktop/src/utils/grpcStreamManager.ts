@@ -89,7 +89,7 @@ export interface StreamMessageRecord {
 }
 
 /**
- * Prepends a new stream message to maintain newest-on-top ordering (standard).
+ * Prepends a new stream message to maintain newest-on-top ordering (newest-first).
  */
 export function prependStreamMessage<T>(list: T[] = [], item: T): T[] {
   return [item, ...list];

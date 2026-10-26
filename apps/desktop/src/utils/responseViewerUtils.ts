@@ -30,7 +30,7 @@ export interface StatusBadgeInfo {
 }
 
 /**
- * Formats HTTP or gRPC status code into a standard label and tone.
+ * Formats HTTP or gRPC status code into a standard status label and tone.
  */
 export function formatStatusCode(
   protocol: 'http' | 'grpc',

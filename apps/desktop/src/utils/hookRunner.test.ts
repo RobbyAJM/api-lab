@@ -19,7 +19,7 @@ test('HTTP Before Hook: modifies url, headers, and sets environment variables', 
   const initialVars = { API_KEY: 'secret123' };
 
   const script = `
-    // standard API
+    // Script hook API
     pm.request.headers['Authorization'] = 'Bearer ' + pm.variables.get('API_KEY');
     pm.environment.set('TIMESTAMP', '1600000000');
     console.log('Attached authorization token');
