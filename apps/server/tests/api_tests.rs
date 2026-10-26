@@ -934,3 +934,98 @@ async fn test_user_avatar_and_profile_update() {
     assert_eq!(me["user"]["name"].as_str().unwrap(), "Avatar Pro");
     assert_eq!(me["user"]["avatar"].as_str().unwrap(), "lorelei:cool-seed");
 }
+
+#[tokio::test]
+async fn test_notifications_crud_and_invite_notification() {
+    let app = setup_app().await;
+
+    // 1. Register User A
+    let email_a = format!("inviter_{}@example.com", Uuid::new_v4());
+    let reg_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email_a,
+                "name": "User A",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let auth_a: AuthResponse = parse_body(res.into_body()).await;
+    let token_a = auth_a.token;
+    let ws_id = auth_a.workspace.unwrap().id;
+
+    // 2. User A creates invitation for User B
+    let invite_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/workspaces/{ws_id}/invitations"))
+        .header(header::AUTHORIZATION, format!("Bearer {token_a}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "role": "developer" }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(invite_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let invite_body: InvitationResponse = parse_body(res.into_body()).await;
+    let invite_token = invite_body.token.unwrap();
+
+    // 3. User B accepts invitation
+    let email_b = format!("invitee_{}@example.com", Uuid::new_v4());
+    let accept_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/invitations/accept")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email_b,
+                "name": "User B",
+                "password": "Password123!",
+                "invitation_token": invite_token
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(accept_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 4. User A checks notifications -> should see User B accepted invitation
+    let notifs_req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/notifications")
+        .header(header::AUTHORIZATION, format!("Bearer {token_a}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(notifs_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let notifs: Vec<NotificationItem> = parse_body(res.into_body()).await;
+    assert!(!notifs.is_empty());
+    let notif = notifs.into_iter().find(|n| n.title.contains("joined")).expect("expected joined notification");
+    assert!(!notif.read);
+    assert_eq!(notif.category, "direct");
+
+    // 5. Mark notification as read
+    let mark_read_req = Request::builder()
+        .method("PATCH")
+        .uri(format!("/api/v1/notifications/{}/read", notif.id))
+        .header(header::AUTHORIZATION, format!("Bearer {token_a}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(mark_read_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let marked: NotificationItem = parse_body(res.into_body()).await;
+    assert!(marked.read);
+
+    // 6. Delete notification
+    let delete_req = Request::builder()
+        .method("DELETE")
+        .uri(format!("/api/v1/notifications/{}", notif.id))
+        .header(header::AUTHORIZATION, format!("Bearer {token_a}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(delete_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+}
