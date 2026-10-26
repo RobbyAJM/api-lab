@@ -6,6 +6,7 @@ import {
   getDiceBearUrl,
   generateRandomSeed,
 } from './dicebear.ts';
+import { sanitizeExtraComponents } from './dicebearSchema.ts';
 
 test('parseAvatar: defaults to bottts:api-lab on null or empty', () => {
   assert.deepEqual(parseAvatar(null), { style: 'bottts', seed: 'api-lab', options: {} });
@@ -14,36 +15,90 @@ test('parseAvatar: defaults to bottts:api-lab on null or empty', () => {
 });
 
 test('parseAvatar: parses style, seed and query options', () => {
-  const parsed = parseAvatar('lorelei:Felix?backgroundColor=b6e3f4&radius=20&flip=true&rotate=90');
+  const parsed = parseAvatar('lorelei:Felix?backgroundColor=b6e3f4&radius=20&flip=true&rotate=90&scale=120&eyes=variant01');
   assert.equal(parsed.style, 'lorelei');
   assert.equal(parsed.seed, 'Felix');
   assert.equal(parsed.options.backgroundColor, 'b6e3f4');
   assert.equal(parsed.options.radius, 20);
   assert.equal(parsed.options.flip, true);
   assert.equal(parsed.options.rotate, 90);
+  assert.equal(parsed.options.scale, 120);
+  assert.deepEqual(parsed.options.extra, { eyes: 'variant01' });
+});
+
+test('parseAvatar: parses full DiceBear HTTP CDN URLs seamlessly', () => {
+  const parsed = parseAvatar('https://api.dicebear.com/9.x/avataaars/svg?seed=John%20Doe&radius=15&scale=115&eyes=closed');
+  assert.equal(parsed.style, 'avataaars');
+  assert.equal(parsed.seed, 'John Doe');
+  assert.equal(parsed.options.radius, 15);
+  assert.equal(parsed.options.scale, 115);
+  assert.deepEqual(parsed.options.extra, { eyes: 'closed' });
+});
+
+test('parseAvatar: drops incompatible or invalid variants on parse', () => {
+  // eyes=close is invalid in avataaars (must be 'closed')
+  const parsed = parseAvatar('avataaars:Felix?eyes=close');
+  assert.equal(parsed.style, 'avataaars');
+  assert.equal(parsed.seed, 'Felix');
+  assert.deepEqual(parsed.options.extra, undefined);
+});
+
+test('sanitizeExtraComponents: validates components strictly against style schema', () => {
+  // bottts allows 'eva' but rejects 'variant01'
+  const botttsSanitized = sanitizeExtraComponents('bottts', {
+    eyes: 'variant01',
+    mouth: 'bite',
+  });
+  assert.deepEqual(botttsSanitized, { mouth: 'bite' });
+
+  // avataaars allows 'closed' and 'default'
+  const avataaarsSanitized = sanitizeExtraComponents('avataaars', {
+    eyes: 'closed',
+    mouth: 'default',
+    invalidComponent: 'abc',
+  });
+  assert.deepEqual(avataaarsSanitized, { eyes: 'closed', mouth: 'default' });
 });
 
 test('formatAvatar: produces style:seed with options query string', () => {
-  const formatted = formatAvatar('lorelei', 'Felix', {
+  const formatted = formatAvatar('croodles-neutral', 'Felix', {
     backgroundColor: 'b6e3f4',
     radius: 20,
     flip: true,
+    scale: 110,
+    extra: { eyes: 'variant02', mouth: 'variant05' },
   });
-  assert.equal(
-    formatted,
-    'lorelei:Felix?backgroundColor=b6e3f4&radius=20&flip=true'
-  );
+  assert.ok(formatted.startsWith('croodles-neutral:Felix?'));
+  assert.ok(formatted.includes('backgroundColor=b6e3f4'));
+  assert.ok(formatted.includes('radius=20'));
+  assert.ok(formatted.includes('flip=true'));
+  assert.ok(formatted.includes('scale=110'));
+  assert.ok(formatted.includes('eyes=variant02'));
+  assert.ok(formatted.includes('mouth=variant05'));
 });
 
-test('getDiceBearUrl: generates expected URL with parameters', () => {
-  const url = getDiceBearUrl('lorelei', 'Felix', {
+test('getDiceBearUrl: generates expected URL and strips invalid variants to prevent 400 Fastify error', () => {
+  // variant01 is invalid in bottts, so getDiceBearUrl omits it
+  const botttsUrl = getDiceBearUrl('bottts', 'Felix', {
+    extra: { eyes: 'variant01', mouth: 'bite' },
+  });
+  assert.ok(botttsUrl.includes('https://api.dicebear.com/9.x/bottts/svg?'));
+  assert.ok(botttsUrl.includes('mouth=bite'));
+  assert.ok(!botttsUrl.includes('eyes=variant01'));
+
+  // variant01 is valid in croodles-neutral
+  const croodlesUrl = getDiceBearUrl('croodles-neutral', 'Felix', {
     backgroundColor: 'b6e3f4',
     radius: 50,
+    scale: 120,
+    extra: { eyes: 'variant01' },
   });
-  assert.ok(url.includes('https://api.dicebear.com/9.x/lorelei/svg?'));
-  assert.ok(url.includes('seed=Felix'));
-  assert.ok(url.includes('backgroundColor=b6e3f4'));
-  assert.ok(url.includes('radius=50'));
+  assert.ok(croodlesUrl.includes('https://api.dicebear.com/9.x/croodles-neutral/svg?'));
+  assert.ok(croodlesUrl.includes('seed=Felix'));
+  assert.ok(croodlesUrl.includes('backgroundColor=b6e3f4'));
+  assert.ok(croodlesUrl.includes('radius=50'));
+  assert.ok(croodlesUrl.includes('scale=120'));
+  assert.ok(croodlesUrl.includes('eyes=variant01'));
 });
 
 test('generateRandomSeed: returns non-empty random string', () => {
