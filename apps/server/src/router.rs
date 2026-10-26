@@ -1,4 +1,4 @@
-use axum::routing::{delete, get, patch, post};
+use axum::routing::{delete, get, patch, post, put};
 use axum::Router;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -25,6 +25,7 @@ pub fn create_router(state: SharedState) -> Router {
         .route("/auth/reset-password", post(auth::reset_password))
         .route("/auth/me", get(auth::get_me))
         .route("/auth/theme", patch(auth::update_theme))
+        .route("/auth/profile", put(auth::update_profile).patch(auth::update_profile))
         // Workspaces
         .route("/workspaces", get(workspaces::list_workspaces).post(workspaces::create_workspace))
         .route(
