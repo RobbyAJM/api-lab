@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Avatar } from '../common/Avatar';
-import { sortPresenceUsers, getAvatarStackPreview } from '../../utils/presence';
+import { sortPresenceUsers, filterOtherPresenceUsers, getAvatarStackPreview } from '../../utils/presence';
 
 export const OnlineUsersPopover: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -9,8 +9,9 @@ export const OnlineUsersPopover: React.FC = () => {
   const onlineUsers = useAppStore((s) => s.onlineUsers);
   const currentUser = useAppStore((s) => s.user);
 
+  const otherUsers = filterOtherPresenceUsers(onlineUsers, currentUser?.id);
   const sortedUsers = sortPresenceUsers(onlineUsers, currentUser?.id);
-  const { visible, overflowCount } = getAvatarStackPreview(sortedUsers, 3);
+  const { visible, overflowCount } = getAvatarStackPreview(otherUsers, 3);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -26,7 +27,7 @@ export const OnlineUsersPopover: React.FC = () => {
     };
   }, [open]);
 
-  if (onlineUsers.length === 0) {
+  if (otherUsers.length === 0) {
     return null;
   }
 
