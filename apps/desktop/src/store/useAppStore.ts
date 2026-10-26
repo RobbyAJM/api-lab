@@ -59,6 +59,8 @@ interface AppState {
   lastGrpcResponse: GrpcExecutionResponse | null;
   httpResponses: Record<string, HttpExecutionResponse>;
   grpcResponses: Record<string, GrpcExecutionResponse>;
+  executingEndpoints: Record<string, { startTime: number }>;
+  setEndpointExecuting: (endpointId: string, executing: boolean) => void;
 
   // Streaming state
   isStreaming: boolean;
@@ -204,6 +206,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastGrpcResponse: null,
   httpResponses: {},
   grpcResponses: {},
+  executingEndpoints: {},
+  setEndpointExecuting: (endpointId, executing) =>
+    set((state) => {
+      const next = { ...state.executingEndpoints };
+      if (executing) {
+        next[endpointId] = { startTime: Date.now() };
+      } else {
+        delete next[endpointId];
+      }
+      return { executingEndpoints: next };
+    }),
 
   isStreaming: false,
   activeStreamId: null,
