@@ -306,6 +306,30 @@ pub struct GrpcSamplePayloadResponse {
 }
 
 // WebSocket Event DTO
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PresenceUser {
+    pub user_id: Uuid,
+    pub name: String,
+    pub email: String,
+    pub avatar: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum PresenceEvent {
+    Join {
+        workspace_id: Uuid,
+        user: PresenceUser,
+    },
+    Leave {
+        workspace_id: Uuid,
+        user_id: Uuid,
+    },
+    Notification {
+        workspace_id: Uuid,
+        notification: serde_json::Value,
+    },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WsSyncEvent {
     pub workspace_id: Uuid,
