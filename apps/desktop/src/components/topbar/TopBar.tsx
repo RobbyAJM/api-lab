@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   ChevronDown,
   ArrowLeft,
@@ -19,6 +19,16 @@ export const TopBar: React.FC = () => {
   const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen);
   const setMembersModalOpen = useAppStore((s) => s.setMembersModalOpen);
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
+  const lastToggleRef = useRef(0);
+
+  const toggleMaximize = () => {
+    const now = Date.now();
+    if (now - lastToggleRef.current < 300) return;
+    lastToggleRef.current = now;
+    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
+      invoke('toggle_maximize_window').catch(() => {});
+    }
+  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -26,13 +36,51 @@ export const TopBar: React.FC = () => {
     if (target.closest('button, input, select, textarea, [data-tauri-no-drag]')) {
       return;
     }
-    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
-      getCurrentWindow()
-        .startDragging()
-        .catch(() => {
-          invoke('start_dragging_window').catch(() => {});
-        });
+
+    if (typeof window === 'undefined' || !window.__TAURI_INTERNALS__) {
+      return;
     }
+
+    // Double-click toggle maximize
+    if (e.detail === 2) {
+      toggleMaximize();
+      return;
+    }
+
+    // Drag detection on move threshold to allow clean single & double clicks
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startScreenX = e.screenX;
+    const startScreenY = e.screenY;
+    let hasStartedDrag = false;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (hasStartedDrag) return;
+      const dx = Math.abs(moveEvent.clientX - startX);
+      const dy = Math.abs(moveEvent.clientY - startY);
+      if (dx > 4 || dy > 4) {
+        hasStartedDrag = true;
+        cleanup();
+        invoke('start_dragging_window', {
+          screenX: moveEvent.screenX || startScreenX,
+          screenY: moveEvent.screenY || startScreenY,
+        }).catch(() => {
+          getCurrentWindow().startDragging().catch(() => {});
+        });
+      }
+    };
+
+    const onMouseUp = () => {
+      cleanup();
+    };
+
+    const cleanup = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
@@ -40,14 +88,11 @@ export const TopBar: React.FC = () => {
     if (target.closest('button, input, select, textarea, [data-tauri-no-drag]')) {
       return;
     }
-    if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) {
-      invoke('toggle_maximize_window').catch(() => {});
-    }
+    toggleMaximize();
   };
 
   return (
     <header
-      data-tauri-drag-region
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
       className="h-9 w-full bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between px-2 select-none flex-shrink-0 z-30 cursor-default"
@@ -88,7 +133,6 @@ export const TopBar: React.FC = () => {
 
       {/* Flexible Drag Region between left and center */}
       <div
-        data-tauri-drag-region
         className="flex-1 h-full min-w-4 cursor-default"
       />
 
@@ -112,7 +156,6 @@ export const TopBar: React.FC = () => {
 
       {/* Flexible Drag Region between center and right */}
       <div
-        data-tauri-drag-region
         className="flex-1 h-full min-w-4 cursor-default"
       />
 
