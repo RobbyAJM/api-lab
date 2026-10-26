@@ -475,18 +475,30 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                     autoFocus
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Filter..."
-                    className="w-28 sm:w-36 bg-zinc-900 border border-zinc-800 focus:border-zinc-700 rounded py-0.5 pl-6 pr-5 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none"
+                    className="w-28 sm:w-36 bg-zinc-900 border border-zinc-800 focus:border-zinc-700 rounded py-0.5 pl-6 pr-10 text-xs font-mono text-zinc-200 placeholder-zinc-500 focus:outline-none"
                   />
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setShowSearchInput(false);
-                    }}
-                    className="absolute right-1 text-zinc-500 hover:text-zinc-300 p-0.5"
-                    title="Close search"
-                  >
-                    <X size={10} />
-                  </button>
+                  <div className="absolute right-1 flex items-center gap-1">
+                    {activeTab === 'body' && bodyMatchesCount > 0 && (
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        {bodyMatchesCount}
+                      </span>
+                    )}
+                    {activeTab === 'saved' && savedMatchesCount > 0 && (
+                      <span className="text-[10px] text-zinc-400 font-mono">
+                        {savedMatchesCount}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        setSearchQuery('');
+                        setShowSearchInput(false);
+                      }}
+                      className="text-zinc-500 hover:text-zinc-300 p-0.5"
+                      title="Close search"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <button
