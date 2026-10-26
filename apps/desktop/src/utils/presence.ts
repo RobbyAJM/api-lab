@@ -19,6 +19,20 @@ export function sortPresenceUsers(
   });
 }
 
+// ponytail: basic user id filter, add role/channel filtering if workspace permissions expand
+export function filterOtherPresenceUsers(
+  users: PresenceUser[],
+  currentUserId?: string
+): PresenceUser[] {
+  const dedupedMap = new Map<string, PresenceUser>();
+  for (const u of users) {
+    if (!currentUserId || u.user_id !== currentUserId) {
+      dedupedMap.set(u.user_id, u);
+    }
+  }
+  return Array.from(dedupedMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function mergePresenceJoin(
   existing: PresenceUser[],
   user: PresenceUser

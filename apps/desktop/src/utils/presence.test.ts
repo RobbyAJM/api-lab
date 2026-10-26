@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   sortPresenceUsers,
+  filterOtherPresenceUsers,
   mergePresenceJoin,
   mergePresenceLeave,
   getAvatarStackPreview,
@@ -58,4 +59,22 @@ test('getAvatarStackPreview: slices max items and computes overflow', () => {
   const p2 = getAvatarStackPreview([u1, u2, u3, { ...u1, user_id: 'u4' }], 3);
   assert.equal(p2.visible.length, 3);
   assert.equal(p2.overflowCount, 1);
+});
+
+test('filterOtherPresenceUsers: returns empty list when only current user is online', () => {
+  const others = filterOtherPresenceUsers([u1], 'u1');
+  assert.equal(others.length, 0);
+});
+
+test('filterOtherPresenceUsers: excludes current user and sorts others alphabetically', () => {
+  const others = filterOtherPresenceUsers([u1, u2, u3], 'u3');
+  assert.equal(others.length, 2);
+  assert.equal(others[0].user_id, 'u2'); // Alice
+  assert.equal(others[1].user_id, 'u1'); // Charlie
+  assert.ok(!others.some((u) => u.user_id === 'u3'));
+});
+
+test('filterOtherPresenceUsers: returns all users deduplicated when currentUserId is omitted', () => {
+  const others = filterOtherPresenceUsers([u1, u2, u1]);
+  assert.equal(others.length, 2);
 });
