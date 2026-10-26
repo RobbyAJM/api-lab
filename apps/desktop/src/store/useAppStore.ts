@@ -67,6 +67,8 @@ interface AppState {
   activeStreamId: string | null;
   streamingEndpointId: string | null;
   streamMessages: StreamMessageItem[];
+  backendUnavailable: boolean;
+  setBackendUnavailable: (unavailable: boolean) => void;
   setIsStreaming: (
     isStreaming: boolean,
     streamId?: string | null,
@@ -222,6 +224,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   activeStreamId: null,
   streamingEndpointId: null,
   streamMessages: [],
+  backendUnavailable: false,
+  setBackendUnavailable: (unavailable) => set({ backendUnavailable: unavailable }),
   setIsStreaming: (isStreaming, streamId = null, endpointId = null) =>
     set({
       isStreaming,
