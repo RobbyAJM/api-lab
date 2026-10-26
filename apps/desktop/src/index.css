@@ -58,3 +58,27 @@ input, textarea, select {
 ::-webkit-scrollbar-thumb:hover {
   background: rgb(var(--color-zinc-700));
 }
+
+@keyframes responseProgressMove {
+  0% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(0%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.response-progress-gradient {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(var(--color-primary)) 50%,
+    rgb(var(--color-secondary, var(--color-primary))) 75%,
+    transparent 100%
+  );
+  animation: responseProgressMove 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+

@@ -38,6 +38,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     clearEndpointDraft,
     openFolderSettingsModal,
     openCollectionSettingsModal,
+    setEndpointExecuting,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -346,6 +347,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   async function handleSend() {
     saveChanges({ silent: true });
     setSending(true);
+    setEndpointExecuting(endpoint.id, true);
     setStatusMessage(null);
 
     const headerMap: Record<string, string> = {};
@@ -446,6 +448,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
        }, endpoint.id);
     } finally {
       setSending(false);
+      setEndpointExecuting(endpoint.id, false);
     }
   }
 
