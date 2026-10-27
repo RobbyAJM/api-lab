@@ -169,7 +169,7 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Collections & Folders List */}
-      <div className="flex-1 overflow-y-auto px-2 space-y-1">
+      <div className="flex-1 overflow-y-auto pl-2 pr-1.5 space-y-1 min-h-0">
         {collections.map((coll) => (
           <CollectionNode
             key={coll.id}
@@ -207,7 +207,7 @@ export const Sidebar: React.FC = () => {
       {/* Horizontal Resizable Splitter Handle (New Feature 2) */}
       <div
         onMouseDown={startResizing}
-        className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize hover:bg-zinc-700 active:bg-zinc-600 transition-colors z-40"
+        className="absolute top-0 -right-1 bottom-0 w-2 cursor-col-resize hover:bg-zinc-700/60 active:bg-zinc-600 transition-colors z-40"
         title="Drag to resize sidebar width"
       />
 
