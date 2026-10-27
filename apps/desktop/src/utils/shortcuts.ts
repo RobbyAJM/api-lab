@@ -45,6 +45,13 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     category: 'General',
   },
   {
+    id: 'open_settings',
+    keyLabel: 'Ctrl + ,',
+    macKeyLabel: '⌘ + ,',
+    description: 'Open App Settings dialog',
+    category: 'General',
+  },
+  {
     id: 'close_tab',
     keyLabel: 'Ctrl + W',
     macKeyLabel: '⌘ + W',
@@ -126,6 +133,8 @@ export function matchesShortcut(event: KeyboardEventLike, shortcutId: string): b
       return isMod && (key === '/' || key === '?');
     case 'open_environment':
       return isMod && (key === 'e' || key === 'E');
+    case 'open_settings':
+      return isMod && !event.shiftKey && !event.altKey && key === ',';
     case 'close_tab':
       return isMod && !event.shiftKey && !event.altKey && (key === 'w' || key === 'W');
     case 'close_other_tabs':

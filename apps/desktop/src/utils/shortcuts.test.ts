@@ -30,6 +30,10 @@ test('getAllShortcuts: returns registered shortcuts list', () => {
   const help = shortcuts.find((s) => s.id === 'open_shortcuts');
   assert.ok(help);
   assert.equal(help.keyLabel, 'Ctrl + /');
+  const settings = shortcuts.find((s) => s.id === 'open_settings');
+  assert.ok(settings);
+  assert.equal(settings.keyLabel, 'Ctrl + ,');
+  assert.equal(settings.macKeyLabel, '⌘ + ,');
 });
 
 test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
@@ -57,6 +61,13 @@ test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
   // open_environment: Ctrl+E or Cmd+E
   assert.equal(matchesShortcut({ key: 'e', ctrlKey: true }, 'open_environment'), true);
   assert.equal(matchesShortcut({ key: 'E', metaKey: true }, 'open_environment'), true);
+
+  // open_settings: Ctrl+, or Cmd+,
+  assert.equal(matchesShortcut({ key: ',', ctrlKey: true }, 'open_settings'), true);
+  assert.equal(matchesShortcut({ key: ',', metaKey: true }, 'open_settings'), true);
+  assert.equal(matchesShortcut({ key: ',' }, 'open_settings'), false);
+  assert.equal(matchesShortcut({ key: ',', ctrlKey: true, shiftKey: true }, 'open_settings'), false);
+  assert.equal(matchesShortcut({ key: ',', ctrlKey: true, altKey: true }, 'open_settings'), false);
 
   // close_tab: Ctrl+W or Cmd+W (without Shift or Alt)
   assert.equal(matchesShortcut({ key: 'w', ctrlKey: true }, 'close_tab'), true);

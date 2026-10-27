@@ -61,8 +61,6 @@ export const Sidebar: React.FC = () => {
     setAppSettingsTab,
   } = useAppStore();
 
-  const [newCollectionName, setNewCollectionName] = useState('');
-  const [showAddCollection, setShowAddCollection] = useState(false);
   const searchQuery = '';
   const [collapseSignal, setCollapseSignal] = useState(0);
 
@@ -129,20 +127,6 @@ export const Sidebar: React.FC = () => {
     enabled: !!activeWorkspaceId,
   });
 
-  // Create Collection
-  const createCollectionMutation = useMutation({
-    mutationFn: (name: string) =>
-      apiRequest<Collection>(`/workspaces/${activeWorkspaceId}/collections`, {
-        method: 'POST',
-        body: JSON.stringify({ name }),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['collections', activeWorkspaceId] });
-      setNewCollectionName('');
-      setShowAddCollection(false);
-    },
-  });
-
   // Delete Collection
   const [collectionToDelete, setCollectionToDelete] = useState<{ id: string; name: string } | null>(null);
   const deleteCollectionMutation = useMutation({
@@ -181,36 +165,8 @@ export const Sidebar: React.FC = () => {
           >
             <ChevronsDownUp size={13} />
           </button>
-          <button
-            onClick={() => setShowAddCollection(!showAddCollection)}
-            className="hover:text-zinc-200 p-0.5 rounded transition"
-            title="New Collection"
-          >
-            <Plus size={13} />
-          </button>
         </div>
       </div>
-
-      {showAddCollection && (
-        <div className="px-3 pb-2 flex gap-1">
-          <input
-            type="text"
-            value={newCollectionName}
-            onChange={(e) => setNewCollectionName(e.target.value)}
-            placeholder="Collection name..."
-            className="flex-1 bg-zinc-900 border border-zinc-700/60 rounded px-2 py-0.5 text-xs text-zinc-200"
-          />
-          <button
-            onClick={() =>
-              newCollectionName.trim() &&
-              createCollectionMutation.mutate(newCollectionName.trim())
-            }
-            className="bg-primary hover:bg-primary-hover text-white px-2 py-0.5 rounded text-xs"
-          >
-            Add
-          </button>
-        </div>
-      )}
 
       {/* Collections & Folders List */}
       <div className="flex-1 overflow-y-auto px-2 space-y-1">
