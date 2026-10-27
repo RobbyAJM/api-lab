@@ -143,7 +143,9 @@ export function formatAvatar(
   const safeSeed = seed.trim() || 'api-lab';
 
   const params = new URLSearchParams();
-  if (options?.backgroundColor) params.set('backgroundColor', options.backgroundColor);
+  if (options?.backgroundColor && options.backgroundColor !== 'transparent') {
+    params.set('backgroundColor', options.backgroundColor.replace(/^#/, ''));
+  }
   if (options?.radius !== undefined && options.radius > 0) params.set('radius', String(options.radius));
   if (options?.flip) params.set('flip', 'true');
   if (options?.rotate !== undefined && options.rotate > 0) params.set('rotate', String(options.rotate));
@@ -185,8 +187,8 @@ export function getDiceBearUrl(
   const params = new URLSearchParams();
   params.set('seed', encodedSeed);
 
-  if (options.backgroundColor) {
-    params.set('backgroundColor', options.backgroundColor);
+  if (options.backgroundColor && options.backgroundColor !== 'transparent') {
+    params.set('backgroundColor', options.backgroundColor.replace(/^#/, ''));
   }
   if (options.radius !== undefined && options.radius > 0) {
     params.set('radius', String(options.radius));

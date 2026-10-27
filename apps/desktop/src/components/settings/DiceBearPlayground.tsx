@@ -199,7 +199,7 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
             >
               <div className="flex items-center gap-2 min-w-0">
                 <img
-                  src={getDiceBearUrl(style, 'preview', { radius: 50, backgroundColor: 'transparent' })}
+                  src={getDiceBearUrl(style, 'preview', { radius: 50 })}
                   alt=""
                   className="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex-shrink-0"
                 />
@@ -227,7 +227,7 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
                       }`}
                     >
                       <img
-                        src={getDiceBearUrl(def.id, 'sample', { radius: 50, backgroundColor: 'transparent' })}
+                        src={getDiceBearUrl(def.id, 'sample', { radius: 50 })}
                         alt=""
                         className="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex-shrink-0"
                         loading="lazy"
@@ -454,7 +454,6 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
                     const isFailed = failedThumbs[v];
                     const previewThumbUrl = getDiceBearUrl(style, 'preview', {
                       extra: { [currentComponent.id]: v },
-                      backgroundColor: 'transparent',
                     });
                     return (
                       <button
