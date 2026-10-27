@@ -78,12 +78,14 @@ export function extractPathVariables(url: string): string[] {
  */
 export function interpolatePathVariables(
   url: string,
-  pathVariables: Array<[string, string, string?]> | Record<string, string>
+  pathVariables: Array<[string, string, string?, boolean?]> | Record<string, string>
 ): string {
   if (!url) return '';
 
   const entries: [string, string][] = Array.isArray(pathVariables)
-    ? pathVariables.map(([k, v]) => [k, v ?? ''])
+    ? pathVariables
+        .filter((row) => row[3] !== false)
+        .map(([k, v]) => [k, v ?? ''])
     : Object.entries(pathVariables);
 
   if (entries.length === 0) return url;
@@ -129,16 +131,16 @@ export function interpolatePathVariables(
  * Preserves user entered values and descriptions.
  */
 export function syncPathVariablesWithKeys(
-  existing: Array<[string, string, string?]>,
+  existing: Array<[string, string, string?, boolean?]>,
   keys: string[]
-): Array<[string, string, string]> {
-  const map = new Map<string, [string, string]>();
-  for (const [k, v, d] of existing) {
-    if (k) map.set(k, [v ?? '', d ?? '']);
+): Array<[string, string, string, boolean]> {
+  const map = new Map<string, [string, string, boolean]>();
+  for (const [k, v, d, enabled] of existing) {
+    if (k) map.set(k, [v ?? '', d ?? '', enabled !== false]);
   }
 
   return keys.map((key) => {
     const prev = map.get(key);
-    return [key, prev ? prev[0] : '', prev ? prev[1] : ''];
+    return [key, prev ? prev[0] : '', prev ? prev[1] : '', prev ? prev[2] : true];
   });
 }
