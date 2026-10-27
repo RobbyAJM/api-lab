@@ -169,6 +169,11 @@ export const App: React.FC = () => {
         e.preventDefault();
         setEnvModalOpen(!envModalOpen);
       }
+      // Open / Toggle App Settings (Ctrl + ,)
+      else if (matchesShortcut(e, 'open_settings')) {
+        e.preventDefault();
+        setAppSettingsOpen(!appSettingsOpen);
+      }
       // 4. Close Active Tab (Ctrl + W) - force close even if unsaved
       else if (matchesShortcut(e, 'close_tab')) {
         e.preventDefault();
