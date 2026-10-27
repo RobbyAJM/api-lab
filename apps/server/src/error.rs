@@ -53,3 +53,36 @@ impl IntoResponse for ApiError {
         (status, Json(json!({ "error": message }))).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_api_error_status_codes() {
+        assert_eq!(
+            ApiError::BadRequest("bad".into()).into_response().status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            ApiError::Unauthorized("unauth".into()).into_response().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            ApiError::Forbidden("forbidden".into()).into_response().status(),
+            StatusCode::FORBIDDEN
+        );
+        assert_eq!(
+            ApiError::NotFound("not found".into()).into_response().status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            ApiError::Conflict("conflict".into()).into_response().status(),
+            StatusCode::CONFLICT
+        );
+        assert_eq!(
+            ApiError::Internal("internal".into()).into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+}

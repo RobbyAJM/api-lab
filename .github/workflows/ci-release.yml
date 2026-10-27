@@ -2,6 +2,7 @@ name: CI and Release
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened]
   push:
     branches:
       - main
@@ -22,6 +23,22 @@ jobs:
     name: Checks
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: api_lab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://root:root@localhost:5432/api_lab?sslmode=disable
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -40,7 +57,7 @@ jobs:
       - name: Install JavaScript dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run TypeScript tests
+      - name: Run desktop TypeScript tests
         run: pnpm run test:ts
 
       - name: Build desktop frontend
@@ -51,6 +68,15 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: Run database migrations
+        run: |
+          for file in $(ls migrations/*.sql | sort); do
+            PGPASSWORD=root psql -h localhost -U root -d api_lab -f "$file"
+          done
+
+      - name: Run desktop and server Rust unit tests
+        run: cargo test -p api-lab-desktop --no-default-features -p api-lab-server --lib -p rust-core -p grpc-client
 
       - name: Check native desktop crates
         run: cargo check --locked -p rust-core -p grpc-client
