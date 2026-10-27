@@ -1,6 +1,6 @@
 use axum::extract::{Path, State};
 use axum::Json;
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use rust_core::crypto::{generate_token_hex, hash_token_sha256};
 use rust_core::dto::{
     CreateInvitationDto, CreateWorkspaceDto, InvitationResponse, JoinWorkspaceDto, MemberResponse,
@@ -114,7 +114,7 @@ pub async fn join_workspace(
     .map_err(ApiError::Database)?
     .ok_or_else(|| ApiError::BadRequest("invalid or expired invitation".into()))?;
 
-    if invite.status != "pending" || invite.expires_at <= Utc::now() {
+    if invite.status != "pending" || invite.expires_at.map_or(false, |exp| exp <= Utc::now()) {
         return Err(ApiError::BadRequest("invitation has expired or is no longer valid".into()));
     }
 
@@ -323,8 +323,9 @@ pub async fn create_invitation(
 
     let token = generate_token_hex();
     let token_hash = hash_token_sha256(&token);
-    let days = dto.expires_in_days.unwrap_or(7).clamp(1, 30);
-    let expires_at = Utc::now() + Duration::days(days);
+    let expires_at = dto
+        .resolve_expiry(Utc::now())
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
     let inv_id = Uuid::new_v4();
 
     sqlx::query!(
@@ -366,7 +367,7 @@ pub async fn list_invitations(
         r#"
         SELECT id, workspace_id, role, inviter_id, expires_at, status, created_at
         FROM invitations
-        WHERE workspace_id = $1 AND status = 'pending' AND expires_at > NOW()
+        WHERE workspace_id = $1 AND status = 'pending' AND (expires_at IS NULL OR expires_at > NOW())
         ORDER BY created_at DESC
         "#,
         workspace_id

@@ -1,9 +1,17 @@
 use std::collections::HashMap;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::{DateTime, Duration, Utc};
+use serde::{Deserialize, Deserializer, Serialize};
 use uuid::Uuid;
 
 use crate::models::{InvitationStatus, Protocol, Role};
+
+fn deserialize_double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterDto {
@@ -116,6 +124,31 @@ pub struct UpdateMemberRoleDto {
 pub struct CreateInvitationDto {
     pub role: Role,
     pub expires_in_days: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_double_option")]
+    pub expires_at: Option<Option<DateTime<Utc>>>,
+    pub never_expires: Option<bool>,
+}
+
+impl CreateInvitationDto {
+    pub fn resolve_expiry(&self, now: DateTime<Utc>) -> Result<Option<DateTime<Utc>>, &'static str> {
+        if self.never_expires.unwrap_or(false) || self.expires_at == Some(None) {
+            return Ok(None);
+        }
+
+        if let Some(Some(exp)) = self.expires_at {
+            if exp <= now {
+                return Err("expiration date must be in the future");
+            }
+            return Ok(Some(exp));
+        }
+
+        if let Some(days) = self.expires_in_days {
+            let clamped = days.clamp(1, 30);
+            return Ok(Some(now + Duration::days(clamped)));
+        }
+
+        Ok(Some(now + Duration::days(7)))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,7 +158,7 @@ pub struct InvitationResponse {
     pub token: Option<String>,
     pub role: Role,
     pub inviter_id: Uuid,
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
     pub status: InvitationStatus,
     pub created_at: DateTime<Utc>,
 }
@@ -363,4 +396,43 @@ pub struct WsSyncEvent {
     pub entity: String, // "collection", "folder", "endpoint", "environment", "variable", "member", "saved_response"
     pub action: String, // "create", "update", "delete"
     pub entity_id: Uuid,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn test_invitation_expiry_resolution() {
+        let now = Utc.with_ymd_and_hms(2026, 10, 27, 12, 0, 0).unwrap();
+
+        // 1. Default (omitted) -> 7 days
+        let dto: CreateInvitationDto = serde_json::from_str(r#"{"role":"developer"}"#).unwrap();
+        assert_eq!(dto.resolve_expiry(now).unwrap(), Some(now + Duration::days(7)));
+
+        // 2. Explicit null -> indefinite
+        let dto: CreateInvitationDto = serde_json::from_str(r#"{"role":"developer","expires_at":null}"#).unwrap();
+        assert_eq!(dto.resolve_expiry(now).unwrap(), None);
+
+        // 3. never_expires: true -> indefinite
+        let dto: CreateInvitationDto = serde_json::from_str(r#"{"role":"developer","never_expires":true}"#).unwrap();
+        assert_eq!(dto.resolve_expiry(now).unwrap(), None);
+
+        // 4. Specific future date
+        let future = Utc.with_ymd_and_hms(2026, 11, 15, 0, 0, 0).unwrap();
+        let dto: CreateInvitationDto = serde_json::from_str(
+            r#"{"role":"developer","expires_at":"2026-11-15T00:00:00Z"}"#
+        ).unwrap();
+        assert_eq!(dto.resolve_expiry(now).unwrap(), Some(future));
+
+        // 5. Past date -> Err
+        let past = r#"{"role":"developer","expires_at":"2026-10-20T00:00:00Z"}"#;
+        let dto: CreateInvitationDto = serde_json::from_str(past).unwrap();
+        assert!(dto.resolve_expiry(now).is_err());
+
+        // 6. expires_in_days
+        let dto: CreateInvitationDto = serde_json::from_str(r#"{"role":"developer","expires_in_days":14}"#).unwrap();
+        assert_eq!(dto.resolve_expiry(now).unwrap(), Some(now + Duration::days(14)));
+    }
 }

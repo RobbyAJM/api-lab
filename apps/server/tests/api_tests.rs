@@ -1032,6 +1032,120 @@ async fn test_notifications_crud_and_invite_notification() {
 }
 
 #[tokio::test]
+async fn test_workspace_invitation_expiry_controls() {
+    let app = setup_app().await;
+    let admin_email = format!("admin_exp_{}@example.com", Uuid::new_v4());
+
+    // 1. Register admin
+    let reg_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": admin_email,
+                "name": "Admin Expiry",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let auth: AuthResponse = parse_body(res.into_body()).await;
+    let admin_token = auth.token;
+    let ws_id = auth.workspace.unwrap().id;
+
+    // 2. Reject past expiration timestamp
+    let past_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/workspaces/{ws_id}/invitations"))
+        .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "role": "developer",
+                "expires_at": "2020-01-01T00:00:00Z"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(past_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+    // 3. Create indefinite invitation (never_expires: true, expires_at: null)
+    let indef_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/workspaces/{ws_id}/invitations"))
+        .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "role": "developer",
+                "never_expires": true,
+                "expires_at": null
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(indef_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let indef_res: InvitationResponse = parse_body(res.into_body()).await;
+    assert!(indef_res.expires_at.is_none());
+    let indef_token = indef_res.token.expect("expected invite token");
+
+    // 4. List invitations includes indefinite invite
+    let list_req = Request::builder()
+        .method("GET")
+        .uri(format!("/api/v1/workspaces/{ws_id}/invitations"))
+        .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(list_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let list: Vec<InvitationResponse> = parse_body(res.into_body()).await;
+    assert!(list.iter().any(|inv| inv.id == indef_res.id && inv.expires_at.is_none()));
+
+    // 5. User accepts indefinite invitation
+    let user_email = format!("invitee_{}@example.com", Uuid::new_v4());
+    let accept_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/invitations/accept")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": user_email,
+                "name": "Indefinite Invitee",
+                "password": "Password123!",
+                "invitation_token": indef_token
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(accept_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+
+    // 6. Create custom future expiration date invitation
+    let future_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/workspaces/{ws_id}/invitations"))
+        .header(header::AUTHORIZATION, format!("Bearer {admin_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "role": "admin",
+                "expires_at": "2030-01-01T00:00:00Z"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(future_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let future_res: InvitationResponse = parse_body(res.into_body()).await;
+    assert!(future_res.expires_at.is_some());
+}
+
+#[tokio::test]
 async fn test_join_workspace_via_invitation_token() {
     let app = setup_app().await;
     let db_url = std::env::var("DATABASE_URL")

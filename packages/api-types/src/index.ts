@@ -67,7 +67,7 @@ export interface InvitationResponse {
   token?: string;
   role: Role;
   inviter_id: string;
-  expires_at: string;
+  expires_at: string | null;
   status: InvitationStatus;
   created_at: string;
 }

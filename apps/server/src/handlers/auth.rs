@@ -176,7 +176,7 @@ pub async fn accept_invitation(
     .map_err(ApiError::Database)?
     .ok_or_else(|| ApiError::BadRequest("invalid or expired invitation".into()))?;
 
-    if invite.status != "pending" || invite.expires_at <= Utc::now() {
+    if invite.status != "pending" || invite.expires_at.map_or(false, |exp| exp <= Utc::now()) {
         return Err(ApiError::BadRequest("invitation has expired or is no longer valid".into()));
     }
 

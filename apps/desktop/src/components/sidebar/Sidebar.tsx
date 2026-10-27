@@ -38,6 +38,7 @@ import { SyncReflectionModal } from '../collections/SyncReflectionModal';
 import { SyncSwaggerModal } from '../collections/SyncSwaggerModal';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
+import { getHttpMethodColor } from '../../utils/httpMethodUtils';
 import {
   buildFolderTree,
   filterCollectionTree,
@@ -1322,15 +1323,9 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
         <div className="flex items-center gap-2 truncate flex-1 min-w-0">
           {endpoint.protocol === 'http' ? (
             <span
-              className={`w-7 text-[9px] font-mono font-bold flex-shrink-0 text-left ${
-                method === 'GET'
-                  ? 'text-emerald-400'
-                  : method === 'POST'
-                  ? 'text-blue-400'
-                  : method === 'PUT' || method === 'PATCH'
-                  ? 'text-amber-400'
-                  : 'text-red-400'
-              }`}
+              className={`w-7 text-[9px] font-mono font-bold flex-shrink-0 text-left ${getHttpMethodColor(
+                method
+              )}`}
             >
               {method.slice(0, 4)}
             </span>
