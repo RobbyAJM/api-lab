@@ -3,13 +3,14 @@
   "private": true,
   "packageManager": "pnpm@10.5.2",
   "scripts": {
+    "version:sync": "node scripts/sync-version.mjs",
     "dev:desktop": "pnpm --filter @api-lab/desktop dev",
     "build:desktop": "pnpm --filter @api-lab/desktop build",
-    "build:desktop:exe": "pnpm --filter @api-lab/desktop run tauri build --no-bundle --features desktop",
+    "build:desktop:exe": "pnpm version:sync && pnpm --filter @api-lab/desktop run tauri build --no-bundle --features desktop",
     "server:run": "cargo run -p api-lab-server",
     "test:rust": "cargo test --workspace",
-    "test:ts": "node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts",
-    "test": "cargo test --workspace && node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts",
+    "test:ts": "node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts scripts/*.test.mjs",
+    "test": "cargo test --workspace && node --experimental-strip-types --test apps/desktop/src/utils/*.test.ts scripts/*.test.mjs",
     "lint:design": ".opencode\\skills\\impeccable\\scripts\\impeccable.cmd detect apps/desktop/src"
   },
   "devDependencies": {
