@@ -23,6 +23,22 @@ jobs:
     name: Checks
     if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-22.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: api_lab
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgres://root:root@localhost:5432/api_lab?sslmode=disable
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -52,6 +68,9 @@ jobs:
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
+
+      - name: Run database migrations
+        run: cargo run -p api-lab-server --bin migrate
 
       - name: Run desktop and server Rust unit tests
         run: cargo test -p api-lab-desktop --no-default-features -p api-lab-server --lib -p rust-core -p grpc-client
