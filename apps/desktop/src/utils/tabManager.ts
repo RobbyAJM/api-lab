@@ -45,7 +45,7 @@ export function isConfigDirty(
     const cleanUrl = split.url.trim();
 
     // Collect query params from both cfg.query_params and any URL query string
-    const queryMap = new Map<string, [string, string, string]>();
+    const normalizedQueryParams: Array<[string, string, string, boolean]> = [];
     const rawQueryParams: Array<any> = Array.isArray(cfg.query_params) ? cfg.query_params : [];
     for (const item of rawQueryParams) {
       if (Array.isArray(item)) {
@@ -53,17 +53,20 @@ export function isConfigDirty(
         if (k) {
           const v = item[1] !== undefined && item[1] !== null ? String(item[1]).trim() : '';
           const d = item[2] !== undefined && item[2] !== null ? String(item[2]).trim() : '';
-          queryMap.set(k, [k, v, d]);
+          const enabled = item[3] !== false;
+          normalizedQueryParams.push([k, v, d, enabled]);
         }
       }
     }
-    for (const [k, v] of split.params) {
-      const trimmedKey = k.trim();
-      if (trimmedKey && !queryMap.has(trimmedKey)) {
-        queryMap.set(trimmedKey, [trimmedKey, (v || '').trim(), '']);
+    if (normalizedQueryParams.length === 0) {
+      for (const [k, v] of split.params) {
+        const trimmedKey = k.trim();
+        if (trimmedKey) {
+          normalizedQueryParams.push([trimmedKey, (v || '').trim(), '', true]);
+        }
       }
     }
-    const normalizedQueryParams = Array.from(queryMap.values()).sort(([a], [b]) => a.localeCompare(b));
+    normalizedQueryParams.sort(([aKey, aVal], [bKey, bVal]) => (aKey + aVal).localeCompare(bKey + bVal));
 
     // 2. Path variables: filter out empty placeholders (empty value and empty description)
     // ponytail: ignore unedited path placeholders so auto-extracted URL keys don't mark clean endpoints dirty

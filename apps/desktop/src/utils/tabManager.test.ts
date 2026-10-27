@@ -341,6 +341,35 @@ test('isConfigDirty: prevents false positives on newly opened HTTP endpoints', (
     query_params: [['status', 'archived', '']],
   };
   assert.equal(isConfigDirty(baseUrlQuery, draftQueryEdited), true);
+
+  // User toggles query param (disables it)
+  const draftQueryDisabled = {
+    ...draftUrlQuery,
+    query_params: [
+      ['status', 'active', '', false],
+      ['limit', '10', '', true],
+    ],
+  };
+  assert.equal(isConfigDirty(baseUrlQuery, draftQueryDisabled), true);
+
+  // Duplicate keys preserved in dirty check
+  const baseDuplicates = {
+    method: 'GET',
+    url: 'https://api.example.com/items',
+    query_params: [
+      ['filter', 'a', '', true],
+      ['filter', 'b', '', true],
+    ],
+  };
+  const draftDuplicates = {
+    method: 'GET',
+    url: 'https://api.example.com/items?filter=a&filter=b',
+    query_params: [
+      ['filter', 'a', '', true],
+      ['filter', 'b', '', true],
+    ],
+  };
+  assert.equal(isConfigDirty(baseDuplicates, draftDuplicates), false);
 });
 
 test('isConfigDirty: prevents false positives on newly opened gRPC endpoints (Unary & Stream)', () => {

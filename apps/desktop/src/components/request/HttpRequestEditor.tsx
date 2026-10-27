@@ -15,7 +15,12 @@ import { applyCollectionSettingsToHttp } from '../../utils/collectionSettings';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { getEffectiveEndpointConfig, isConfigDirty } from '../../utils/tabManager';
 import { stripJsonComments } from '../../utils/jsonComments';
-import { splitUrlQuery, type HttpBodyType } from '../../utils/httpRequest';
+import {
+  serializeQueryParamsToUrl,
+  parseUrlQueryParams,
+  type HttpBodyType,
+  type QueryParamRow,
+} from '../../utils/httpRequest';
 import { substituteVariables } from '../../utils/responseViewerUtils';
 import {
   extractPathVariables,
@@ -53,16 +58,26 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const initialConfig = getEffectiveEndpointConfig(endpoint, draft);
 
   const [method, setMethod] = useState(initialConfig.method || 'GET');
+  const [queryParams, setQueryParams] = useState<QueryParamRow[]>(() => {
+    const rawParams = (initialConfig.query_params || []) as QueryParamRow[];
+    const rawUrl = initialConfig.url !== undefined ? initialConfig.url : 'https://httpbin.org/get';
+    const normalizedUrl = convertSwaggerPathToApiPath(rawUrl);
+    if (normalizedUrl.includes('?')) {
+      return parseUrlQueryParams(normalizedUrl, rawParams);
+    }
+    return rawParams.map(([k, v, d, en]) => [k, v, d ?? '', en !== false]);
+  });
   const [url, setUrl] = useState(() => {
     const rawUrl = initialConfig.url !== undefined ? initialConfig.url : 'https://httpbin.org/get';
-    return convertSwaggerPathToApiPath(rawUrl);
+    const normalizedUrl = convertSwaggerPathToApiPath(rawUrl);
+    const rawParams = (initialConfig.query_params || []) as QueryParamRow[];
+    if (rawParams.length > 0 && !normalizedUrl.includes('?')) {
+      return serializeQueryParamsToUrl(normalizedUrl, rawParams);
+    }
+    return normalizedUrl;
   });
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'scripts'>('params');
 
-  // Query Params, Path Variables & Headers state
-  const [queryParams, setQueryParams] = useState<[string, string, string?][]>(
-    initialConfig.query_params || []
-  );
   const [pathVariables, setPathVariables] = useState<[string, string, string][]>(() => {
     const saved = (initialConfig.path_variables || []) as Array<[string, string, string?]>;
     const rawUrl = initialConfig.url !== undefined ? initialConfig.url : 'https://httpbin.org/get';
@@ -106,14 +121,6 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
   const [hookLogs, setHookLogs] = useState<string[]>([]);
-
-  useEffect(() => {
-    const parsed = splitUrlQuery(url);
-    if (parsed.params.length > 0 && queryParams.length === 0) {
-      setUrl(parsed.url);
-      setQueryParams(parsed.params);
-    }
-  }, []);
 
   // Synchronize path variables when URL changes
   useEffect(() => {
@@ -199,13 +206,21 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       const currentDraft = useAppStore.getState().endpointDrafts[endpoint.id];
       const cfg = getEffectiveEndpointConfig(endpoint, currentDraft);
       setMethod(cfg.method || 'GET');
-      const nextUrl = convertSwaggerPathToApiPath(cfg.url !== undefined ? cfg.url : 'https://httpbin.org/get');
-      setUrl(nextUrl);
-      setQueryParams(cfg.query_params || []);
+      const rawUrl = cfg.url !== undefined ? cfg.url : 'https://httpbin.org/get';
+      const normalizedUrl = convertSwaggerPathToApiPath(rawUrl);
+      const rawParams = (cfg.query_params || []) as QueryParamRow[];
+      const resolvedParams: QueryParamRow[] = normalizedUrl.includes('?')
+        ? parseUrlQueryParams(normalizedUrl, rawParams)
+        : rawParams.map(([k, v, d, en]) => [k, v, d ?? '', en !== false]);
+      const resolvedUrl = rawParams.length > 0 && !normalizedUrl.includes('?')
+        ? serializeQueryParamsToUrl(normalizedUrl, rawParams)
+        : normalizedUrl;
+      setUrl(resolvedUrl);
+      setQueryParams(resolvedParams);
       const rawHeaders = cfg.headers || {};
       const descs = cfg.header_descriptions || {};
       setHeaders(Object.entries(rawHeaders).map(([k, v]) => [k, v as string, descs[k] || '']));
-      setPathVariables(syncPathVariablesWithKeys(cfg.path_variables || [], extractPathVariables(nextUrl)));
+      setPathVariables(syncPathVariablesWithKeys(cfg.path_variables || [], extractPathVariables(resolvedUrl)));
       setBodyType(cfg.body_type || 'json');
        setBody(cfg.body || '');
        try {
@@ -236,7 +251,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     return {
       method,
       url,
-      query_params: queryParams.filter(([k]) => k.trim()),
+      query_params: queryParams.filter(([k]) => k && k.trim()),
       path_variables: pathVariables.filter(([k]) => k.trim()),
       headers: headerMap,
       header_descriptions: headerDescMap,
@@ -368,7 +383,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       method,
       headers: headerMap,
       query_params: queryParams
-        .filter(([k]) => k.trim())
+        .filter(([k, _v, _d, enabled]) => k && k.trim() && enabled !== false)
         .map(([k, v]) => [k, v] as [string, string]),
       body: bodyType === 'none' ? undefined : cleanBody,
       body_type: bodyType,
@@ -562,11 +577,8 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               value={url}
               onChange={(next) => {
                 const normalized = convertSwaggerPathToApiPath(next);
-                const parsed = splitUrlQuery(normalized);
-                setUrl(parsed.params.length ? parsed.url : normalized);
-                if (parsed.params.length) {
-                  setQueryParams(parsed.params);
-                }
+                setUrl(normalized);
+                setQueryParams((prev) => parseUrlQueryParams(normalized, prev));
               }}
               variables={activeVariables}
               placeholder="https://api.example.com/v1/users/{{USER_ID}}"
@@ -673,7 +685,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             <KeyValueTable
               title="Query Parameters"
               items={queryParams}
-              onChange={setQueryParams}
+              onChange={(next) => {
+                setQueryParams(next);
+                setUrl((prevUrl) => serializeQueryParamsToUrl(prevUrl, next));
+              }}
+              showCheckbox={true}
               variables={activeVariables}
               keyPlaceholder="parameter"
               valuePlaceholder="value (or {{VAR}})"

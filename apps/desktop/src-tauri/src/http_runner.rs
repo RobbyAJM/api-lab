@@ -153,7 +153,13 @@ pub async fn run_http(
         }
     };
 
-    let mut request_builder = client.request(method, &url).query(&interpolated_query);
+    let base_url = if !interpolated_query.is_empty() {
+        url.split_once('?').map(|(base, _)| base).unwrap_or(&url)
+    } else {
+        &url
+    };
+
+    let mut request_builder = client.request(method, base_url).query(&interpolated_query);
 
     // Apply headers
     let mut header_map = HeaderMap::new();
