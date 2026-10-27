@@ -70,7 +70,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run database migrations
-        run: cargo run -p api-lab-server --bin migrate
+        run: |
+          for file in $(ls migrations/*.sql | sort); do
+            PGPASSWORD=root psql -h localhost -U root -d api_lab -f "$file"
+          done
 
       - name: Run desktop and server Rust unit tests
         run: cargo test -p api-lab-desktop --no-default-features -p api-lab-server --lib -p rust-core -p grpc-client
