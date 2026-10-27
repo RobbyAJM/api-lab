@@ -3,7 +3,7 @@ import { VariableInput } from './VariableInput';
 import { Plus, Trash2, Edit3, List, Settings, Shield } from 'lucide-react';
 import type { VariableSource } from '../../utils/variableHighlight';
 
-export type KeyValueRow = [string, string, string?];
+export type KeyValueRow = [string, string, string?, boolean?];
 
 export interface InheritedEntry {
   key: string;
@@ -15,8 +15,8 @@ export interface InheritedEntry {
 
 export interface KeyValueTableProps {
   title: string;
-  items: Array<[string, string, string?] | [string, string]>;
-  onChange: (items: [string, string, string][]) => void;
+  items: Array<[string, string, string?, boolean?] | [string, string]>;
+  onChange: (items: any[]) => void;
   inheritedEntries?: InheritedEntry[];
   variables?: VariableSource;
   keyPlaceholder?: string;
@@ -27,6 +27,7 @@ export interface KeyValueTableProps {
   hideAdd?: boolean;
   hideDelete?: boolean;
   hideBulkEdit?: boolean;
+  showCheckbox?: boolean;
 }
 
 export const KeyValueTable: React.FC<KeyValueTableProps> = ({
@@ -43,6 +44,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
   hideAdd = false,
   hideDelete = false,
   hideBulkEdit = false,
+  showCheckbox = false,
 }) => {
   const [isBulkEdit, setIsBulkEdit] = useState(false);
   const [bulkText, setBulkText] = useState('');
@@ -58,7 +60,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
       setIsBulkEdit(true);
     } else {
       // Parse bulk text back into rows
-      const parsed: [string, string, string][] = bulkText
+      const parsed: [string, string, string, boolean][] = bulkText
         .split('\n')
         .map((line) => line.trim())
         .filter(Boolean)
@@ -71,8 +73,8 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
             rest = line.slice(0, hashIdx).trim();
           }
           const idx = rest.indexOf(':');
-          if (idx === -1) return [rest.trim(), '', desc];
-          return [rest.slice(0, idx).trim(), rest.slice(idx + 1).trim(), desc];
+          if (idx === -1) return [rest.trim(), '', desc, true];
+          return [rest.slice(0, idx).trim(), rest.slice(idx + 1).trim(), desc, true];
         });
       onChange(parsed);
       setIsBulkEdit(false);
@@ -80,20 +82,44 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
   }
 
   function handleUpdateRow(index: number, keyValDesc: [string, string, string]) {
-    const next: [string, string, string][] = items.map(([k, v, d]) => [k, v, d ?? '']);
-    next[index] = keyValDesc;
+    const next: [string, string, string, boolean][] = items.map(([k, v, d, en]) => [
+      k,
+      v,
+      d ?? '',
+      en !== false,
+    ]);
+    const currentEnabled = items[index]?.[3] !== false;
+    next[index] = [keyValDesc[0], keyValDesc[1], keyValDesc[2], currentEnabled];
     onChange(next);
   }
 
+  function handleToggleRow(index: number, checked: boolean) {
+    const next: [string, string, string, boolean][] = items.map(([k, v, d, en]) => [
+      k,
+      v,
+      d ?? '',
+      en !== false,
+    ]);
+    if (next[index]) {
+      next[index][3] = checked;
+      onChange(next);
+    }
+  }
+
   function handleAddRow() {
-    const next: [string, string, string][] = items.map(([k, v, d]) => [k, v, d ?? '']);
-    onChange([...next, ['', '', '']]);
+    const next: [string, string, string, boolean][] = items.map(([k, v, d, en]) => [
+      k,
+      v,
+      d ?? '',
+      en !== false,
+    ]);
+    onChange([...next, ['', '', '', true]]);
   }
 
   function handleDeleteRow(index: number) {
-    const next: [string, string, string][] = items
+    const next: [string, string, string, boolean][] = items
       .filter((_, i) => i !== index)
-      .map(([k, v, d]) => [k, v, d ?? '']);
+      .map(([k, v, d, en]) => [k, v, d ?? '', en !== false]);
     onChange(next);
   }
 
@@ -178,12 +204,22 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
       ) : (
         <div className="border border-zinc-800/80 rounded-md overflow-hidden bg-zinc-950">
           {/* Table Header */}
-          <div className="grid grid-cols-12 bg-zinc-900/60 border-b border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
-            <div className="col-span-4">Key</div>
-            <div className="col-span-4 pl-2">Value</div>
-            <div className={hideDelete ? 'col-span-4 pl-2' : 'col-span-3 pl-2'}>Description</div>
-            {!hideDelete && <div className="col-span-1 text-right">Action</div>}
-          </div>
+          {showCheckbox ? (
+            <div className="grid grid-cols-[24px_1fr_1fr_1fr_28px] gap-2 items-center bg-zinc-900/60 border-b border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
+              <div className="w-6"></div>
+              <div>Key</div>
+              <div>Value</div>
+              <div>Description</div>
+              {!hideDelete && <div className="text-right">Action</div>}
+            </div>
+          ) : (
+            <div className="grid grid-cols-12 bg-zinc-900/60 border-b border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
+              <div className="col-span-4">Key</div>
+              <div className="col-span-4 pl-2">Value</div>
+              <div className={hideDelete ? 'col-span-4 pl-2' : 'col-span-3 pl-2'}>Description</div>
+              {!hideDelete && <div className="col-span-1 text-right">Action</div>}
+            </div>
+          )}
 
           {/* Table Rows */}
           {items.length === 0 && inheritedEntries.length === 0 ? (
@@ -196,11 +232,15 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
               {inheritedEntries.map((entry, idx) => (
                 <div
                   key={`inherited-${idx}`}
-                  className="grid grid-cols-12 items-center px-2 py-1.5 bg-zinc-950/60 transition group"
+                  className={`grid ${
+                    showCheckbox ? 'grid-cols-[24px_1fr_1fr_1fr_28px] gap-2' : 'grid-cols-12'
+                  } items-center px-2 py-1.5 bg-zinc-950/60 transition group`}
                   title={`Inherited authorization from ${entry.sourceLabel}. Cannot be edited directly here.`}
                 >
+                  {showCheckbox && <div className="w-6"></div>}
+
                   {/* Key Input */}
-                  <div className="col-span-4 pr-1">
+                  <div className={showCheckbox ? '' : 'col-span-4 pr-1'}>
                     <div className="relative flex items-center">
                       <input
                         type="text"
@@ -216,7 +256,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
                   </div>
 
                   {/* Value Input */}
-                  <div className="col-span-4 px-1">
+                  <div className={showCheckbox ? '' : 'col-span-4 px-1'}>
                     <input
                       type="text"
                       value={entry.value}
@@ -227,7 +267,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
                   </div>
 
                   {/* Description */}
-                  <div className={hideDelete ? 'col-span-4 pl-1' : 'col-span-3 px-1'}>
+                  <div className={showCheckbox ? '' : hideDelete ? 'col-span-4 pl-1' : 'col-span-3 px-1'}>
                     <div
                       className="w-full bg-zinc-950/80 border border-zinc-800/40 rounded px-2.5 py-1 text-[11px] text-zinc-400 truncate flex items-center gap-1.5 h-7 cursor-help"
                       title={`Inherited from ${entry.sourceLabel}. Adjust in settings.`}
@@ -239,7 +279,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
 
                   {/* Actions */}
                   {!hideDelete && (
-                    <div className="col-span-1 text-right pr-1">
+                    <div className={showCheckbox ? 'text-right pr-1' : 'col-span-1 text-right pr-1'}>
                       {entry.onEditSource ? (
                         <button
                           type="button"
@@ -258,13 +298,30 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
               ))}
 
               {/* Standard Items */}
-              {items.map(([k, v, d], idx) => (
+              {items.map(([k, v, d, en], idx) => (
                 <div
                   key={idx}
-                  className="grid grid-cols-12 items-center px-2 py-1.5 hover:bg-zinc-900/40 transition group"
+                  className={`grid ${
+                    showCheckbox ? 'grid-cols-[24px_1fr_1fr_1fr_28px] gap-2' : 'grid-cols-12'
+                  } items-center px-2 py-1.5 hover:bg-zinc-900/40 transition group ${
+                    showCheckbox && en === false ? 'opacity-60' : ''
+                  }`}
                 >
+                  {/* Checkbox Column */}
+                  {showCheckbox && (
+                    <div className="flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={en !== false}
+                        onChange={(e) => handleToggleRow(idx, e.target.checked)}
+                        className="rounded border-zinc-700 bg-zinc-900 text-primary focus:ring-0 cursor-pointer ml-1"
+                        title={en !== false ? 'Enabled' : 'Disabled'}
+                      />
+                    </div>
+                  )}
+
                   {/* Key Input */}
-                  <div className="col-span-4 pr-1">
+                  <div className={showCheckbox ? '' : 'col-span-4 pr-1'}>
                     <input
                       type="text"
                       value={k}
@@ -282,7 +339,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
                   </div>
 
                   {/* Value Input */}
-                  <div className="col-span-4 px-1">
+                  <div className={showCheckbox ? '' : 'col-span-4 px-1'}>
                     <div className="w-full bg-zinc-900 border border-zinc-800 rounded focus-within:border-zinc-700 h-7 flex items-center">
                       <VariableInput
                         value={v ?? ''}
@@ -297,7 +354,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
                   </div>
 
                   {/* Description Input */}
-                  <div className={hideDelete ? 'col-span-4 pl-1' : 'col-span-3 px-1'}>
+                  <div className={showCheckbox ? '' : hideDelete ? 'col-span-4 pl-1' : 'col-span-3 px-1'}>
                     <input
                       type="text"
                       value={d ?? ''}
@@ -311,7 +368,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
 
                   {/* Actions */}
                   {!hideDelete && (
-                    <div className="col-span-1 text-right pr-1">
+                    <div className={showCheckbox ? 'text-right pr-1' : 'col-span-1 text-right pr-1'}>
                       <button
                         type="button"
                         onClick={() => handleDeleteRow(idx)}
