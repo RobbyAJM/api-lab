@@ -5,6 +5,7 @@ import { apiRequest } from '../../api/client';
 import type { Endpoint, Environment } from '@api-lab/api-types';
 import { X, Radio, ArrowDownUp, ArrowLeftRight, AlertTriangle, Plus } from 'lucide-react';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
+import { getHttpMethodColor } from '../../utils/httpMethodUtils';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
 
 export const EndpointTabBar: React.FC = () => {
@@ -86,14 +87,7 @@ export const EndpointTabBar: React.FC = () => {
   function renderMethodBadge(ep: Endpoint) {
     if (ep.protocol === 'http') {
       const method = ep.config?.method || 'GET';
-      const colorCls =
-        method === 'GET'
-          ? 'text-emerald-400'
-          : method === 'POST'
-          ? 'text-blue-400'
-          : method === 'PUT' || method === 'PATCH'
-          ? 'text-amber-400'
-          : 'text-red-400';
+      const colorCls = getHttpMethodColor(method);
 
       return (
         <span

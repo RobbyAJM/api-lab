@@ -13,6 +13,7 @@ import {
   type UnifiedPaletteItem,
   type PaletteActionRecord,
 } from '../../utils/shortcuts';
+import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
 
 export const CommandPaletteModal: React.FC = () => {
   const queryClient = useQueryClient();
@@ -246,15 +247,9 @@ export const CommandPaletteModal: React.FC = () => {
                     {/* Method Badge */}
                     {isHttp ? (
                       <span
-                        className={`text-[9px] font-bold font-mono px-1.5 py-0.5 rounded ${
-                          item.methodLabel === 'GET'
-                            ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800/40'
-                            : item.methodLabel === 'POST'
-                            ? 'text-primary bg-primary-subtle border border-primary-border'
-                            : item.methodLabel === 'PUT' || item.methodLabel === 'PATCH'
-                            ? 'text-amber-400 bg-amber-950/60 border border-amber-800/40'
-                            : 'text-red-400 bg-red-950/60 border border-red-800/40'
-                        }`}
+                        className={`text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border ${getHttpMethodBadgeClass(
+                          item.methodLabel
+                        )}`}
                       >
                         {item.methodLabel}
                       </span>

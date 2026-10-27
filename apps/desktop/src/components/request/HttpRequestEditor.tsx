@@ -8,6 +8,7 @@ import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp } from 'lucide-reac
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
+import { HttpMethodDropdown } from './HttpMethodDropdown';
 import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
@@ -592,28 +593,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       {/* URL & Action Bar */}
       <div className="px-4 pb-2.5 flex items-center gap-2 flex-shrink-0">
-        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded h-9 focus-within:border-primary transition overflow-hidden">
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value)}
-            className={`bg-transparent border-0 px-2.5 py-1 text-xs font-mono font-bold focus:outline-none cursor-pointer h-full ${
-              method === 'GET'
-                ? 'text-emerald-400'
-                : method === 'POST'
-                ? 'text-blue-400'
-                : method === 'PUT' || method === 'PATCH'
-                ? 'text-amber-400'
-                : 'text-rose-400'
-            }`}
-          >
-            <option value="GET" className="bg-zinc-900">GET</option>
-            <option value="POST" className="bg-zinc-900">POST</option>
-            <option value="PUT" className="bg-zinc-900">PUT</option>
-            <option value="PATCH" className="bg-zinc-900">PATCH</option>
-            <option value="DELETE" className="bg-zinc-900">DELETE</option>
-            <option value="HEAD" className="bg-zinc-900">HEAD</option>
-            <option value="OPTIONS" className="bg-zinc-900">OPTIONS</option>
-          </select>
+        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded h-9 focus-within:border-primary transition">
+          <HttpMethodDropdown
+            method={method}
+            onChange={setMethod}
+          />
 
           <div className="h-4 w-px bg-zinc-800 mx-1 flex-shrink-0" />
 
