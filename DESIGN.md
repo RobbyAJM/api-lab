@@ -17,7 +17,6 @@ colors:
   accent-primary: "oklch(75.5% 0.18 70)"  # #f59e0b - main brand amber
   accent-gradient: "oklch(69.8% 0.20 45)" # #f97316 - brand gradient stop & secondary orange
   accent-hover: "oklch(64.5% 0.17 65)"    # #d97706 - button cta & active state
-  accent-grpc: "oklch(68% 0.18 290)"      # gRPC reflection accent
 
   method-get: "oklch(72% 0.17 155)"
   method-post: "oklch(68% 0.18 250)"
