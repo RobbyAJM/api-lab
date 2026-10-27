@@ -4,12 +4,12 @@
 
 :root {
   color-scheme: dark;
-  --color-zinc-950: 15 23 42;
-  --color-zinc-900: 17 24 39;
-  --color-zinc-850: 31 41 55;
-  --color-zinc-800: 39 53 72;
-  --color-zinc-750: 48 62 84;
-  --color-zinc-700: 55 65 81;
+  --color-zinc-950: 10 11 15;
+  --color-zinc-900: 16 18 24;
+  --color-zinc-850: 22 25 33;
+  --color-zinc-800: 30 34 46;
+  --color-zinc-750: 40 45 60;
+  --color-zinc-700: 52 58 76;
   --color-zinc-600: 75 85 99;
   --color-zinc-500: 107 114 128;
   --color-zinc-400: 156 163 175;

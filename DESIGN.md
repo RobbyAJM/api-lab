@@ -3,11 +3,11 @@ name: API Lab Workbench
 description: High-density, mineral dark workbench for HTTP and gRPC engineering. Edge-to-edge chrome, crisp 1px hairlines, zero decorative slop.
 
 colors:
-  ground: "#0f172a"                       # #0f172a - page background
-  surface: "#111827"                      # #111827 - sidebar & panels
-  surface-raised: "#1f2937"               # #1f2937 - inputs, active tabs
-  surface-hover: "#273548"                # #273548 - hover states
-  hairline: "#374151"                     # #374151 - 1px border rule
+  ground: "#0a0b0f"                       # #0a0b0f - page background
+  surface: "#101218"                      # #101218 - sidebar & panels
+  surface-raised: "#161921"               # #161921 - inputs, active tabs
+  surface-hover: "#1e222e"                # #1e222e - hover states
+  hairline: "#343a4c"                     # #343a4c - 1px border rule
   hairline-strong: "#4b5563"              # #4b5563 - active border rule
 
   text-high: "#f9fafb"                    # #f9fafb - primary text, values

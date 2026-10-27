@@ -55,11 +55,11 @@ test('resolveThemeVariables: preserves exact Scientific Teal values for default 
   const defaultTheme = getThemeById('api-lab');
   const vars = resolveThemeVariables(defaultTheme);
 
-  assert.equal(vars['--color-zinc-950'], '15 23 42');
-  assert.equal(vars['--color-zinc-900'], '17 24 39');
-  assert.equal(vars['--color-zinc-850'], '31 41 55');
-  assert.equal(vars['--color-zinc-800'], '39 53 72');
-  assert.equal(vars['--color-zinc-700'], '55 65 81');
+  assert.equal(vars['--color-zinc-950'], '10 11 15');
+  assert.equal(vars['--color-zinc-900'], '16 18 24');
+  assert.equal(vars['--color-zinc-850'], '22 25 33');
+  assert.equal(vars['--color-zinc-800'], '30 34 46');
+  assert.equal(vars['--color-zinc-700'], '52 58 76');
   assert.equal(vars['--color-zinc-500'], '107 114 128');
   assert.equal(vars['--color-zinc-400'], '156 163 175');
   assert.equal(vars['--color-zinc-100'], '249 250 251');
