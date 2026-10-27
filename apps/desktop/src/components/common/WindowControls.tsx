@@ -52,7 +52,7 @@ export const WindowControls: React.FC = () => {
   const maxLabels = getMaximizeButtonLabels(isMaximized);
 
   return (
-    <div className="flex items-center h-full select-none" data-tauri-no-drag>
+    <div className="flex items-center h-full select-none relative z-[60]" data-tauri-no-drag>
       <button
         type="button"
         onClick={() => invokeTauri('minimize_window')}
