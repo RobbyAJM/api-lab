@@ -106,7 +106,7 @@ pub struct Invitation {
     pub token_hash: String,
     pub role: Role,
     pub inviter_id: Uuid,
-    pub expires_at: DateTime<Utc>,
+    pub expires_at: Option<DateTime<Utc>>,
     pub status: InvitationStatus,
     pub created_at: DateTime<Utc>,
 }
