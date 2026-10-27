@@ -1,7 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../../store/useAppStore';
 import { Avatar } from '../common/Avatar';
-import { sortPresenceUsers, filterOtherPresenceUsers, getAvatarStackPreview } from '../../utils/presence';
+import {
+  sortPresenceUsers,
+  filterOtherPresenceUsers,
+  getAvatarStackPreview,
+  formatUserLocation,
+} from '../../utils/presence';
 
 export const OnlineUsersPopover: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -58,7 +63,7 @@ export const OnlineUsersPopover: React.FC = () => {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-64 rounded-md border border-zinc-800 bg-zinc-900 shadow-xl z-50 py-1.5 select-none animate-in fade-in zoom-in-95 duration-100">
+        <div className="absolute right-0 top-full mt-1.5 w-76 rounded-md border border-zinc-800 bg-zinc-900 shadow-xl z-50 py-1.5 select-none animate-in fade-in zoom-in-95 duration-100">
           <div className="px-3 py-1.5 border-b border-zinc-800/80 flex items-center justify-between">
             <span className="text-[11px] font-medium text-zinc-400 uppercase tracking-wider">
               People in the workspace
@@ -68,34 +73,56 @@ export const OnlineUsersPopover: React.FC = () => {
             </span>
           </div>
 
-          <div className="max-h-60 overflow-y-auto divide-y divide-zinc-800/40">
+          <div className="max-h-72 overflow-y-auto divide-y divide-zinc-800/40">
             {sortedUsers.map((user) => {
               const isSelf = user.user_id === currentUser?.id;
+              const loc = formatUserLocation(user.current_location);
+
               return (
                 <div
                   key={user.user_id}
-                  className="px-3 py-2 flex items-center gap-2.5 hover:bg-zinc-800/50 transition"
+                  className="px-3 py-2 flex items-start gap-2.5 hover:bg-zinc-800/50 transition"
                 >
-                  <Avatar
-                    avatar={user.avatar}
-                    name={user.name}
-                    size={24}
-                    showPresenceIndicator
-                    isOnline
-                  />
+                  <div className="pt-0.5">
+                    <Avatar
+                      avatar={user.avatar}
+                      name={user.name}
+                      size={24}
+                      showPresenceIndicator
+                      isOnline
+                    />
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-zinc-200 truncate">
-                        {user.name}
-                      </span>
-                      {isSelf && (
-                        <span className="text-[10px] text-zinc-400 font-normal">
-                          (You)
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="text-xs font-medium text-zinc-200 truncate">
+                          {user.name}
                         </span>
-                      )}
+                        {isSelf && (
+                          <span className="text-[10px] text-zinc-400 font-normal">
+                            (You)
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="text-[10px] text-zinc-500 truncate">
                       {user.email}
+                    </div>
+
+                    <div className="mt-1 flex items-center gap-1.5 overflow-hidden">
+                      {loc.badge && (
+                        <span
+                          className={`px-1 py-0.2 rounded text-[9px] font-mono font-medium border flex-shrink-0 ${loc.badgeClass}`}
+                        >
+                          {loc.badge}
+                        </span>
+                      )}
+                      <span
+                        className="text-[10px] font-mono text-zinc-400 truncate"
+                        title={loc.label}
+                      >
+                        {loc.label}
+                      </span>
                     </div>
                   </div>
                 </div>
