@@ -5,6 +5,7 @@ use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
 use http_body_util::BodyExt;
 use rust_core::dto::*;
+use rust_core::models::Role;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use tokio::sync::broadcast;
@@ -1142,4 +1143,194 @@ async fn test_workspace_invitation_expiry_controls() {
     assert_eq!(res.status(), StatusCode::OK);
     let future_res: InvitationResponse = parse_body(res.into_body()).await;
     assert!(future_res.expires_at.is_some());
+}
+
+#[tokio::test]
+async fn test_join_workspace_via_invitation_token() {
+    let app = setup_app().await;
+    let db_url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| "postgres://root:root@localhost:5432/api_lab?sslmode=disable".into());
+    let pool = PgPoolOptions::new().max_connections(2).connect(&db_url).await.unwrap();
+
+    let email_owner = format!("ws_owner_{}@example.com", Uuid::new_v4());
+    let email_joiner = format!("ws_joiner_{}@example.com", Uuid::new_v4());
+
+    // 1. Register Owner
+    let reg_owner = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email_owner,
+                "name": "Workspace Owner",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_owner).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let owner_auth: AuthResponse = parse_body(res.into_body()).await;
+    let owner_token = owner_auth.token;
+    let owner_ws = owner_auth.workspace.unwrap();
+
+    // 2. Register Joiner
+    let reg_joiner = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email_joiner,
+                "name": "Workspace Joiner",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_joiner).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let joiner_auth: AuthResponse = parse_body(res.into_body()).await;
+    let joiner_token = joiner_auth.token;
+
+    // 3. Owner creates invitation
+    let invite_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/workspaces/{}/invitations", owner_ws.id))
+        .header(header::AUTHORIZATION, format!("Bearer {owner_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({ "role": "developer", "expires_in_days": 7 }).to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(invite_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let invite_body: InvitationResponse = parse_body(res.into_body()).await;
+    let valid_token = invite_body.token.unwrap();
+
+    // 4. Joiner sends invalid format token -> 400
+    let bad_format_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/workspaces/join")
+        .header(header::AUTHORIZATION, format!("Bearer {joiner_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "token": "not-a-valid-token" }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(bad_format_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+    // 5. Joiner sends non-existent 64-hex token -> 400
+    let fake_token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let not_found_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/workspaces/join")
+        .header(header::AUTHORIZATION, format!("Bearer {joiner_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "token": fake_token }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(not_found_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+    // 6. Joiner joins successfully with valid token -> 200
+    let join_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/workspaces/join")
+        .header(header::AUTHORIZATION, format!("Bearer {joiner_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "token": valid_token }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(join_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let joined_ws: WorkspaceSummary = parse_body(res.into_body()).await;
+    assert_eq!(joined_ws.id, owner_ws.id);
+    assert_eq!(joined_ws.role, Role::Developer);
+
+    // 7. Joining again with same token -> 400 (already accepted or member)
+    let re_join_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/workspaces/join")
+        .header(header::AUTHORIZATION, format!("Bearer {joiner_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "token": valid_token }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(re_join_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
+
+    // 8. Verify Joiner's workspaces list contains Owner's workspace
+    let list_req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/workspaces")
+        .header(header::AUTHORIZATION, format!("Bearer {joiner_token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(list_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let ws_list: Vec<WorkspaceSummary> = parse_body(res.into_body()).await;
+    assert!(ws_list.iter().any(|w| w.id == owner_ws.id));
+
+    // 9. Verify Owner received joined notification
+    let notifs_req = Request::builder()
+        .method("GET")
+        .uri("/api/v1/notifications")
+        .header(header::AUTHORIZATION, format!("Bearer {owner_token}"))
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(notifs_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let notifs: Vec<NotificationItem> = parse_body(res.into_body()).await;
+    assert!(notifs.iter().any(|n| n.title.contains("joined")));
+
+    // 10. Expired token test
+    let invite_req2 = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/workspaces/{}/invitations", owner_ws.id))
+        .header(header::AUTHORIZATION, format!("Bearer {owner_token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({ "role": "developer", "expires_in_days": 1 }).to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(invite_req2).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let invite2: InvitationResponse = parse_body(res.into_body()).await;
+    let expired_token = invite2.token.unwrap();
+
+    // Expire token in database directly
+    sqlx::query!(
+        "UPDATE invitations SET expires_at = NOW() - INTERVAL '1 hour' WHERE id = $1",
+        invite2.id
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Joiner 2 tries to join with expired token
+    let email_joiner2 = format!("ws_joiner2_{}@example.com", Uuid::new_v4());
+    let reg_joiner2 = Request::builder()
+        .method("POST")
+        .uri("/api/v1/auth/register")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "email": email_joiner2,
+                "name": "Workspace Joiner 2",
+                "password": "Password123!"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(reg_joiner2).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let joiner2_auth: AuthResponse = parse_body(res.into_body()).await;
+
+    let expired_join_req = Request::builder()
+        .method("POST")
+        .uri("/api/v1/workspaces/join")
+        .header(header::AUTHORIZATION, format!("Bearer {}", joiner2_auth.token))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(json!({ "token": expired_token }).to_string()))
+        .unwrap();
+    let res = app.clone().oneshot(expired_join_req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::BAD_REQUEST);
 }
