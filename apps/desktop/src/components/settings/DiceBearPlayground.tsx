@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dices,
   Copy,
@@ -9,6 +9,8 @@ import {
   ChevronDown,
   Sparkles,
   AlertCircle,
+  Search,
+  X,
 } from 'lucide-react';
 import {
   type DiceBearStyle,
@@ -52,8 +54,13 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
   const [copiedType, setCopiedType] = useState<'svg' | 'url' | null>(null);
   const [downloading, setDownloading] = useState<boolean>(false);
   const [styleDropdownOpen, setStyleDropdownOpen] = useState<boolean>(false);
+  const [styleSearchQuery, setStyleSearchQuery] = useState<string>('');
   const [previewError, setPreviewError] = useState<boolean>(false);
   const [failedThumbs, setFailedThumbs] = useState<Record<string, boolean>>({});
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const dropdownListRef = useRef<HTMLDivElement>(null);
+  const dropdownScrollPos = useRef<number>(0);
 
   const styleDef = getStyleDefinition(style);
 
@@ -69,6 +76,43 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
     // Clear preview error on style change to allow re-rendering
     setPreviewError(false);
   }, [style, styleDef.components, activeComponentTab]);
+
+  useEffect(() => {
+    if (styleDropdownOpen) {
+      if (dropdownListRef.current) {
+        dropdownListRef.current.scrollTop = dropdownScrollPos.current;
+      }
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+        if (dropdownListRef.current) {
+          dropdownListRef.current.scrollTop = dropdownScrollPos.current;
+        }
+      }, 50);
+    }
+  }, [styleDropdownOpen]);
+
+  // Click outside listener for dropdown
+  useEffect(() => {
+    if (!styleDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setStyleDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [styleDropdownOpen]);
+
+  const filteredStyles = useMemo(() => {
+    const q = styleSearchQuery.trim().toLowerCase();
+    if (!q) return DICEBEAR_STYLE_DEFINITIONS;
+    return DICEBEAR_STYLE_DEFINITIONS.filter(
+      (def) =>
+        def.id.toLowerCase().includes(q) ||
+        def.label.toLowerCase().includes(q) ||
+        def.description.toLowerCase().includes(q)
+    );
+  }, [styleSearchQuery]);
 
   const radius = options.radius ?? 0;
   const flip = Boolean(options.flip);
@@ -191,7 +235,7 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
             <span className="text-[10px] text-zinc-500 font-mono">DiceBear 10.x</span>
           </div>
 
-          <div className="relative">
+          <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setStyleDropdownOpen(!styleDropdownOpen)}
@@ -199,7 +243,7 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
             >
               <div className="flex items-center gap-2 min-w-0">
                 <img
-                  src={getDiceBearUrl(style, 'preview', { radius: 50, backgroundColor: 'transparent' })}
+                  src={getDiceBearUrl(style, 'preview', { radius: 50 })}
                   alt=""
                   className="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex-shrink-0"
                 />
@@ -212,34 +256,79 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
             </button>
 
             {styleDropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1 z-30 max-h-60 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded shadow-xl py-1 divide-y divide-zinc-800">
-                {DICEBEAR_STYLE_DEFINITIONS.map((def) => {
-                  const isCurrent = def.id === style;
-                  return (
+              <div className="absolute top-full left-0 right-0 mt-1 z-30 max-h-72 flex flex-col bg-zinc-900 border border-zinc-700 rounded shadow-xl overflow-hidden">
+                {/* Search Header */}
+                <div className="p-2 border-b border-zinc-800 bg-zinc-950/60 flex items-center gap-2 flex-shrink-0">
+                  <Search size={13} className="text-zinc-500 flex-shrink-0" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={styleSearchQuery}
+                    onChange={(e) => setStyleSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setStyleDropdownOpen(false);
+                      }
+                    }}
+                    placeholder={`Search ${DICEBEAR_STYLE_DEFINITIONS.length} styles...`}
+                    className="flex-1 bg-transparent text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none"
+                  />
+                  {styleSearchQuery && (
                     <button
-                      key={def.id}
                       type="button"
-                      onClick={() => handleStyleSelect(def.id)}
-                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition ${
-                        isCurrent
-                          ? 'bg-zinc-800 text-blue-400'
-                          : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-zinc-100'
-                      }`}
+                      onClick={() => setStyleSearchQuery('')}
+                      className="text-zinc-500 hover:text-zinc-300 p-0.5"
                     >
-                      <img
-                        src={getDiceBearUrl(def.id, 'sample', { radius: 50, backgroundColor: 'transparent' })}
-                        alt=""
-                        className="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex-shrink-0"
-                        loading="lazy"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium truncate">{def.label}</div>
-                        <div className="text-[10px] text-zinc-500 truncate">{def.description}</div>
-                      </div>
-                      {isCurrent && <Check size={12} className="text-blue-400 ml-auto flex-shrink-0" />}
+                      <X size={12} />
                     </button>
-                  );
-                })}
+                  )}
+                  <span className="text-[10px] text-zinc-500 font-mono flex-shrink-0">
+                    {filteredStyles.length}/{DICEBEAR_STYLE_DEFINITIONS.length}
+                  </span>
+                </div>
+
+                {/* Filtered Styles List */}
+                <div
+                  ref={dropdownListRef}
+                  onScroll={(e) => {
+                    dropdownScrollPos.current = e.currentTarget.scrollTop;
+                  }}
+                  className="overflow-y-auto divide-y divide-zinc-800/80 py-1"
+                >
+                  {filteredStyles.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-zinc-500">
+                      No matching avatar styles
+                    </div>
+                  ) : (
+                    filteredStyles.map((def) => {
+                      const isCurrent = def.id === style;
+                      return (
+                        <button
+                          key={def.id}
+                          type="button"
+                          onClick={() => handleStyleSelect(def.id)}
+                          className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs transition ${
+                            isCurrent
+                              ? 'bg-zinc-800 text-blue-400'
+                              : 'text-zinc-300 hover:bg-zinc-800/60 hover:text-zinc-100'
+                          }`}
+                        >
+                          <img
+                            src={getDiceBearUrl(def.id, 'sample', { radius: 50 })}
+                            alt=""
+                            className="w-5 h-5 rounded-full bg-zinc-800 border border-zinc-700 flex-shrink-0"
+                            loading="lazy"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="font-medium truncate">{def.label}</div>
+                            <div className="text-[10px] text-zinc-500 truncate">{def.description}</div>
+                          </div>
+                          {isCurrent && <Check size={12} className="text-blue-400 ml-auto flex-shrink-0" />}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -454,7 +543,6 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
                     const isFailed = failedThumbs[v];
                     const previewThumbUrl = getDiceBearUrl(style, 'preview', {
                       extra: { [currentComponent.id]: v },
-                      backgroundColor: 'transparent',
                     });
                     return (
                       <button
