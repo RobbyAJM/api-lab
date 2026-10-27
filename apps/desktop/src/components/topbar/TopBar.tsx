@@ -95,7 +95,7 @@ export const TopBar: React.FC = () => {
     <header
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
-      className="h-9 w-full bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between px-2 select-none flex-shrink-0 z-30 cursor-default"
+      className="h-9 w-full bg-zinc-950 border-b border-zinc-800/80 flex items-center justify-between px-2 select-none flex-shrink-0 cursor-default"
     >
       {/* Left: Navigation & Workspace */}
       <div className="flex items-center gap-1 min-w-0" data-tauri-no-drag>

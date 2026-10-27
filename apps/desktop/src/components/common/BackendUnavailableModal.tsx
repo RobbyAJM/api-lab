@@ -15,7 +15,6 @@ import {
   testServerConnection,
   type ServerConnectionTestResult,
 } from '../../utils/serverConfig';
-import { WindowControls } from './WindowControls';
 
 export const BackendUnavailableModal: React.FC = () => {
   const queryClient = useQueryClient();
@@ -93,16 +92,6 @@ export const BackendUnavailableModal: React.FC = () => {
       aria-modal="true"
       className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 select-none"
     >
-      {/* Top frameless window controls & drag region */}
-      <div
-        className="absolute top-0 left-0 right-0 h-9 flex items-center justify-end px-2 z-10"
-        data-tauri-drag-region
-      >
-        <div className="h-full flex items-center" data-tauri-no-drag>
-          <WindowControls />
-        </div>
-      </div>
-
       <div className="bg-zinc-900 border border-zinc-800 rounded-md p-6 max-w-md w-full shadow-2xl space-y-4 text-zinc-200">
         {/* Header with Server Alert Icon */}
         <div className="flex items-start gap-3.5">
