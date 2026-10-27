@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { isMacOS, getMaximizeButtonLabels } from '../../utils/windowControls';
 
 declare global {
   interface Window {
@@ -23,9 +24,7 @@ export const WindowControls: React.FC = () => {
   const [isMac, setIsMac] = useState(false);
 
   useEffect(() => {
-    if (typeof navigator !== 'undefined') {
-      setIsMac(/Mac|iPhone|iPod|iPad/i.test(navigator.userAgent || ''));
-    }
+    setIsMac(isMacOS());
 
     let mounted = true;
     const checkMax = async () => {
@@ -50,6 +49,8 @@ export const WindowControls: React.FC = () => {
     return null;
   }
 
+  const maxLabels = getMaximizeButtonLabels(isMaximized);
+
   return (
     <div className="flex items-center h-full select-none" data-tauri-no-drag>
       <button
@@ -71,8 +72,8 @@ export const WindowControls: React.FC = () => {
           if (typeof max === 'boolean') setIsMaximized(max);
         }}
         className="h-full px-3 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition inline-flex items-center justify-center"
-        title={isMaximized ? 'Restore Down' : 'Maximize'}
-        aria-label={isMaximized ? 'Restore window' : 'Maximize window'}
+        title={maxLabels.title}
+        aria-label={maxLabels.ariaLabel}
       >
         {isMaximized ? (
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1">
