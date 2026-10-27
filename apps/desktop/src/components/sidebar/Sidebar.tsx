@@ -141,10 +141,10 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
-      className="relative bg-zinc-900 border-r border-zinc-800/60 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
+      className="relative bg-zinc-950 border-r border-zinc-800/60 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
     >
       {/* Brand Header */}
-      <div className="px-3 py-2 border-b border-zinc-800/60 flex items-center justify-between bg-zinc-900">
+      <div className="px-3 py-2 border-b border-zinc-800/60 flex items-center justify-between bg-zinc-950">
         <div className="flex items-center gap-2">
           <img src={appLogo} alt="API Lab" className="w-5 h-5 rounded object-contain" />
           <span className="font-semibold text-xs text-zinc-100 tracking-tight">API Lab</span>
