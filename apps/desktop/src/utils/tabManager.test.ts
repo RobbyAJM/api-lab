@@ -14,7 +14,10 @@ import {
   getAdjacentEndpoint,
   setEndpointResponseInState,
   getEndpointResponseFromState,
+  switchWorkspaceTabs,
+  removeWorkspaceTabs,
   type TabState,
+  type WorkspaceTabMap,
 } from './tabManager.ts';
 import type { Endpoint } from '@api-lab/api-types';
 
@@ -632,4 +635,111 @@ test('unsaved changes: execute retains dirty state; only explicit save clears dr
 
   assert.equal(isEndpointDirtyInState(state, 'ep1'), false);
   assert.equal(getEffectiveEndpointConfig(savedEp, state.endpointDrafts?.['ep1']).url, 'https://api.example.com/ep1-edited');
+});
+
+test('switchWorkspaceTabs: preserves open tabs and unsaved drafts across workspace switches', () => {
+  const epA1 = createMockEndpoint('epA1', 'Endpoint A1');
+  const epA2 = createMockEndpoint('epA2', 'Endpoint A2');
+  const epB1 = createMockEndpoint('epB1', 'Endpoint B1');
+
+  let workspaceTabs: WorkspaceTabMap = {};
+
+  // 1. Workspace A: user opens 2 endpoints and creates unsaved draft in epA1
+  let wsAState: TabState = {
+    openEndpoints: [],
+    activeEndpointId: null,
+    activeEndpoint: null,
+    endpointDrafts: {},
+    endpointResponses: {},
+  };
+  wsAState = openEndpointInTabs(wsAState, epA1);
+  wsAState = openEndpointInTabs(wsAState, epA2);
+  const dirtyConfigA1 = { ...epA1.config, url: 'https://api.example.com/draft-work' };
+  wsAState = setEndpointDraftInState(wsAState, 'epA1', dirtyConfigA1);
+  wsAState = setEndpointResponseInState(wsAState, 'epA1', {
+    http: { status_code: 200, body: '{"workspace":"A"}', headers: {}, response_time_ms: 10, response_size_bytes: 15 },
+  });
+
+  assert.equal(wsAState.openEndpoints.length, 2);
+  assert.equal(wsAState.activeEndpointId, 'epA2');
+  assert.equal(isEndpointDirtyInState(wsAState, 'epA1'), true);
+
+  // 2. Switch from Workspace A to Workspace B (newly visited workspace)
+  const toB = switchWorkspaceTabs(workspaceTabs, 'ws-A', wsAState, 'ws-B');
+  workspaceTabs = toB.workspaceTabs;
+  let wsBState = toB.activeTabState;
+
+  // Workspace B should start clean and empty
+  assert.equal(wsBState.openEndpoints.length, 0);
+  assert.equal(wsBState.activeEndpointId, null);
+  assert.deepEqual(wsBState.endpointDrafts, {});
+
+  // 3. User works in Workspace B: opens epB1, sets draft
+  wsBState = openEndpointInTabs(wsBState, epB1);
+  const dirtyConfigB1 = { ...epB1.config, body: '{"query":"from B"}' };
+  wsBState = setEndpointDraftInState(wsBState, 'epB1', dirtyConfigB1);
+
+  assert.equal(wsBState.openEndpoints.length, 1);
+  assert.equal(wsBState.activeEndpointId, 'epB1');
+  assert.equal(isEndpointDirtyInState(wsBState, 'epB1'), true);
+
+  // 4. Switch back to Workspace A: left work and unsaved changes must exist
+  const backToA = switchWorkspaceTabs(workspaceTabs, 'ws-B', wsBState, 'ws-A');
+  workspaceTabs = backToA.workspaceTabs;
+  const restoredA = backToA.activeTabState;
+
+  assert.equal(restoredA.openEndpoints.length, 2);
+  assert.equal(restoredA.openEndpoints[0].id, 'epA1');
+  assert.equal(restoredA.openEndpoints[1].id, 'epA2');
+  assert.equal(restoredA.activeEndpointId, 'epA2');
+  assert.equal(restoredA.activeEndpoint?.id, 'epA2');
+  // Verify epA1 unsaved draft is still intact
+  assert.equal(isEndpointDirtyInState(restoredA, 'epA1'), true);
+  assert.equal(restoredA.endpointDrafts?.['epA1']?.url, 'https://api.example.com/draft-work');
+  assert.equal(restoredA.endpointResponses?.['epA1']?.http?.status_code, 200);
+
+  // 5. Switch back to Workspace B: verify B's left work also still exists
+  const backToB = switchWorkspaceTabs(workspaceTabs, 'ws-A', restoredA, 'ws-B');
+  workspaceTabs = backToB.workspaceTabs;
+  const restoredB = backToB.activeTabState;
+
+  assert.equal(restoredB.openEndpoints.length, 1);
+  assert.equal(restoredB.openEndpoints[0].id, 'epB1');
+  assert.equal(restoredB.activeEndpointId, 'epB1');
+  assert.equal(isEndpointDirtyInState(restoredB, 'epB1'), true);
+  assert.equal(restoredB.endpointDrafts?.['epB1']?.body, '{"query":"from B"}');
+});
+
+test('switchWorkspaceTabs: same workspace switch is a no-op identity check', () => {
+  const ep = createMockEndpoint('ep1', 'Ep1');
+  const currentTabState: TabState = {
+    openEndpoints: [ep],
+    activeEndpointId: 'ep1',
+    activeEndpoint: ep,
+    endpointDrafts: {},
+    endpointResponses: {},
+  };
+  const initialMap: WorkspaceTabMap = { 'ws-1': currentTabState };
+  const res = switchWorkspaceTabs(initialMap, 'ws-1', currentTabState, 'ws-1');
+
+  assert.equal(res.workspaceTabs, initialMap);
+  assert.equal(res.activeTabState, currentTabState);
+});
+
+test('removeWorkspaceTabs: prunes deleted workspace without affecting others', () => {
+  const epA = createMockEndpoint('epA', 'EpA');
+  const epB = createMockEndpoint('epB', 'EpB');
+  const tabMap: WorkspaceTabMap = {
+    'ws-1': { openEndpoints: [epA], activeEndpointId: 'epA', activeEndpoint: epA },
+    'ws-2': { openEndpoints: [epB], activeEndpointId: 'epB', activeEndpoint: epB },
+  };
+
+  const updated = removeWorkspaceTabs(tabMap, 'ws-1');
+  assert.equal(updated['ws-1'], undefined);
+  assert.equal(updated['ws-2'].openEndpoints.length, 1);
+  assert.equal(updated['ws-2'].openEndpoints[0].id, 'epB');
+
+  // Deleting non-existent workspace returns same object
+  const unchanged = removeWorkspaceTabs(updated, 'non-existent');
+  assert.equal(unchanged, updated);
 });

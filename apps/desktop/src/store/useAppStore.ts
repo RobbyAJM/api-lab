@@ -19,7 +19,10 @@ import {
   setEndpointDraftInState,
   clearEndpointDraftInState,
   isEndpointDirtyInState,
+  switchWorkspaceTabs,
+  removeWorkspaceTabs,
   type TabResponseData,
+  type WorkspaceTabMap,
 } from '../utils/tabManager';
 import {
   recordPaletteAction,
@@ -41,6 +44,7 @@ interface AppState {
   workspaces: WorkspaceSummary[];
   activeWorkspaceId: string | null;
   activeWorkspaceRole: 'admin' | 'developer' | null;
+  workspaceTabs: WorkspaceTabMap;
 
   activeEnvironmentId: string | null;
 
@@ -141,6 +145,7 @@ interface AppState {
   logout: () => void;
   setWorkspaces: (workspaces: WorkspaceSummary[]) => void;
   setActiveWorkspaceId: (id: string | null) => void;
+  removeWorkspaceTabState: (workspaceId: string) => void;
   setActiveEnvironmentId: (id: string | null) => void;
   setActiveEndpoint: (endpoint: Endpoint | null) => void;
   setLastHttpResponse: (res: HttpExecutionResponse | null, endpointId?: string) => void;
@@ -226,6 +231,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   workspaces: [],
   activeWorkspaceId: null,
   activeWorkspaceRole: null,
+  workspaceTabs: {},
 
   activeEnvironmentId: typeof window !== 'undefined' ? localStorage.getItem('api_lab_active_environment_id') : null,
 
@@ -361,6 +367,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       workspaces: [],
       activeWorkspaceId: null,
       activeWorkspaceRole: null,
+      workspaceTabs: {},
       activeEndpointId: null,
       activeEndpoint: null,
       endpointResponses: {},
@@ -375,9 +382,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setWorkspaces: (workspaces) => {
-    const current = get().activeWorkspaceId;
+    const state = get();
+    const current = state.activeWorkspaceId;
     let nextActive = current;
-    let role = get().activeWorkspaceRole;
+    let role = state.activeWorkspaceRole;
 
     if (!current || !workspaces.some((w) => w.id === current)) {
       if (workspaces.length > 0) {
@@ -392,26 +400,99 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (activeObj) role = activeObj.role;
     }
 
-    set({ workspaces, activeWorkspaceId: nextActive, activeWorkspaceRole: role });
+    if (nextActive === current) {
+      set({ workspaces, activeWorkspaceRole: role });
+      return;
+    }
+
+    const { workspaceTabs, activeTabState } = switchWorkspaceTabs(
+      state.workspaceTabs,
+      current,
+      {
+        openEndpoints: state.openEndpoints,
+        activeEndpointId: state.activeEndpointId,
+        activeEndpoint: state.activeEndpoint,
+        endpointDrafts: state.endpointDrafts,
+        endpointResponses: state.endpointResponses,
+      },
+      nextActive
+    );
+
+    const activeEpId = activeTabState.activeEndpointId;
+    const targetResp = activeEpId ? activeTabState.endpointResponses?.[activeEpId] : null;
+
+    if (activeEpId) {
+      localStorage.setItem('api_lab_active_endpoint_id', activeEpId);
+    } else {
+      localStorage.removeItem('api_lab_active_endpoint_id');
+    }
+
+    set({
+      workspaces,
+      activeWorkspaceId: nextActive,
+      activeWorkspaceRole: role,
+      workspaceTabs,
+      openEndpoints: activeTabState.openEndpoints,
+      activeEndpointId: activeTabState.activeEndpointId,
+      activeEndpoint: activeTabState.activeEndpoint,
+      endpointDrafts: activeTabState.endpointDrafts || {},
+      endpointResponses: activeTabState.endpointResponses || {},
+      lastHttpResponse: targetResp?.http ?? null,
+      lastGrpcResponse: targetResp?.grpc ?? null,
+      streamMessages: targetResp?.streamMessages ?? [],
+      isStreaming: false,
+      activeStreamId: null,
+    });
   },
 
   setActiveWorkspaceId: (id) => {
-    const ws = get().workspaces.find((w) => w.id === id);
+    const state = get();
+    if (state.activeWorkspaceId === id) return;
+
+    const ws = state.workspaces.find((w) => w.id === id);
+    const { workspaceTabs, activeTabState } = switchWorkspaceTabs(
+      state.workspaceTabs,
+      state.activeWorkspaceId,
+      {
+        openEndpoints: state.openEndpoints,
+        activeEndpointId: state.activeEndpointId,
+        activeEndpoint: state.activeEndpoint,
+        endpointDrafts: state.endpointDrafts,
+        endpointResponses: state.endpointResponses,
+      },
+      id
+    );
+
+    const activeEpId = activeTabState.activeEndpointId;
+    const targetResp = activeEpId ? activeTabState.endpointResponses?.[activeEpId] : null;
+
+    if (activeEpId) {
+      localStorage.setItem('api_lab_active_endpoint_id', activeEpId);
+    } else {
+      localStorage.removeItem('api_lab_active_endpoint_id');
+    }
+
     set({
       activeWorkspaceId: id,
       activeWorkspaceRole: ws ? ws.role : null,
-      openEndpoints: [],
-      activeEndpointId: null,
-      activeEndpoint: null,
-      endpointDrafts: {},
-      endpointResponses: {},
-      lastHttpResponse: null,
-      lastGrpcResponse: null,
+      workspaceTabs,
+      openEndpoints: activeTabState.openEndpoints,
+      activeEndpointId: activeTabState.activeEndpointId,
+      activeEndpoint: activeTabState.activeEndpoint,
+      endpointDrafts: activeTabState.endpointDrafts || {},
+      endpointResponses: activeTabState.endpointResponses || {},
+      lastHttpResponse: targetResp?.http ?? null,
+      lastGrpcResponse: targetResp?.grpc ?? null,
+      streamMessages: targetResp?.streamMessages ?? [],
       isStreaming: false,
       activeStreamId: null,
-      streamMessages: [],
     });
   },
+
+  removeWorkspaceTabState: (workspaceId) =>
+    set((state) => ({
+      workspaceTabs: removeWorkspaceTabs(state.workspaceTabs, workspaceId),
+    })),
 
   setActiveEnvironmentId: (id) => {
     if (typeof window !== 'undefined') {

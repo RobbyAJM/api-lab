@@ -23,6 +23,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
     workspaces,
     activeWorkspaceId,
     setActiveWorkspaceId,
+    removeWorkspaceTabState,
     workspaceModalOpen,
     setWorkspaceModalOpen,
     setMembersModalOpen,
@@ -131,6 +132,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
       if (activeWorkspaceId === deletedId && remaining.length > 0) {
         setActiveWorkspaceId(remaining[0].id);
       }
+      removeWorkspaceTabState(deletedId);
       setDeletingWs(null);
     },
   });
