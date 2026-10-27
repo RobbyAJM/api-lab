@@ -33,6 +33,7 @@ pub fn create_router(state: SharedState) -> Router {
         .route("/notifications/{id}", delete(notifications::delete_notification))
         // Workspaces
         .route("/workspaces", get(workspaces::list_workspaces).post(workspaces::create_workspace))
+        .route("/workspaces/join", post(workspaces::join_workspace))
         .route(
             "/workspaces/{workspace_id}",
             patch(workspaces::update_workspace).delete(workspaces::delete_workspace),

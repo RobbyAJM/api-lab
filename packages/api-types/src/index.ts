@@ -22,6 +22,10 @@ export interface WorkspaceSummary {
   role: Role;
 }
 
+export interface JoinWorkspaceDto {
+  token: string;
+}
+
 export interface AuthResponse {
   token: string;
   user: UserSummary;

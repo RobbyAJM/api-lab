@@ -4,10 +4,12 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { Avatar } from '../common/Avatar';
 import { filterWorkspaces, getWorkspaceInitials } from '../../utils/workspacePicker';
+import { validateInvitationToken, formatJoinErrorMessage } from '../../utils/workspaceJoin';
 import type { WorkspaceSummary } from '@api-lab/api-types';
 import {
   X,
   Plus,
+  UserPlus,
   Search,
   Star,
   MoreHorizontal,
@@ -45,6 +47,11 @@ export const WorkspaceSettingsModal: React.FC = () => {
   const [showCreateWs, setShowCreateWs] = useState(false);
   const [newWsName, setNewWsName] = useState('');
 
+  // Join workspace dialog state
+  const [showJoinWs, setShowJoinWs] = useState(false);
+  const [joinToken, setJoinToken] = useState('');
+  const [joinError, setJoinError] = useState<string | null>(null);
+
   // Delete workspace dialog state
   const [deletingWs, setDeletingWs] = useState<WorkspaceSummary | null>(null);
 
@@ -78,6 +85,38 @@ export const WorkspaceSettingsModal: React.FC = () => {
       setWorkspaceModalOpen(false);
     },
   });
+
+  // Join Workspace Mutation
+  const joinWsMutation = useMutation({
+    mutationFn: (token: string) =>
+      apiRequest<WorkspaceSummary>('/workspaces/join', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+      }),
+    onSuccess: (joined) => {
+      queryClient.invalidateQueries({ queryKey: ['workspaces'] });
+      queryClient.invalidateQueries({ queryKey: ['auth_me'] });
+      setActiveWorkspaceId(joined.id);
+      setJoinToken('');
+      setJoinError(null);
+      setShowJoinWs(false);
+      setWorkspaceModalOpen(false);
+    },
+    onError: (err: unknown) => {
+      setJoinError(formatJoinErrorMessage(err));
+    },
+  });
+
+  const handleJoinSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const validation = validateInvitationToken(joinToken);
+    if (!validation.valid) {
+      setJoinError(validation.error);
+      return;
+    }
+    setJoinError(null);
+    joinWsMutation.mutate(validation.token);
+  };
 
   // Delete Workspace Mutation
   const deleteWsMutation = useMutation({
@@ -126,6 +165,19 @@ export const WorkspaceSettingsModal: React.FC = () => {
           <h1 className="text-xl font-bold tracking-tight text-white">Workspaces</h1>
 
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                setJoinToken('');
+                setJoinError(null);
+                setShowJoinWs(true);
+              }}
+              className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white rounded font-medium text-xs border border-zinc-700/80 shadow transition flex items-center gap-1.5"
+            >
+              <UserPlus size={14} />
+              <span>Join workspace</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -363,6 +415,77 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 </button>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Join Workspace Inline Sub-dialog */}
+        {showJoinWs && (
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
+            <form
+              onSubmit={handleJoinSubmit}
+              className="w-96 rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4"
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-white">Join workspace</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowJoinWs(false);
+                    setJoinError(null);
+                  }}
+                  className="text-zinc-500 hover:text-zinc-300"
+                >
+                  <X size={15} />
+                </button>
+              </div>
+
+              <p className="text-xs text-zinc-400">
+                Enter 64-character invitation token provided by workspace admin.
+              </p>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">
+                  Invitation token
+                </label>
+                <input
+                  type="text"
+                  value={joinToken}
+                  onChange={(e) => {
+                    setJoinToken(e.target.value);
+                    if (joinError) setJoinError(null);
+                  }}
+                  placeholder="paste 64-character token"
+                  autoFocus
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-primary font-mono"
+                />
+              </div>
+
+              {joinError && (
+                <div className="p-2.5 rounded bg-red-950/40 border border-red-800/60 text-red-400 text-xs">
+                  {joinError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowJoinWs(false);
+                    setJoinError(null);
+                  }}
+                  className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 rounded text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!joinToken.trim() || joinWsMutation.isPending}
+                  className="px-3.5 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-medium transition disabled:opacity-50"
+                >
+                  {joinWsMutation.isPending ? 'Joining...' : 'Join'}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 

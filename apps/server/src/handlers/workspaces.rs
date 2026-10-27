@@ -3,7 +3,7 @@ use axum::Json;
 use chrono::{Duration, Utc};
 use rust_core::crypto::{generate_token_hex, hash_token_sha256};
 use rust_core::dto::{
-    CreateInvitationDto, CreateWorkspaceDto, InvitationResponse, MemberResponse,
+    CreateInvitationDto, CreateWorkspaceDto, InvitationResponse, JoinWorkspaceDto, MemberResponse,
     UpdateMemberRoleDto, WorkspaceSummary, WsSyncEvent,
 };
 use rust_core::models::{InvitationStatus, Role};
@@ -83,6 +83,104 @@ pub async fn create_workspace(
         id: ws_id,
         name: name.to_string(),
         role: Role::Admin,
+    }))
+}
+
+pub async fn join_workspace(
+    auth: AuthUser,
+    State(state): State<SharedState>,
+    Json(dto): Json<JoinWorkspaceDto>,
+) -> Result<Json<WorkspaceSummary>, ApiError> {
+    let token = dto.token.trim();
+    if token.len() != 64 || !token.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(ApiError::BadRequest("invalid invitation token format".into()));
+    }
+
+    let token_hash = hash_token_sha256(token);
+
+    let mut tx = state.pool.begin().await.map_err(ApiError::Database)?;
+
+    let invite = sqlx::query!(
+        r#"
+        SELECT id, workspace_id, inviter_id, role, expires_at, status
+        FROM invitations
+        WHERE token_hash = $1
+        FOR UPDATE
+        "#,
+        token_hash
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(ApiError::Database)?
+    .ok_or_else(|| ApiError::BadRequest("invalid or expired invitation".into()))?;
+
+    if invite.status != "pending" || invite.expires_at <= Utc::now() {
+        return Err(ApiError::BadRequest("invitation has expired or is no longer valid".into()));
+    }
+
+    let assigned_role = Role::from_str_opt(&invite.role)
+        .ok_or_else(|| ApiError::Internal("corrupted invitation role".into()))?;
+
+    let existing_member = sqlx::query!(
+        "SELECT id FROM workspace_members WHERE workspace_id = $1 AND user_id = $2",
+        invite.workspace_id,
+        auth.user.id
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(ApiError::Database)?;
+
+    if existing_member.is_some() {
+        return Err(ApiError::BadRequest("user is already a member of this workspace".into()));
+    }
+
+    sqlx::query!(
+        r#"
+        INSERT INTO workspace_members (workspace_id, user_id, role)
+        VALUES ($1, $2, $3)
+        "#,
+        invite.workspace_id,
+        auth.user.id,
+        assigned_role.as_str()
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(ApiError::Database)?;
+
+    sqlx::query!(
+        "UPDATE invitations SET status = 'accepted' WHERE id = $1",
+        invite.id
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(ApiError::Database)?;
+
+    let ws = sqlx::query!("SELECT name FROM workspaces WHERE id = $1", invite.workspace_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(ApiError::Database)?;
+
+    let notif_title = "Team member joined";
+    let notif_message = format!("{} accepted your invitation to join {}", auth.user.name.trim(), ws.name);
+    let _ = sqlx::query!(
+        r#"
+        INSERT INTO notifications (user_id, workspace_id, title, message, category)
+        VALUES ($1, $2, $3, $4, 'direct')
+        "#,
+        invite.inviter_id,
+        invite.workspace_id,
+        notif_title,
+        notif_message
+    )
+    .execute(&mut *tx)
+    .await;
+
+    tx.commit().await.map_err(ApiError::Database)?;
+
+    Ok(Json(WorkspaceSummary {
+        id: invite.workspace_id,
+        name: ws.name,
+        role: assigned_role,
     }))
 }
 

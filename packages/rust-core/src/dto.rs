@@ -92,6 +92,12 @@ pub struct CreateWorkspaceDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct JoinWorkspaceDto {
+    #[serde(alias = "invitation_token")]
+    pub token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemberResponse {
     pub id: Uuid,
     pub user_id: Uuid,
