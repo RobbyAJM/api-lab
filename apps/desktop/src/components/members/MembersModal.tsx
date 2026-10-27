@@ -10,6 +10,12 @@ import type {
 } from '@api-lab/api-types';
 import { X, UserPlus, Trash2, Copy, Check, Settings, Users, Save } from 'lucide-react';
 import { Select } from '../common/Select';
+import {
+  getDefaultExpirationDate,
+  getMinExpirationDate,
+  buildCreateInvitationPayload,
+  formatInvitationExpiration,
+} from '../../utils/invitation';
 
 export const MembersModal: React.FC = () => {
   const queryClient = useQueryClient();
@@ -57,6 +63,8 @@ export const MembersModal: React.FC = () => {
 
   // State for invitation creation
   const [inviteRole, setInviteRole] = useState<Role>('developer');
+  const [neverExpires, setNeverExpires] = useState(false);
+  const [expirationDate, setExpirationDate] = useState(() => getDefaultExpirationDate(7));
   const [copiedToken, setCopiedToken] = useState(false);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -108,11 +116,17 @@ export const MembersModal: React.FC = () => {
 
   // Generate invitation
   const inviteMutation = useMutation({
-    mutationFn: () =>
-      apiRequest<InvitationResponse>(`/workspaces/${activeWorkspaceId}/invitations`, {
+    mutationFn: () => {
+      const payload = buildCreateInvitationPayload({
+        role: inviteRole,
+        neverExpires,
+        expirationDate,
+      });
+      return apiRequest<InvitationResponse>(`/workspaces/${activeWorkspaceId}/invitations`, {
         method: 'POST',
-        body: JSON.stringify({ role: inviteRole, expires_in_days: 7 }),
-      }),
+        body: JSON.stringify(payload),
+      });
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invitations', activeWorkspaceId] });
       if (data.token) {
@@ -277,7 +291,7 @@ export const MembersModal: React.FC = () => {
                 <span className="text-xs font-semibold text-zinc-200 flex items-center gap-1.5">
                   <UserPlus size={14} /> Invite New Member
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-3">
                   <Select
                     value={inviteRole}
                     onChange={(val) => setInviteRole(val as Role)}
@@ -288,6 +302,29 @@ export const MembersModal: React.FC = () => {
                     size="sm"
                     className="w-36"
                   />
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="invite-expiration-date" className="text-xs text-zinc-400">
+                      Expiration Date:
+                    </label>
+                    <input
+                      id="invite-expiration-date"
+                      type="date"
+                      value={expirationDate}
+                      onChange={(e) => setExpirationDate(e.target.value)}
+                      disabled={neverExpires}
+                      min={getMinExpirationDate()}
+                      className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-300 select-none cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={neverExpires}
+                      onChange={(e) => setNeverExpires(e.target.checked)}
+                      className="rounded border-zinc-700 bg-zinc-900 text-primary focus:ring-0 cursor-pointer"
+                    />
+                    <span>Indefinite / Never Expires</span>
+                  </label>
                   <button
                     onClick={() => inviteMutation.mutate()}
                     disabled={inviteMutation.isPending}
@@ -388,7 +425,7 @@ export const MembersModal: React.FC = () => {
                           {inv.role}
                         </span>
                         <span className="text-[11px] text-zinc-500 ml-2">
-                          Expires {new Date(inv.expires_at).toLocaleDateString()}
+                          {formatInvitationExpiration(inv.expires_at)}
                         </span>
                       </div>
                       <button

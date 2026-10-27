@@ -1,0 +1,1 @@
+ALTER TABLE invitations ALTER COLUMN expires_at DROP NOT NULL;
