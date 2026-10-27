@@ -366,12 +366,25 @@ pub struct GrpcSamplePayloadResponse {
 }
 
 // WebSocket Event DTO
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct PresenceUserLocation {
+    pub location_type: String, // "http", "grpc", "settings", "workspace_settings", "members", "environments", "collection_settings", "folder_settings", "idle"
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub endpoint_id: Option<Uuid>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PresenceUser {
     pub user_id: Uuid,
     pub name: String,
     pub email: String,
     pub avatar: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_location: Option<PresenceUserLocation>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -383,6 +396,10 @@ pub enum PresenceEvent {
     Leave {
         workspace_id: Uuid,
         user_id: Uuid,
+    },
+    Update {
+        workspace_id: Uuid,
+        user: PresenceUser,
     },
     Notification {
         workspace_id: Uuid,
@@ -434,5 +451,39 @@ mod tests {
         // 6. expires_in_days
         let dto: CreateInvitationDto = serde_json::from_str(r#"{"role":"developer","expires_in_days":14}"#).unwrap();
         assert_eq!(dto.resolve_expiry(now).unwrap(), Some(now + Duration::days(14)));
+    }
+
+    #[test]
+    fn test_presence_user_location_serialization() {
+        let user_id = Uuid::new_v4();
+        let endpoint_id = Uuid::new_v4();
+
+        // 1. Without current location (backward compat)
+        let json_without = format!(
+            r#"{{"user_id":"{}","name":"Alice","email":"alice@example.com","avatar":"bottts:alice"}}"#,
+            user_id
+        );
+        let user: PresenceUser = serde_json::from_str(&json_without).unwrap();
+        assert_eq!(user.current_location, None);
+
+        // 2. With HTTP location
+        let user_with_loc = PresenceUser {
+            user_id,
+            name: "Alice".into(),
+            email: "alice@example.com".into(),
+            avatar: "bottts:alice".into(),
+            current_location: Some(PresenceUserLocation {
+                location_type: "http".into(),
+                endpoint_id: Some(endpoint_id),
+                name: Some("List Users".into()),
+                method: Some("GET".into()),
+            }),
+        };
+        let serialized = serde_json::to_string(&user_with_loc).unwrap();
+        assert!(serialized.contains("location_type"));
+        assert!(serialized.contains("List Users"));
+
+        let deserialized: PresenceUser = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, user_with_loc);
     }
 }

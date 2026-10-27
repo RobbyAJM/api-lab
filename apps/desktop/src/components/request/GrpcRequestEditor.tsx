@@ -36,6 +36,7 @@ import {
   EyeOff,
   Settings,
 } from 'lucide-react';
+import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
@@ -1065,6 +1066,8 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">
+          <EndpointConflictAlert endpointId={endpoint.id} />
+
           {statusMessage && (
             <span className="text-[10px] font-mono text-zinc-300 bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded select-text">
               {statusMessage}

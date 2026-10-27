@@ -45,11 +45,30 @@ export interface NotificationItem {
   created_at: string;
 }
 
+export type UserLocationType =
+  | 'http'
+  | 'grpc'
+  | 'settings'
+  | 'workspace_settings'
+  | 'members'
+  | 'environments'
+  | 'collection_settings'
+  | 'folder_settings'
+  | 'idle';
+
+export interface PresenceUserLocation {
+  location_type: UserLocationType;
+  endpoint_id?: string;
+  name?: string;
+  method?: string;
+}
+
 export interface PresenceUser {
   user_id: string;
   name: string;
   email: string;
   avatar: string;
+  current_location?: PresenceUserLocation | null;
 }
 
 export interface MemberResponse {
