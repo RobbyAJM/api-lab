@@ -246,10 +246,24 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   const discoveredServices = cachedServices;
 
-  const [metadata, setMetadata] = useState<[string, string, string?][]>(() => {
+  const [metadata, setMetadata] = useState<[string, string, string, boolean][]>(() => {
+    if (Array.isArray(initialConfig.metadata_list)) {
+      return initialConfig.metadata_list.map((item: any) => [
+        String(item[0] || ''),
+        String(item[1] || ''),
+        String(item[2] || ''),
+        item[3] !== false,
+      ]);
+    }
     const raw = initialConfig.metadata || {};
     const descs = initialConfig.metadata_descriptions || {};
-    return Object.entries(raw).map(([k, v]) => [k, v as string, descs[k] || '']);
+    const disabled = initialConfig.metadata_disabled || {};
+    return Object.entries(raw).map(([k, v]) => [
+      k,
+      v as string,
+      descs[k] || '',
+      !disabled[k],
+    ]);
   });
   const [payloadStr, setPayloadStr] = useState<string>(() => {
     if (initialConfig.payload !== undefined && initialConfig.payload !== null) {
@@ -310,9 +324,24 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       setMaxMsgSizeMb(cfg.max_msg_size_mb !== undefined ? String(cfg.max_msg_size_mb) : '4');
       setShowReqSchemaPreview(false);
       setShowResSchemaPreview(false);
-      const rawMeta = cfg.metadata || {};
-      const descs = cfg.metadata_descriptions || {};
-      setMetadata(Object.entries(rawMeta).map(([k, v]) => [k, v as string, descs[k] || '']));
+      if (Array.isArray(cfg.metadata_list)) {
+        setMetadata(cfg.metadata_list.map((item: any) => [
+          String(item[0] || ''),
+          String(item[1] || ''),
+          String(item[2] || ''),
+          item[3] !== false,
+        ]));
+      } else {
+        const rawMeta = cfg.metadata || {};
+        const descs = cfg.metadata_descriptions || {};
+        const disabled = cfg.metadata_disabled || {};
+        setMetadata(Object.entries(rawMeta).map(([k, v]) => [
+          k,
+          v as string,
+          descs[k] || '',
+          !disabled[k],
+        ]));
+      }
        setAuth(cfg.auth || { auth_type: 'inherit' });
       setPayloadStr(
         cfg.payload !== undefined && cfg.payload !== null
@@ -507,10 +536,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   function buildConfig() {
     const metaMap: Record<string, string> = {};
     const metaDescMap: Record<string, string> = {};
-    for (const [k, v, d] of metadata) {
+    const metaDisabledMap: Record<string, boolean> = {};
+    for (const [k, v, d, enabled] of metadata) {
       if (k.trim()) {
         metaMap[k.trim()] = v;
         if (d && d.trim()) metaDescMap[k.trim()] = d.trim();
+        if (enabled === false) metaDisabledMap[k.trim()] = true;
       }
     }
 
@@ -531,7 +562,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       timeout_seconds: timeoutSeconds ? Number(timeoutSeconds) : 30,
       max_msg_size_mb: maxMsgSizeMb ? Number(maxMsgSizeMb) : 4,
       metadata: metaMap,
+      metadata_list: metadata.filter(([k]) => k.trim()),
       metadata_descriptions: metaDescMap,
+      metadata_disabled: metaDisabledMap,
       auth,
       payload: payloadJson,
       pre_request_script: preRequestScript,
@@ -657,8 +690,8 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setStatusMessage(null);
 
     const metaMap: Record<string, string> = {};
-    for (const [k, v] of metadata) {
-      if (k.trim()) metaMap[k.trim()] = v;
+    for (const [k, v, _d, enabled] of metadata) {
+      if (k.trim() && enabled !== false) metaMap[k.trim()] = v;
     }
     applyRequestAuth(metaMap);
 
@@ -825,8 +858,8 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     clearStreamMessages();
 
     const metaMap: Record<string, string> = {};
-    for (const [k, v] of metadata) {
-      if (k.trim()) metaMap[k.trim()] = v;
+    for (const [k, v, _d, enabled] of metadata) {
+      if (k.trim() && enabled !== false) metaMap[k.trim()] = v;
     }
     applyRequestAuth(metaMap);
 
@@ -1297,9 +1330,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Metadata</span>
-            {metadata.filter(([k]) => k.trim()).length > 0 && (
+            {metadata.filter(([k, _v, _d, enabled]) => k.trim() && enabled !== false).length > 0 && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
-                {metadata.filter(([k]) => k.trim()).length}
+                {metadata.filter(([k, _v, _d, enabled]) => k.trim() && enabled !== false).length}
               </span>
             )}
           </button>

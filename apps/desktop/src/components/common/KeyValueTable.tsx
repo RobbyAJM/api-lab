@@ -15,7 +15,7 @@ export interface InheritedEntry {
 
 export interface KeyValueTableProps {
   title: string;
-  items: Array<[string, string, string?, boolean?] | [string, string]>;
+  items: Array<[string, string, string?, boolean?] | [string, string, string?] | [string, string]>;
   onChange: (items: any[]) => void;
   inheritedEntries?: InheritedEntry[];
   variables?: VariableSource;
@@ -28,6 +28,7 @@ export interface KeyValueTableProps {
   hideDelete?: boolean;
   hideBulkEdit?: boolean;
   showCheckbox?: boolean;
+  hideCheckbox?: boolean;
 }
 
 export const KeyValueTable: React.FC<KeyValueTableProps> = ({
@@ -44,17 +45,23 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
   hideAdd = false,
   hideDelete = false,
   hideBulkEdit = false,
-  showCheckbox = false,
+  showCheckbox = true,
+  hideCheckbox = false,
 }) => {
   const [isBulkEdit, setIsBulkEdit] = useState(false);
   const [bulkText, setBulkText] = useState('');
+
+  const enableCheckbox = showCheckbox && !hideCheckbox;
 
   // Enter bulk edit mode
   function handleToggleBulk() {
     if (!isBulkEdit) {
       const text = items
         .filter(([k]) => k.trim())
-        .map(([k, v, d]) => (d && d.trim() ? `${k}: ${v} # ${d.trim()}` : `${k}: ${v}`))
+        .map(([k, v, d, enabled]) => {
+          const prefix = enabled === false ? '// ' : '';
+          return d && d.trim() ? `${prefix}${k}: ${v} # ${d.trim()}` : `${prefix}${k}: ${v}`;
+        })
         .join('\n');
       setBulkText(text);
       setIsBulkEdit(true);
@@ -65,16 +72,18 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
         .map((line) => line.trim())
         .filter(Boolean)
         .map((line) => {
+          const isLineDisabled = line.startsWith('//');
+          const cleanLine = isLineDisabled ? line.slice(2).trim() : line;
           let desc = '';
-          let rest = line;
-          const hashIdx = line.indexOf('#');
+          let rest = cleanLine;
+          const hashIdx = cleanLine.indexOf('#');
           if (hashIdx !== -1) {
-            desc = line.slice(hashIdx + 1).trim();
-            rest = line.slice(0, hashIdx).trim();
+            desc = cleanLine.slice(hashIdx + 1).trim();
+            rest = cleanLine.slice(0, hashIdx).trim();
           }
           const idx = rest.indexOf(':');
-          if (idx === -1) return [rest.trim(), '', desc, true];
-          return [rest.slice(0, idx).trim(), rest.slice(idx + 1).trim(), desc, true];
+          if (idx === -1) return [rest.trim(), '', desc, !isLineDisabled];
+          return [rest.slice(0, idx).trim(), rest.slice(idx + 1).trim(), desc, !isLineDisabled];
         });
       onChange(parsed);
       setIsBulkEdit(false);
@@ -126,6 +135,14 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
   function handleClearAll() {
     onChange([]);
   }
+
+  const gridCols = enableCheckbox
+    ? hideDelete
+      ? 'grid-cols-[24px_1fr_1fr_1fr]'
+      : 'grid-cols-[24px_1fr_1fr_1fr_28px]'
+    : hideDelete
+      ? 'grid-cols-[1fr_1fr_1fr]'
+      : 'grid-cols-[1fr_1fr_1fr_28px]';
 
   return (
     <div className="space-y-2 text-xs">
@@ -193,33 +210,24 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
           <textarea
             value={bulkText}
             onChange={(e) => setBulkText(e.target.value)}
-            placeholder={`key: value # description\nkey2: value2`}
+            placeholder={`key: value # description\n// disabled_key: value`}
             className="w-full h-48 bg-zinc-900 border border-zinc-800 rounded-md p-3 font-mono text-xs text-zinc-200 focus:outline-none focus:border-zinc-700 resize-none"
             spellCheck={false}
           />
           <p className="text-[10px] text-zinc-500 font-sans">
-            One entry per line in <code>key: value # description</code> format. Click "Key-Value" above when done.
+            One entry per line in <code>key: value # description</code> format. Prefix with <code>//</code> to disable. Click "Key-Value" above when done.
           </p>
         </div>
       ) : (
         <div className="border border-zinc-800/80 rounded-md overflow-hidden bg-zinc-950">
           {/* Table Header */}
-          {showCheckbox ? (
-            <div className="grid grid-cols-[24px_1fr_1fr_1fr_28px] gap-2 items-center bg-zinc-900/60 border-b border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
-              <div className="w-6"></div>
-              <div>Key</div>
-              <div>Value</div>
-              <div>Description</div>
-              {!hideDelete && <div className="text-right">Action</div>}
-            </div>
-          ) : (
-            <div className="grid grid-cols-12 bg-zinc-900/60 border-b border-zinc-800/80 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
-              <div className="col-span-4">Key</div>
-              <div className="col-span-4 pl-2">Value</div>
-              <div className={hideDelete ? 'col-span-4 pl-2' : 'col-span-3 pl-2'}>Description</div>
-              {!hideDelete && <div className="col-span-1 text-right">Action</div>}
-            </div>
-          )}
+          <div className={`grid ${gridCols} gap-2 bg-zinc-900/60 border-b border-zinc-800/80 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none items-center`}>
+            {enableCheckbox && <div className="text-center"></div>}
+            <div>Key</div>
+            <div>Value</div>
+            <div>Description</div>
+            {!hideDelete && <div className="text-right pr-1">Action</div>}
+          </div>
 
           {/* Table Rows */}
           {items.length === 0 && inheritedEntries.length === 0 ? (
@@ -232,15 +240,23 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
               {inheritedEntries.map((entry, idx) => (
                 <div
                   key={`inherited-${idx}`}
-                  className={`grid ${
-                    showCheckbox ? 'grid-cols-[24px_1fr_1fr_1fr_28px] gap-2' : 'grid-cols-12'
-                  } items-center px-2 py-1.5 bg-zinc-950/60 transition group`}
+                  className={`grid ${gridCols} gap-2 items-center px-2 py-1.5 bg-zinc-950/60 transition group`}
                   title={`Inherited authorization from ${entry.sourceLabel}. Cannot be edited directly here.`}
                 >
-                  {showCheckbox && <div className="w-6"></div>}
+                  {enableCheckbox && (
+                    <div className="flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        disabled
+                        className="rounded border-zinc-800 bg-zinc-950 text-secondary cursor-not-allowed opacity-60"
+                        title="Inherited entry always enabled"
+                      />
+                    </div>
+                  )}
 
                   {/* Key Input */}
-                  <div className={showCheckbox ? '' : 'col-span-4 pr-1'}>
+                  <div>
                     <div className="relative flex items-center">
                       <input
                         type="text"
@@ -256,7 +272,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
                   </div>
 
                   {/* Value Input */}
-                  <div className={showCheckbox ? '' : 'col-span-4 px-1'}>
+                  <div>
                     <input
                       type="text"
                       value={entry.value}
@@ -267,7 +283,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
                   </div>
 
                   {/* Description */}
-                  <div className={showCheckbox ? '' : hideDelete ? 'col-span-4 pl-1' : 'col-span-3 px-1'}>
+                  <div>
                     <div
                       className="w-full bg-zinc-950/80 border border-zinc-800/40 rounded px-2.5 py-1 text-[11px] text-zinc-400 truncate flex items-center gap-1.5 h-7 cursor-help"
                       title={`Inherited from ${entry.sourceLabel}. Adjust in settings.`}
@@ -279,7 +295,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
 
                   {/* Actions */}
                   {!hideDelete && (
-                    <div className={showCheckbox ? 'text-right pr-1' : 'col-span-1 text-right pr-1'}>
+                    <div className="text-right pr-1">
                       {entry.onEditSource ? (
                         <button
                           type="button"
@@ -298,89 +314,93 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
               ))}
 
               {/* Standard Items */}
-              {items.map(([k, v, d, en], idx) => (
-                <div
-                  key={idx}
-                  className={`grid ${
-                    showCheckbox ? 'grid-cols-[24px_1fr_1fr_1fr_28px] gap-2' : 'grid-cols-12'
-                  } items-center px-2 py-1.5 hover:bg-zinc-900/40 transition group ${
-                    showCheckbox && en === false ? 'opacity-60' : ''
-                  }`}
-                >
-                  {/* Checkbox Column */}
-                  {showCheckbox && (
-                    <div className="flex items-center justify-center">
+              {items.map(([k, v, d, en], idx) => {
+                const isRowEnabled = en !== false;
+                return (
+                  <div
+                    key={idx}
+                    className={`grid ${gridCols} gap-2 items-center px-2 py-1.5 hover:bg-zinc-900/40 transition group ${
+                      !isRowEnabled ? 'opacity-60' : ''
+                    }`}
+                  >
+                    {enableCheckbox && (
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={isRowEnabled}
+                          onChange={(e) => handleToggleRow(idx, e.target.checked)}
+                          className="rounded border-zinc-700 bg-zinc-900 text-primary focus:ring-0 cursor-pointer ml-1"
+                          title={isRowEnabled ? 'Disable row' : 'Enable row'}
+                        />
+                      </div>
+                    )}
+
+                    {/* Key Input */}
+                    <div>
                       <input
-                        type="checkbox"
-                        checked={en !== false}
-                        onChange={(e) => handleToggleRow(idx, e.target.checked)}
-                        className="rounded border-zinc-700 bg-zinc-900 text-primary focus:ring-0 cursor-pointer ml-1"
-                        title={en !== false ? 'Enabled' : 'Disabled'}
-                      />
-                    </div>
-                  )}
-
-                  {/* Key Input */}
-                  <div className={showCheckbox ? '' : 'col-span-4 pr-1'}>
-                    <input
-                      type="text"
-                      value={k}
-                      readOnly={readOnlyKeys}
-                      onChange={(e) =>
-                        handleUpdateRow(idx, [e.target.value, v ?? '', d ?? ''])
-                      }
-                      placeholder={keyPlaceholder}
-                      className={`w-full border rounded px-2.5 py-1 text-xs font-mono h-7 focus:outline-none ${
-                        readOnlyKeys
-                          ? 'bg-zinc-950 text-zinc-400 border-zinc-800/60 cursor-default'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-200 focus:border-zinc-700'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Value Input */}
-                  <div className={showCheckbox ? '' : 'col-span-4 px-1'}>
-                    <div className="w-full bg-zinc-900 border border-zinc-800 rounded focus-within:border-zinc-700 h-7 flex items-center">
-                      <VariableInput
-                        value={v ?? ''}
-                        onChange={(newVal) =>
-                          handleUpdateRow(idx, [k, newVal, d ?? ''])
+                        type="text"
+                        value={k}
+                        readOnly={readOnlyKeys}
+                        onChange={(e) =>
+                          handleUpdateRow(idx, [e.target.value, v ?? '', d ?? ''])
                         }
-                        variables={variables}
-                        placeholder={valuePlaceholder}
-                        className="w-full h-full text-xs font-mono"
+                        placeholder={keyPlaceholder}
+                        className={`w-full border rounded px-2.5 py-1 text-xs font-mono h-7 focus:outline-none ${
+                          readOnlyKeys
+                            ? 'bg-zinc-950 text-zinc-400 border-zinc-800/60 cursor-default'
+                            : isRowEnabled
+                              ? 'bg-zinc-900 border-zinc-800 text-zinc-200 focus:border-zinc-700'
+                              : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400 focus:border-zinc-700 line-through'
+                        }`}
                       />
                     </div>
-                  </div>
 
-                  {/* Description Input */}
-                  <div className={showCheckbox ? '' : hideDelete ? 'col-span-4 pl-1' : 'col-span-3 px-1'}>
-                    <input
-                      type="text"
-                      value={d ?? ''}
-                      onChange={(e) =>
-                        handleUpdateRow(idx, [k, v ?? '', e.target.value])
-                      }
-                      placeholder={descriptionPlaceholder}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700 h-7"
-                    />
-                  </div>
-
-                  {/* Actions */}
-                  {!hideDelete && (
-                    <div className={showCheckbox ? 'text-right pr-1' : 'col-span-1 text-right pr-1'}>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteRow(idx)}
-                        className="p-1 rounded text-zinc-600 hover:text-red-400 hover:bg-zinc-900 transition"
-                        title="Delete row"
-                      >
-                        <Trash2 size={12} />
-                      </button>
+                    {/* Value Input */}
+                    <div>
+                      <div className="w-full bg-zinc-900 border border-zinc-800 rounded focus-within:border-zinc-700 h-7 flex items-center">
+                        <VariableInput
+                          value={v ?? ''}
+                          onChange={(newVal) =>
+                            handleUpdateRow(idx, [k, newVal, d ?? ''])
+                          }
+                          variables={variables}
+                          placeholder={valuePlaceholder}
+                          className={`w-full h-full text-xs font-mono ${!isRowEnabled ? 'text-zinc-400' : ''}`}
+                        />
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+
+                    {/* Description Input */}
+                    <div>
+                      <input
+                        type="text"
+                        value={d ?? ''}
+                        onChange={(e) =>
+                          handleUpdateRow(idx, [k, v ?? '', e.target.value])
+                        }
+                        placeholder={descriptionPlaceholder}
+                        className={`w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs placeholder:text-zinc-600 focus:outline-none focus:border-zinc-700 h-7 ${
+                          isRowEnabled ? 'text-zinc-300' : 'text-zinc-500'
+                        }`}
+                      />
+                    </div>
+
+                    {/* Actions */}
+                    {!hideDelete && (
+                      <div className="text-right pr-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteRow(idx)}
+                          className="p-1 rounded text-zinc-600 hover:text-red-400 hover:bg-zinc-900 transition"
+                          title="Delete row"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

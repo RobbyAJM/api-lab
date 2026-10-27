@@ -4,7 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection, CollectionFolder } from '@api-lab/api-types';
-import { Save, Shield, Globe, Settings } from 'lucide-react';
+import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp } from 'lucide-react';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
@@ -33,6 +33,15 @@ import {
   resolveInheritedAuth,
   getInheritedAuthHeader,
 } from '../../utils/folderSettings';
+
+export interface MultipartField {
+  name: string;
+  value: string;
+  enabled?: boolean;
+  filename?: string;
+  data?: string;
+  content_type?: string;
+}
 
 export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -78,16 +87,30 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   });
   const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'scripts'>('params');
 
-  const [pathVariables, setPathVariables] = useState<[string, string, string][]>(() => {
-    const saved = (initialConfig.path_variables || []) as Array<[string, string, string?]>;
+  const [pathVariables, setPathVariables] = useState<[string, string, string, boolean][]>(() => {
+    const saved = (initialConfig.path_variables || []) as Array<any>;
     const rawUrl = initialConfig.url !== undefined ? initialConfig.url : 'https://httpbin.org/get';
     const keys = extractPathVariables(convertSwaggerPathToApiPath(rawUrl));
     return syncPathVariablesWithKeys(saved, keys);
   });
-  const [headers, setHeaders] = useState<[string, string, string?][]>(() => {
+  const [headers, setHeaders] = useState<[string, string, string, boolean][]>(() => {
+    if (Array.isArray(initialConfig.headers_list)) {
+      return initialConfig.headers_list.map((item: any) => [
+        String(item[0] || ''),
+        String(item[1] || ''),
+        String(item[2] || ''),
+        item[3] !== false,
+      ]);
+    }
     const raw = initialConfig.headers || {};
     const descs = initialConfig.header_descriptions || {};
-    return Object.entries(raw).map(([k, v]) => [k, v as string, descs[k] || '']);
+    const disabled = initialConfig.header_disabled || {};
+    return Object.entries(raw).map(([k, v]) => [
+      k,
+      v as string,
+      descs[k] || '',
+      !disabled[k],
+    ]);
   });
 
   // Body & Auth state
@@ -97,12 +120,12 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [body, setBody] = useState<string>(
     initialConfig.body !== undefined ? initialConfig.body : ''
   );
-  const [multipartFields, setMultipartFields] = useState<
-    { name: string; value: string; filename?: string; data?: string; content_type?: string }[]
-  >(() => {
+  const [multipartFields, setMultipartFields] = useState<MultipartField[]>(() => {
     try {
       const parsed = JSON.parse(initialConfig.body || '[]');
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed)
+        ? parsed.map((item: any) => ({ ...item, enabled: item.enabled !== false }))
+        : [];
     } catch {
       return [];
     }
@@ -121,7 +144,6 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
   const [hookLogs, setHookLogs] = useState<string[]>([]);
-
   // Synchronize path variables when URL changes
   useEffect(() => {
     const keys = extractPathVariables(url);
@@ -217,19 +239,38 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         : normalizedUrl;
       setUrl(resolvedUrl);
       setQueryParams(resolvedParams);
-      const rawHeaders = cfg.headers || {};
-      const descs = cfg.header_descriptions || {};
-      setHeaders(Object.entries(rawHeaders).map(([k, v]) => [k, v as string, descs[k] || '']));
+      if (Array.isArray(cfg.headers_list)) {
+        setHeaders(cfg.headers_list.map((item: any) => [
+          String(item[0] || ''),
+          String(item[1] || ''),
+          String(item[2] || ''),
+          item[3] !== false,
+        ]));
+      } else {
+        const rawHeaders = cfg.headers || {};
+        const descs = cfg.header_descriptions || {};
+        const disabled = cfg.header_disabled || {};
+        setHeaders(Object.entries(rawHeaders).map(([k, v]) => [
+          k,
+          v as string,
+          descs[k] || '',
+          !disabled[k],
+        ]));
+      }
       setPathVariables(syncPathVariablesWithKeys(cfg.path_variables || [], extractPathVariables(resolvedUrl)));
       setBodyType(cfg.body_type || 'json');
-       setBody(cfg.body || '');
-       try {
-         const parsedBody = JSON.parse(cfg.body || '[]');
-         setMultipartFields(Array.isArray(parsedBody) ? parsedBody : []);
-       } catch {
-         setMultipartFields([]);
-       }
-       setAuth(cfg.auth || { auth_type: 'none' });
+      setBody(cfg.body || '');
+      try {
+        const parsedBody = JSON.parse(cfg.body || '[]');
+        setMultipartFields(
+          Array.isArray(parsedBody)
+            ? parsedBody.map((item: any) => ({ ...item, enabled: item.enabled !== false }))
+            : []
+        );
+      } catch {
+        setMultipartFields([]);
+      }
+      setAuth(cfg.auth || { auth_type: 'none' });
       setPreRequestScript(cfg.pre_request_script || '');
       setPostResponseScript(
         cfg.post_request_script || cfg.post_response_script || ''
@@ -242,10 +283,12 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   function buildConfig() {
     const headerMap: Record<string, string> = {};
     const headerDescMap: Record<string, string> = {};
-    for (const [k, v, d] of headers) {
+    const headerDisabledMap: Record<string, boolean> = {};
+    for (const [k, v, d, enabled] of headers) {
       if (k.trim()) {
         headerMap[k.trim()] = v;
         if (d && d.trim()) headerDescMap[k.trim()] = d.trim();
+        if (enabled === false) headerDisabledMap[k.trim()] = true;
       }
     }
     return {
@@ -254,7 +297,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       query_params: queryParams.filter(([k]) => k && k.trim()),
       path_variables: pathVariables.filter(([k]) => k.trim()),
       headers: headerMap,
+      headers_list: headers.filter(([k]) => k.trim()),
       header_descriptions: headerDescMap,
+      header_disabled: headerDisabledMap,
       body_type: bodyType,
       body: bodyType === 'multipart' ? JSON.stringify(multipartFields) : body,
       auth,
@@ -368,12 +413,12 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setStatusMessage(null);
 
     const headerMap: Record<string, string> = {};
-    for (const [k, v] of headers) {
-      if (k.trim()) headerMap[k.trim()] = v;
+    for (const [k, v, _d, enabled] of headers) {
+      if (k.trim() && enabled !== false) headerMap[k.trim()] = v;
     }
 
     const cleanBody = bodyType === 'multipart'
-      ? JSON.stringify(multipartFields)
+      ? JSON.stringify(multipartFields.filter((f) => f.enabled !== false && f.name.trim()))
       : bodyType === 'json' && body ? stripJsonComments(body) : body;
 
     const resolvedUrl = interpolatePathVariables(url, pathVariables);
@@ -609,6 +654,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Params</span>
+            {queryParams.filter(([k, _v, _d, enabled]) => k.trim() && enabled !== false).length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+                {queryParams.filter(([k, _v, _d, enabled]) => k.trim() && enabled !== false).length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('headers')}
@@ -619,6 +669,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Headers</span>
+            {headers.filter(([k, _v, _d, enabled]) => k.trim() && enabled !== false).length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+                {headers.filter(([k, _v, _d, enabled]) => k.trim() && enabled !== false).length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('body')}
@@ -629,6 +684,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Body</span>
+            {bodyType === 'multipart' && multipartFields.filter((f) => f.name.trim() && f.enabled !== false).length > 0 && (
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+                {multipartFields.filter((f) => f.name.trim() && f.enabled !== false).length}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setActiveTab('auth')}
@@ -786,50 +846,207 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 />
               </div>
             ) : bodyType === 'multipart' ? (
-              <div className="space-y-2">
-                {multipartFields.map((field, index) => (
-                  <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2 items-center">
-                    <input
-                      value={field.name}
-                      onChange={(e) => setMultipartFields((fields) => fields.map((item, i) => i === index ? { ...item, name: e.target.value } : item))}
-                      placeholder="field name"
-                      className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 font-mono"
-                    />
-                    {field.filename ? (
-                      <span className="truncate text-zinc-300 bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5" title={field.filename}>{field.filename}</span>
-                    ) : (
-                      <input
-                        value={field.value}
-                        onChange={(e) => setMultipartFields((fields) => fields.map((item, i) => i === index ? { ...item, value: e.target.value } : item))}
-                        placeholder="value"
-                        className="bg-zinc-900 border border-zinc-800 rounded px-2 py-1.5 font-mono"
-                      />
-                    )}
-                    <div className="flex gap-1">
-                      <label className="cursor-pointer px-2 py-1.5 border border-zinc-800 rounded text-zinc-400 hover:text-white">
-                        File
-                        <input
-                          type="file"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            const reader = new FileReader();
-                            reader.onload = () => setMultipartFields((fields) => fields.map((item, i) => i === index ? {
-                              ...item,
-                              filename: file.name,
-                              data: String(reader.result).split(',', 2)[1] || '',
-                              content_type: file.type || 'application/octet-stream',
-                            } : item));
-                            reader.readAsDataURL(file);
-                          }}
-                        />
-                      </label>
-                      <button type="button" onClick={() => setMultipartFields((fields) => fields.filter((_, i) => i !== index))} className="px-2 text-zinc-500 hover:text-rose-400">×</button>
-                    </div>
+              <div className="space-y-2 text-xs">
+                {/* Top Action Header */}
+                <div className="flex items-center justify-between pb-1 select-none">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-zinc-300">Multipart Form Data</span>
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      {multipartFields.length} {multipartFields.length === 1 ? 'entry' : 'entries'}
+                    </span>
                   </div>
-                ))}
-                <button type="button" onClick={() => setMultipartFields((fields) => [...fields, { name: '', value: '' }])} className="text-primary hover:text-white">+ Add field</button>
+
+                  <div className="flex items-center gap-2">
+                    {multipartFields.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setMultipartFields([])}
+                        className="text-[11px] text-zinc-500 hover:text-red-400 px-1.5 py-0.5 transition"
+                        title="Clear all entries"
+                      >
+                        Clear All
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setMultipartFields((fields) => [
+                          ...fields,
+                          { name: '', value: '', enabled: true },
+                        ])
+                      }
+                      className="flex items-center gap-1 px-2.5 py-0.5 rounded text-[11px] font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition"
+                    >
+                      <Plus size={11} />
+                      <span>Add Field</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Table Surface */}
+                <div className="border border-zinc-800/80 rounded-md overflow-hidden bg-zinc-950">
+                  {/* Table Header */}
+                  <div className="grid grid-cols-[24px_1fr_1fr_auto_28px] gap-2 bg-zinc-900/60 border-b border-zinc-800/80 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none items-center">
+                    <div className="text-center"></div>
+                    <div>Key</div>
+                    <div>Value</div>
+                    <div>Type</div>
+                    <div className="text-right pr-1">Action</div>
+                  </div>
+
+                  {/* Table Rows */}
+                  {multipartFields.length === 0 ? (
+                    <div className="py-6 text-center text-zinc-500 font-sans select-none">
+                      No entries. Click <strong className="text-zinc-400 font-medium">"Add Field"</strong> to add one.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-zinc-900">
+                      {multipartFields.map((field, index) => {
+                        const isRowEnabled = field.enabled !== false;
+                        return (
+                          <div
+                            key={index}
+                            className={`grid grid-cols-[24px_1fr_1fr_auto_28px] gap-2 items-center px-2 py-1.5 hover:bg-zinc-900/40 transition group ${
+                              !isRowEnabled ? 'opacity-60' : ''
+                            }`}
+                          >
+                            {/* Checkbox */}
+                            <div className="flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={isRowEnabled}
+                                onChange={(e) =>
+                                  setMultipartFields((fields) =>
+                                    fields.map((item, i) =>
+                                      i === index ? { ...item, enabled: e.target.checked } : item
+                                    )
+                                  )
+                                }
+                                className="rounded border-zinc-700 bg-zinc-900 text-primary focus:ring-0 cursor-pointer"
+                                title={isRowEnabled ? 'Disable field' : 'Enable field'}
+                              />
+                            </div>
+
+                            {/* Field Name */}
+                            <div>
+                              <input
+                                value={field.name}
+                                onChange={(e) =>
+                                  setMultipartFields((fields) =>
+                                    fields.map((item, i) =>
+                                      i === index ? { ...item, name: e.target.value } : item
+                                    )
+                                  )
+                                }
+                                placeholder="field-name"
+                                className={`w-full border rounded px-2.5 py-1 text-xs font-mono h-7 focus:outline-none ${
+                                  isRowEnabled
+                                    ? 'bg-zinc-900 border-zinc-800 text-zinc-200 focus:border-zinc-700'
+                                    : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400 focus:border-zinc-700 line-through'
+                                }`}
+                              />
+                            </div>
+
+                            {/* Value / File */}
+                            <div>
+                              {field.filename ? (
+                                <div className="flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1 text-xs font-mono h-7 text-zinc-200">
+                                  <span className="truncate pr-1.5" title={field.filename}>
+                                    {field.filename}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setMultipartFields((fields) =>
+                                        fields.map((item, i) =>
+                                          i === index
+                                            ? {
+                                                name: item.name,
+                                                value: '',
+                                                enabled: item.enabled,
+                                              }
+                                            : item
+                                        )
+                                      )
+                                    }
+                                    className="text-zinc-500 hover:text-red-400 text-xs px-1"
+                                    title="Remove file"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ) : (
+                                <input
+                                  value={field.value}
+                                  onChange={(e) =>
+                                    setMultipartFields((fields) =>
+                                      fields.map((item, i) =>
+                                        i === index ? { ...item, value: e.target.value } : item
+                                      )
+                                    )
+                                  }
+                                  placeholder="value (or {{VAR}})"
+                                  className={`w-full border rounded px-2.5 py-1 text-xs font-mono h-7 focus:outline-none ${
+                                    isRowEnabled
+                                      ? 'bg-zinc-900 border-zinc-800 text-zinc-200 focus:border-zinc-700'
+                                      : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400 focus:border-zinc-700'
+                                  }`}
+                                />
+                              )}
+                            </div>
+
+                            {/* File Upload Trigger */}
+                            <div>
+                              <label className="cursor-pointer px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-zinc-700 rounded text-[11px] font-medium flex items-center gap-1 transition h-7 select-none">
+                                <FileUp size={11} className="text-zinc-400" />
+                                <span>{field.filename ? 'Replace' : 'File'}</span>
+                                <input
+                                  type="file"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = () =>
+                                      setMultipartFields((fields) =>
+                                        fields.map((item, i) =>
+                                          i === index
+                                            ? {
+                                                ...item,
+                                                filename: file.name,
+                                                data: String(reader.result).split(',', 2)[1] || '',
+                                                content_type: file.type || 'application/octet-stream',
+                                              }
+                                            : item
+                                        )
+                                      );
+                                    reader.readAsDataURL(file);
+                                  }}
+                                />
+                              </label>
+                            </div>
+
+                            {/* Action (Delete) */}
+                            <div className="text-right pr-1">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setMultipartFields((fields) =>
+                                    fields.filter((_, i) => i !== index)
+                                  )
+                                }
+                                className="p-1 rounded text-zinc-600 hover:text-red-400 hover:bg-zinc-900 transition"
+                                title="Delete field"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             ) : bodyType === 'binary' ? (
               <label className="flex items-center justify-between gap-3 p-4 border border-dashed border-zinc-700 rounded text-zinc-400 cursor-pointer hover:border-zinc-500 hover:text-zinc-200">

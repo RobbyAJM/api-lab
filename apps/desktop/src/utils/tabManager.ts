@@ -77,15 +77,31 @@ export function isConfigDirty(
         String(item[0] || '').trim(),
         item[1] !== undefined && item[1] !== null ? String(item[1]).trim() : '',
         item[2] !== undefined && item[2] !== null ? String(item[2]).trim() : '',
+        item[3] !== false,
       ])
-      .filter(([_, v, d]) => v !== '' || d !== '')
-      .sort(([a], [b]) => a.localeCompare(b));
+      .filter(([_, v, d, enabled]) => v !== '' || d !== '' || !enabled)
+      .sort(([a], [b]) => (a as string).localeCompare(b as string));
 
     // 3. Headers & Descriptions
+    const rawHeadersList: Array<any> = Array.isArray(cfg.headers_list) ? cfg.headers_list : [];
+    const headersListMap = new Map<string, boolean>();
+    for (const item of rawHeadersList) {
+      if (Array.isArray(item)) {
+        const k = String(item[0] || '').trim();
+        if (k) headersListMap.set(k, item[3] !== false);
+      }
+    }
+    const disabledHeaders = cfg.header_disabled || {};
     const headers = Object.entries(cfg.headers || {})
-      .map(([k, v]) => [k.trim(), typeof v === 'string' ? v.trim() : String(v ?? '')])
+      .map(([k, v]) => {
+        const trimmedKey = k.trim();
+        const enabled = headersListMap.has(trimmedKey)
+          ? headersListMap.get(trimmedKey)!
+          : !disabledHeaders[trimmedKey];
+        return [trimmedKey, typeof v === 'string' ? v.trim() : String(v ?? ''), enabled];
+      })
       .filter(([k]) => Boolean(k))
-      .sort(([k1], [k2]) => k1.localeCompare(k2));
+      .sort(([k1], [k2]) => (k1 as string).localeCompare(k2 as string));
 
     const headerDescriptions = Object.entries(cfg.header_descriptions || {})
       .map(([k, v]) => [k.trim(), typeof v === 'string' ? v.trim() : String(v ?? '')])
@@ -95,15 +111,30 @@ export function isConfigDirty(
     // 4. Metadata & Descriptions (gRPC)
     const rawAuth = cfg.auth;
     const hasAuthToken = rawAuth && (rawAuth.auth_type === 'bearer' || rawAuth.auth_type === 'custom');
+    const rawMetadataList: Array<any> = Array.isArray(cfg.metadata_list) ? cfg.metadata_list : [];
+    const metadataListMap = new Map<string, boolean>();
+    for (const item of rawMetadataList) {
+      if (Array.isArray(item)) {
+        const k = String(item[0] || '').trim();
+        if (k) metadataListMap.set(k, item[3] !== false);
+      }
+    }
+    const disabledMetadata = cfg.metadata_disabled || {};
     const metadata = Object.entries(cfg.metadata || {})
-      .map(([k, v]) => [k.trim(), typeof v === 'string' ? v.trim() : String(v ?? '')])
+      .map(([k, v]) => {
+        const trimmedKey = k.trim();
+        const enabled = metadataListMap.has(trimmedKey)
+          ? metadataListMap.get(trimmedKey)!
+          : !disabledMetadata[trimmedKey];
+        return [trimmedKey, typeof v === 'string' ? v.trim() : String(v ?? ''), enabled];
+      })
       .filter(([k]) => {
         if (!k) return false;
         // Ignore derived authorization header in metadata if auth object is configured
-        if (hasAuthToken && k.toLowerCase() === 'authorization') return false;
+        if (hasAuthToken && (k as string).toLowerCase() === 'authorization') return false;
         return true;
       })
-      .sort(([k1], [k2]) => k1.localeCompare(k2));
+      .sort(([k1], [k2]) => (k1 as string).localeCompare(k2 as string));
 
     const metadataDescriptions = Object.entries(cfg.metadata_descriptions || {})
       .map(([k, v]) => [k.trim(), typeof v === 'string' ? v.trim() : String(v ?? '')])

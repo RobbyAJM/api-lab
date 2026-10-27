@@ -79,16 +79,25 @@ test('interpolatePathVariables: preserves port and query string', () => {
   assert.equal(res, 'http://localhost:8080/users/user_123?active=true#profile');
 });
 
-test('syncPathVariablesWithKeys: keeps existing values and descriptions', () => {
-  const existing: [string, string, string][] = [
-    ['id', '100', 'Unique user id'],
-    ['old', 'discard', 'stale'],
+test('interpolatePathVariables: skips disabled path variables', () => {
+  const url = 'https://httpbin.org/users/:id/posts/:post_id';
+  const res = interpolatePathVariables(url, [
+    ['id', '42', '', true],
+    ['post_id', '999', '', false],
+  ]);
+  assert.equal(res, 'https://httpbin.org/users/42/posts/:post_id');
+});
+
+test('syncPathVariablesWithKeys: keeps existing values, descriptions and enabled state', () => {
+  const existing: [string, string, string, boolean][] = [
+    ['id', '100', 'Unique user id', false],
+    ['old', 'discard', 'stale', true],
   ];
   const keys = ['id', 'status'];
 
   const synced = syncPathVariablesWithKeys(existing, keys);
   assert.deepEqual(synced, [
-    ['id', '100', 'Unique user id'],
-    ['status', '', ''],
+    ['id', '100', 'Unique user id', false],
+    ['status', '', '', true],
   ]);
 });

@@ -236,6 +236,9 @@ pub async fn run_http(
                 };
                 let mut form = reqwest::multipart::Form::new();
                 for field in fields {
+                    if field.get("enabled").and_then(|v| v.as_bool()) == Some(false) {
+                        continue;
+                    }
                     let Some(name) = field.get("name").and_then(|v| v.as_str()) else {
                         return HttpExecutionResponse {
                             status_code: 0,
