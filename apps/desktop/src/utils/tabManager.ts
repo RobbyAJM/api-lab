@@ -449,3 +449,74 @@ export function getEndpointResponseFromState(
   if (!endpointId || !state.endpointResponses) return null;
   return state.endpointResponses[endpointId] || null;
 }
+
+export type WorkspaceTabMap = Record<string, TabState>;
+
+/**
+ * Switches workspace tab state: saves outgoing workspace tab state and restores target workspace state.
+ * If target workspace has no stored state, returns clean empty tab state.
+ */
+export function switchWorkspaceTabs(
+  workspaceTabs: WorkspaceTabMap,
+  currentWorkspaceId: string | null,
+  currentTabState: TabState,
+  targetWorkspaceId: string | null
+): {
+  workspaceTabs: WorkspaceTabMap;
+  activeTabState: TabState;
+} {
+  if (currentWorkspaceId === targetWorkspaceId) {
+    return {
+      workspaceTabs,
+      activeTabState: currentTabState,
+    };
+  }
+
+  const nextWorkspaceTabs: WorkspaceTabMap = { ...workspaceTabs };
+
+  if (currentWorkspaceId) {
+    nextWorkspaceTabs[currentWorkspaceId] = {
+      openEndpoints: [...currentTabState.openEndpoints],
+      activeEndpointId: currentTabState.activeEndpointId,
+      activeEndpoint: currentTabState.activeEndpoint,
+      endpointDrafts: { ...(currentTabState.endpointDrafts || {}) },
+      endpointResponses: { ...(currentTabState.endpointResponses || {}) },
+    };
+  }
+
+  const restored = targetWorkspaceId ? nextWorkspaceTabs[targetWorkspaceId] : undefined;
+
+  const activeTabState: TabState = restored
+    ? {
+        openEndpoints: [...restored.openEndpoints],
+        activeEndpointId: restored.activeEndpointId,
+        activeEndpoint: restored.activeEndpoint,
+        endpointDrafts: { ...(restored.endpointDrafts || {}) },
+        endpointResponses: { ...(restored.endpointResponses || {}) },
+      }
+    : {
+        openEndpoints: [],
+        activeEndpointId: null,
+        activeEndpoint: null,
+        endpointDrafts: {},
+        endpointResponses: {},
+      };
+
+  return {
+    workspaceTabs: nextWorkspaceTabs,
+    activeTabState,
+  };
+}
+
+/**
+ * Removes tab state for a deleted workspace.
+ */
+export function removeWorkspaceTabs(
+  workspaceTabs: WorkspaceTabMap,
+  workspaceId: string
+): WorkspaceTabMap {
+  if (!workspaceTabs[workspaceId]) return workspaceTabs;
+  const next = { ...workspaceTabs };
+  delete next[workspaceId];
+  return next;
+}
