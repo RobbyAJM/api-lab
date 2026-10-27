@@ -598,3 +598,38 @@ test('endpointResponses: preserves responses per tab across switches and cleans 
   state = closeAllEndpointsInTabs();
   assert.deepEqual(state.endpointResponses, {});
 });
+
+test('unsaved changes: execute retains dirty state; only explicit save clears draft', () => {
+  const ep = createMockEndpoint('ep1', 'Test Endpoint');
+  let state: TabState = {
+    openEndpoints: [],
+    activeEndpointId: null,
+    activeEndpoint: null,
+    endpointDrafts: {},
+    endpointResponses: {},
+  };
+
+  state = openEndpointInTabs(state, ep);
+  assert.equal(isEndpointDirtyInState(state, 'ep1'), false);
+
+  // User modifies endpoint in editor (creates draft)
+  const modifiedConfig = { ...ep.config, url: 'https://api.example.com/ep1-edited' };
+  state = setEndpointDraftInState(state, 'ep1', modifiedConfig);
+  assert.equal(isEndpointDirtyInState(state, 'ep1'), true);
+
+  // Sending/invoking records response, but draft is NOT cleared
+  state = setEndpointResponseInState(state, 'ep1', {
+    http: { status_code: 200, body: '{"success":true}', headers: {}, response_time_ms: 15, response_size_bytes: 20 },
+  });
+  // Must still be dirty after response!
+  assert.equal(isEndpointDirtyInState(state, 'ep1'), true);
+  assert.equal(getEffectiveEndpointConfig(ep, state.endpointDrafts?.['ep1']).url, 'https://api.example.com/ep1-edited');
+
+  // Only explicit save persists config and clears draft
+  const savedEp: Endpoint = { ...ep, config: modifiedConfig, version: ep.version + 1 };
+  state = updateEndpointInTabs(state, savedEp);
+  state = clearEndpointDraftInState(state, 'ep1');
+
+  assert.equal(isEndpointDirtyInState(state, 'ep1'), false);
+  assert.equal(getEffectiveEndpointConfig(savedEp, state.endpointDrafts?.['ep1']).url, 'https://api.example.com/ep1-edited');
+});

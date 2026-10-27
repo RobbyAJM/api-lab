@@ -408,7 +408,6 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   }, [currentVersion, preRequestScript, postResponseScript, method, url, queryParams, pathVariables, headers, bodyType, body, auth]);
 
   async function handleSend() {
-    saveChanges({ silent: true });
     setSending(true);
     setEndpointExecuting(endpoint.id, true);
     setStatusMessage(null);

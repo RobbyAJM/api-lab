@@ -684,7 +684,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   // Execute unary gRPC
   async function handleSend() {
-    saveChanges({ silent: true });
     setSending(true);
     setEndpointExecuting(endpoint.id, true);
     setStatusMessage(null);
@@ -851,7 +850,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   // Execute Streaming gRPC (Feature 1)
   async function handleStartStream() {
-    saveChanges({ silent: true });
     setSending(true);
     setEndpointExecuting(endpoint.id, true);
     setStatusMessage('Starting stream...');
