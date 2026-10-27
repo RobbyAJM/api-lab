@@ -5,8 +5,9 @@ import {
   formatAvatar,
   getDiceBearUrl,
   generateRandomSeed,
+  DICEBEAR_STYLES,
 } from './dicebear.ts';
-import { sanitizeExtraComponents } from './dicebearSchema.ts';
+import { sanitizeExtraComponents, DICEBEAR_STYLE_DEFINITIONS } from './dicebearSchema.ts';
 
 test('parseAvatar: defaults to bottts:api-lab on null or empty', () => {
   assert.deepEqual(parseAvatar(null), { style: 'bottts', seed: 'api-lab', options: {} });
@@ -79,7 +80,7 @@ test('formatAvatar: produces style:seed with options query string', () => {
   assert.ok(formatted.startsWith('croodles-neutral:Felix?'));
   assert.ok(formatted.includes('backgroundColor=b6e3f4'));
   assert.ok(formatted.includes('radius=20'));
-  assert.ok(formatted.includes('flip=true'));
+  assert.ok(formatted.includes('flip=horizontal'));
   assert.ok(formatted.includes('scale=110'));
   assert.ok(formatted.includes('eyes=variant02'));
   assert.ok(formatted.includes('mouth=variant05'));
@@ -99,13 +100,15 @@ test('getDiceBearUrl: generates expected URL and strips invalid variants to prev
     backgroundColor: 'b6e3f4',
     radius: 50,
     scale: 120,
+    flip: true,
     extra: { eyes: 'variant01' },
   });
   assert.ok(croodlesUrl.includes('https://api.dicebear.com/10.x/croodles-neutral/svg?'));
   assert.ok(croodlesUrl.includes('seed=Felix'));
   assert.ok(croodlesUrl.includes('backgroundColor=b6e3f4'));
   assert.ok(croodlesUrl.includes('radius=50'));
-  assert.ok(croodlesUrl.includes('scale=120'));
+  assert.ok(croodlesUrl.includes('scale=1.2'));
+  assert.ok(croodlesUrl.includes('flip=horizontal'));
   assert.ok(croodlesUrl.includes('eyes=variant01'));
 });
 
@@ -139,6 +142,16 @@ test('parseAvatar: roundtrip with formatAvatar produces exact persistence string
   // Autofill roundtrip back to formatAvatar
   const second = formatAvatar(parsed.style, parsed.seed, parsed.options);
   assert.equal(initial, second);
+});
+
+test('DICEBEAR_STYLES: contains all 61 official 10.x styles with schema definitions', () => {
+  assert.equal(DICEBEAR_STYLES.length, 61);
+  assert.equal(DICEBEAR_STYLE_DEFINITIONS.length, 61);
+  for (const style of DICEBEAR_STYLES) {
+    const def = DICEBEAR_STYLE_DEFINITIONS.find((d) => d.id === style);
+    assert.ok(def, `Missing schema definition for style: ${style}`);
+    assert.ok(def.label, `Missing label for style: ${style}`);
+  }
 });
 
 test('generateRandomSeed: returns non-empty random string', () => {

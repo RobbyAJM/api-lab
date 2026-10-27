@@ -1,18 +1,67 @@
 import { sanitizeExtraComponents } from './dicebearSchema.ts';
 
 export const DICEBEAR_STYLES = [
-  'bottts',
-  'croodles-neutral',
-  'croodles',
-  'lorelei',
-  'avataaars',
-  'identicon',
-  'shapes',
-  'thumbs',
-  'pixel-art',
-  'notionists',
   'adventurer',
+  'adventurer-neutral',
+  'avataaars',
+  'avataaars-neutral',
+  'big-ears',
+  'big-ears-neutral',
+  'big-smile',
+  'blobs',
+  'bottts',
+  'bottts-neutral',
+  'cameo',
+  'clay',
+  'constellation',
+  'critters',
+  'croodles',
+  'croodles-neutral',
+  'cutouts',
+  'disco',
+  'dylan',
   'fun-emoji',
+  'gaze',
+  'glass',
+  'glyphs',
+  'icons',
+  'identicon',
+  'initial-face',
+  'initials',
+  'landscape',
+  'line-face',
+  'loops',
+  'lorelei',
+  'lorelei-neutral',
+  'marbles',
+  'micah',
+  'miniavs',
+  'moods',
+  'notionists',
+  'notionists-neutral',
+  'open-peeps',
+  'patchwork',
+  'personas',
+  'pixel-art',
+  'pixel-art-neutral',
+  'pixelbot',
+  'planets',
+  'rings',
+  'shadows',
+  'shape-grid',
+  'shapes',
+  'slice',
+  'sprouts',
+  'squircles',
+  'stack',
+  'stripes',
+  'thumbs',
+  'toon-head',
+  'triangles',
+  'voxel-art',
+  'voxel-bot',
+  'waves',
+  'weave',
 ] as const;
 
 export type DiceBearStyle = (typeof DICEBEAR_STYLES)[number];
@@ -58,7 +107,7 @@ export function parseAvatar(raw?: string | null): ParsedAvatar {
 
     const flip = queryParams.get('flip');
     if (flip !== null) {
-      options.flip = flip === 'true';
+      options.flip = flip === 'true' || flip === 'horizontal' || flip === 'both';
     }
 
     const rot = queryParams.get('rotate');
@@ -69,8 +118,11 @@ export function parseAvatar(raw?: string | null): ParsedAvatar {
 
     const sc = queryParams.get('scale');
     if (sc !== null) {
-      const parsedSc = parseInt(sc, 10);
-      if (!isNaN(parsedSc)) options.scale = parsedSc;
+      const parsedSc = parseFloat(sc);
+      if (!isNaN(parsedSc)) {
+        // Handle both 10.x API scale (0-10, where 1=100%) and percentage scale (e.g. 120)
+        options.scale = parsedSc <= 10 ? Math.round(parsedSc * 100) : Math.round(parsedSc);
+      }
     }
 
     const extra: Record<string, string> = {};
@@ -147,7 +199,7 @@ export function formatAvatar(
     params.set('backgroundColor', options.backgroundColor.replace(/^#/, ''));
   }
   if (options?.radius !== undefined && options.radius > 0) params.set('radius', String(options.radius));
-  if (options?.flip) params.set('flip', 'true');
+  if (options?.flip) params.set('flip', 'horizontal');
   if (options?.rotate !== undefined && options.rotate > 0) params.set('rotate', String(options.rotate));
   if (options?.scale !== undefined && options.scale !== 100) params.set('scale', String(options.scale));
 
@@ -194,13 +246,14 @@ export function getDiceBearUrl(
     params.set('radius', String(options.radius));
   }
   if (options.flip) {
-    params.set('flip', 'true');
+    params.set('flip', 'horizontal');
   }
   if (options.rotate !== undefined && options.rotate > 0) {
     params.set('rotate', String(options.rotate));
   }
   if (options.scale !== undefined && options.scale !== 100) {
-    params.set('scale', String(options.scale));
+    // 10.x HTTP API expects scale as range 0 to 10 (1 = 100%)
+    params.set('scale', String(options.scale / 100));
   }
 
   const cleanExtra = sanitizeExtraComponents(safeStyle, options.extra);
