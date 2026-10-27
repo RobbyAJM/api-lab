@@ -29,6 +29,46 @@ export interface StatusBadgeInfo {
   isError: boolean;
 }
 
+export interface HttpStatusColors {
+  badgeClass: string;
+  dotClass: string;
+}
+
+/**
+ * Returns color classes for HTTP response status based on status tier:
+ * 2xx (Green), 3xx (Blue), 4xx (Amber), 5xx (Red).
+ */
+export function getHttpStatusColors(code: number): HttpStatusColors {
+  if (code >= 200 && code < 300) {
+    return {
+      badgeClass: 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60',
+      dotClass: 'bg-emerald-400',
+    };
+  }
+  if (code >= 300 && code < 400) {
+    return {
+      badgeClass: 'bg-blue-950/60 text-blue-400 border border-blue-800/60',
+      dotClass: 'bg-blue-400',
+    };
+  }
+  if (code >= 400 && code < 500) {
+    return {
+      badgeClass: 'bg-amber-950/60 text-amber-400 border border-amber-800/60',
+      dotClass: 'bg-amber-400',
+    };
+  }
+  if (code >= 500) {
+    return {
+      badgeClass: 'bg-red-950/60 text-red-400 border border-red-800/60',
+      dotClass: 'bg-red-400',
+    };
+  }
+  return {
+    badgeClass: 'bg-zinc-800 text-zinc-300 border border-zinc-700',
+    dotClass: 'bg-zinc-400',
+  };
+}
+
 /**
  * Formats HTTP or gRPC status code into a standard status label and tone.
  */

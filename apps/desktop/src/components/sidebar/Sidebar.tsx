@@ -141,10 +141,10 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
-      className="relative bg-zinc-950 border-r border-zinc-800/60 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
+      className="relative bg-zinc-900 border-r border-zinc-800/60 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
     >
       {/* Brand Header */}
-      <div className="px-3 py-2 border-b border-zinc-800/60 flex items-center justify-between bg-zinc-950">
+      <div className="px-3 py-2 border-b border-zinc-800/60 flex items-center justify-between bg-zinc-900">
         <div className="flex items-center gap-2">
           <img src={appLogo} alt="API Lab" className="w-5 h-5 rounded object-contain" />
           <span className="font-semibold text-xs text-zinc-100 tracking-tight">API Lab</span>
@@ -1216,8 +1216,8 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
         }}
         className={`w-full flex items-center justify-between px-2 py-1 rounded-md text-xs transition text-left cursor-pointer ${
           isActive
-            ? 'bg-zinc-800/70 text-zinc-100 font-medium'
-            : 'hover:bg-zinc-900/70 text-zinc-400 hover:text-zinc-200'
+            ? 'bg-primary/10 text-zinc-100 font-medium border-l-2 border-primary pl-1.5'
+            : 'hover:bg-zinc-800/60 text-zinc-400 hover:text-zinc-200'
         }`}
       >
         <div className="flex items-center gap-2 truncate flex-1 min-w-0">
@@ -1227,7 +1227,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
                 method === 'GET'
                   ? 'text-emerald-400'
                   : method === 'POST'
-                  ? 'text-primary'
+                  ? 'text-blue-400'
                   : method === 'PUT' || method === 'PATCH'
                   ? 'text-amber-400'
                   : 'text-red-400'

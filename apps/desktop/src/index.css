@@ -4,22 +4,22 @@
 
 :root {
   color-scheme: dark;
-  --color-zinc-950: 11 12 14;
-  --color-zinc-900: 17 19 23;
-  --color-zinc-850: 22 25 31;
-  --color-zinc-800: 32 36 44;
-  --color-zinc-750: 41 46 57;
-  --color-zinc-700: 53 60 74;
-  --color-zinc-600: 82 82 91;
-  --color-zinc-500: 113 113 122;
-  --color-zinc-400: 161 161 170;
-  --color-zinc-300: 212 212 216;
-  --color-zinc-200: 228 228 231;
-  --color-zinc-100: 244 244 245;
-  --color-primary: 79 70 229;
-  --color-primary-hover: 67 56 202;
-  --color-secondary: 99 102 241;
-  --color-secondary-hover: 79 70 229;
+  --color-zinc-950: 15 17 23;
+  --color-zinc-900: 23 26 33;
+  --color-zinc-850: 31 36 45;
+  --color-zinc-800: 41 47 58;
+  --color-zinc-750: 48 55 68;
+  --color-zinc-700: 61 70 86;
+  --color-zinc-600: 75 85 99;
+  --color-zinc-500: 107 114 128;
+  --color-zinc-400: 156 163 175;
+  --color-zinc-300: 209 213 219;
+  --color-zinc-200: 249 250 251;
+  --color-zinc-100: 255 255 255;
+  --color-primary: 245 158 11;
+  --color-primary-hover: 217 119 6;
+  --color-secondary: 249 115 22;
+  --color-secondary-hover: 234 88 12;
 }
 
 body {

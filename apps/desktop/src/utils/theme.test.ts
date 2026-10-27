@@ -55,21 +55,21 @@ test('resolveThemeVariables: preserves exact mineral dark values for default api
   const defaultTheme = getThemeById('api-lab');
   const vars = resolveThemeVariables(defaultTheme);
 
-  assert.equal(vars['--color-zinc-950'], '11 12 14');
-  assert.equal(vars['--color-zinc-900'], '17 19 23');
-  assert.equal(vars['--color-zinc-850'], '22 25 31');
-  assert.equal(vars['--color-zinc-800'], '32 36 44');
-  assert.equal(vars['--color-zinc-750'], '41 46 57');
-  assert.equal(vars['--color-zinc-700'], '53 60 74');
-  assert.equal(vars['--color-primary'], '79 70 229');
-  assert.equal(vars['--color-secondary'], '99 102 241');
+  assert.equal(vars['--color-zinc-950'], '15 17 23');
+  assert.equal(vars['--color-zinc-900'], '23 26 33');
+  assert.equal(vars['--color-zinc-850'], '31 36 45');
+  assert.equal(vars['--color-zinc-800'], '41 47 58');
+  assert.equal(vars['--color-zinc-750'], '48 55 68');
+  assert.equal(vars['--color-zinc-700'], '61 70 86');
+  assert.equal(vars['--color-primary'], '245 158 11');
+  assert.equal(vars['--color-secondary'], '249 115 22');
 });
 
 test('resolveThemeVariables: derives distinct palettes for other themes', () => {
   const dracula = getThemeById('dracula');
   const vars = resolveThemeVariables(dracula);
 
-  assert.notEqual(vars['--color-zinc-950'], '11 12 14');
+  assert.notEqual(vars['--color-zinc-950'], '15 17 23');
   assert.ok(vars['--color-primary'].length > 0);
   assert.ok(vars['--color-zinc-900'].length > 0);
 });
@@ -87,6 +87,7 @@ test('generateThemeCss: outputs complete valid CSS text block', () => {
 test('THEMES list contains popular Opencode themes and light themes', () => {
   const ids = THEMES.map((t) => t.id);
   assert.ok(ids.includes('api-lab'));
+  assert.ok(ids.includes('api-lab-light'));
   assert.ok(ids.includes('dracula'));
   assert.ok(ids.includes('catppuccin'));
   assert.ok(ids.includes('nord'));
@@ -107,7 +108,7 @@ test('THEMES list contains popular Opencode themes and light themes', () => {
 
 test('sortThemes: pins api-lab to top, then dark themes A-Z, then light themes A-Z', () => {
   assert.equal(THEMES[0].id, 'api-lab');
-  assert.equal(THEMES[0].name, 'API Lab Mineral (Default)');
+  assert.equal(THEMES[0].name, 'API Lab Amber (Default)');
 
   const darkThemes = THEMES.filter((t) => !t.isLight);
   const lightThemes = THEMES.filter((t) => t.isLight);
@@ -149,6 +150,19 @@ test('resolveThemeVariables: resolves sampled solar-dark and solar-light themes'
   assert.equal(lightVars['--color-zinc-900'], '247 247 247'); // #f7f7f7
   assert.equal(lightVars['--color-primary'], '2 101 220'); // #0265dc
   assert.equal(lightVars['--color-secondary'], '255 108 55'); // #ff6c37
+});
+
+test('resolveThemeVariables: preserves expected tokens for api-lab-light', () => {
+  const apiLabLight = getThemeById('api-lab-light');
+  assert.equal(apiLabLight.id, 'api-lab-light');
+  assert.equal(apiLabLight.isLight, true);
+  const vars = resolveThemeVariables(apiLabLight);
+  assert.equal(vars['--color-zinc-950'], '249 250 251'); // #f9fafb
+  assert.equal(vars['--color-zinc-900'], '255 255 255'); // #ffffff
+  assert.equal(vars['--color-zinc-800'], '255 247 237'); // #fff7ed
+  assert.equal(vars['--color-zinc-750'], '229 231 235'); // #e5e7eb
+  assert.equal(vars['--color-primary'], '217 119 6');    // #d97706
+  assert.equal(vars['--color-secondary'], '249 115 22');  // #f97316
 });
 
 test('resolveThemeVariables: handles light themes with inverted surface scale', () => {
