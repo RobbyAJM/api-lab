@@ -84,7 +84,7 @@ export function parseAvatar(raw?: string | null): ParsedAvatar {
     }
   }
 
-  // Handle DiceBear HTTP CDN URLs e.g. https://api.dicebear.com/9.x/avataaars/svg?seed=Felix
+  // Handle DiceBear HTTP CDN URLs e.g. https://api.dicebear.com/10.x/avataaars/svg?seed=Felix
   const urlMatch = baseStr.match(/api\.dicebear\.com\/(?:[0-9]+\.x|[^\/]+)\/([^\/?#]+)/i);
   if (urlMatch) {
     const matchedStyle = urlMatch[1].toLowerCase().trim() as DiceBearStyle;
@@ -206,7 +206,7 @@ export function getDiceBearUrl(
     if (v) params.set(k, v);
   }
 
-  return `https://api.dicebear.com/9.x/${safeStyle}/svg?${params.toString()}`;
+  return `https://api.dicebear.com/10.x/${safeStyle}/svg?${params.toString()}`;
 }
 
 export function generateRandomSeed(): string {
