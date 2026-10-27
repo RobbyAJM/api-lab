@@ -90,7 +90,7 @@ export const EndpointTabBar: React.FC = () => {
         method === 'GET'
           ? 'text-emerald-400'
           : method === 'POST'
-          ? 'text-primary'
+          ? 'text-blue-400'
           : method === 'PUT' || method === 'PATCH'
           ? 'text-amber-400'
           : 'text-red-400';

@@ -4,6 +4,7 @@ import {
   formatResponseSize,
   formatElapsedTime,
   formatStatusCode,
+  getHttpStatusColors,
   formatTraceRequestBody,
   formatCopyTrace,
   substituteVariables,
@@ -40,6 +41,27 @@ test('formatStatusCode handles HTTP codes', () => {
 
   const redirect = formatStatusCode('http', 301, 'Moved Permanently');
   assert.equal(redirect.isWarning, true);
+});
+
+test('getHttpStatusColors maps tiers to semantic colors', () => {
+  const success200 = getHttpStatusColors(200);
+  assert.ok(success200.badgeClass.includes('emerald'));
+  assert.ok(success200.dotClass.includes('emerald'));
+
+  const redirect302 = getHttpStatusColors(302);
+  assert.ok(redirect302.badgeClass.includes('blue'));
+  assert.ok(redirect302.dotClass.includes('blue'));
+
+  const clientError404 = getHttpStatusColors(404);
+  assert.ok(clientError404.badgeClass.includes('amber'));
+  assert.ok(clientError404.dotClass.includes('amber'));
+
+  const serverError500 = getHttpStatusColors(500);
+  assert.ok(serverError500.badgeClass.includes('red'));
+  assert.ok(serverError500.dotClass.includes('red'));
+
+  const zeroOrUnknown = getHttpStatusColors(0);
+  assert.ok(zeroOrUnknown.badgeClass.includes('zinc'));
 });
 
 test('formatStatusCode handles gRPC codes with standard status label', () => {

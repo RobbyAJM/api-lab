@@ -35,6 +35,7 @@ import {
   formatResponseSize,
   formatElapsedTime,
   formatCopyTrace,
+  getHttpStatusColors,
 } from '../../utils/responseViewerUtils';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
@@ -407,30 +408,21 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           ) : activeResponse || streamMessages.length > 0 ? (
             <div className="flex items-center gap-2 text-xs">
               {/* Status Badge */}
-              {isHttp && lastHttpResponse ? (
-                <span
-                  title={lastHttpResponse.status_text}
-                  className={`font-mono font-bold px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1.5 flex-shrink-0 ${
-                    lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
-                      ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60'
-                      : lastHttpResponse.status_code >= 400
-                      ? 'bg-red-950/60 text-red-400 border border-red-800/60'
-                      : 'bg-zinc-800 text-zinc-300'
-                  }`}
-                >
+              {isHttp && lastHttpResponse ? (() => {
+                const httpColors = getHttpStatusColors(lastHttpResponse.status_code);
+                return (
                   <span
-                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                      lastHttpResponse.status_code >= 200 && lastHttpResponse.status_code < 300
-                        ? 'bg-emerald-400'
-                        : 'bg-red-400'
-                    }`}
-                  />
-                  <span>
-                    {lastHttpResponse.status_code}
-                    {lastHttpResponse.status_text ? ` ${lastHttpResponse.status_text}` : ''}
+                    title={lastHttpResponse.status_text}
+                    className={`font-mono font-bold px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1.5 flex-shrink-0 ${httpColors.badgeClass}`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${httpColors.dotClass}`} />
+                    <span>
+                      {lastHttpResponse.status_code}
+                      {lastHttpResponse.status_text ? ` ${lastHttpResponse.status_text}` : ''}
+                    </span>
                   </span>
-                </span>
-              ) : !isHttp && lastGrpcResponse ? (
+                );
+              })() : !isHttp && lastGrpcResponse ? (
                 <span
                   title={lastGrpcResponse.status_message}
                   className={`font-mono font-bold px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1.5 flex-shrink-0 ${
