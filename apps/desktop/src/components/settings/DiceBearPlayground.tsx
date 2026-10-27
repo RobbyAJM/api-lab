@@ -188,7 +188,7 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
             <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
               Avatar Style
             </span>
-            <span className="text-[10px] text-zinc-500 font-mono">DiceBear 9.x</span>
+            <span className="text-[10px] text-zinc-500 font-mono">DiceBear 10.x</span>
           </div>
 
           <div className="relative">
@@ -645,7 +645,7 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
           </div>
           <div className="text-zinc-500 space-y-0.5 font-mono text-[10px]">
             <div>Format: Vector SVG</div>
-            <div>Public HTTP: api.dicebear.com/9.x</div>
+            <div>Public HTTP: api.dicebear.com/10.x</div>
             <div className="truncate text-zinc-400">Style: {style}</div>
           </div>
         </div>

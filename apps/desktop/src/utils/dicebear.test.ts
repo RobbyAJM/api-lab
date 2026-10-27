@@ -27,12 +27,20 @@ test('parseAvatar: parses style, seed and query options', () => {
 });
 
 test('parseAvatar: parses full DiceBear HTTP CDN URLs seamlessly', () => {
-  const parsed = parseAvatar('https://api.dicebear.com/9.x/avataaars/svg?seed=John%20Doe&radius=15&scale=115&eyes=closed');
-  assert.equal(parsed.style, 'avataaars');
-  assert.equal(parsed.seed, 'John Doe');
-  assert.equal(parsed.options.radius, 15);
-  assert.equal(parsed.options.scale, 115);
-  assert.deepEqual(parsed.options.extra, { eyes: 'closed' });
+  const parsed10 = parseAvatar('https://api.dicebear.com/10.x/avataaars/svg?seed=John%20Doe&radius=15&scale=115&eyes=closed');
+  assert.equal(parsed10.style, 'avataaars');
+  assert.equal(parsed10.seed, 'John Doe');
+  assert.equal(parsed10.options.radius, 15);
+  assert.equal(parsed10.options.scale, 115);
+  assert.deepEqual(parsed10.options.extra, { eyes: 'closed' });
+
+  // Backwards compatibility with 9.x URLs stored in DB
+  const parsed9 = parseAvatar('https://api.dicebear.com/9.x/avataaars/svg?seed=John%20Doe&radius=15&scale=115&eyes=closed');
+  assert.equal(parsed9.style, 'avataaars');
+  assert.equal(parsed9.seed, 'John Doe');
+  assert.equal(parsed9.options.radius, 15);
+  assert.equal(parsed9.options.scale, 115);
+  assert.deepEqual(parsed9.options.extra, { eyes: 'closed' });
 });
 
 test('parseAvatar: drops incompatible or invalid variants on parse', () => {
@@ -82,7 +90,7 @@ test('getDiceBearUrl: generates expected URL and strips invalid variants to prev
   const botttsUrl = getDiceBearUrl('bottts', 'Felix', {
     extra: { eyes: 'variant01', mouth: 'bite' },
   });
-  assert.ok(botttsUrl.includes('https://api.dicebear.com/9.x/bottts/svg?'));
+  assert.ok(botttsUrl.includes('https://api.dicebear.com/10.x/bottts/svg?'));
   assert.ok(botttsUrl.includes('mouth=bite'));
   assert.ok(!botttsUrl.includes('eyes=variant01'));
 
@@ -93,12 +101,44 @@ test('getDiceBearUrl: generates expected URL and strips invalid variants to prev
     scale: 120,
     extra: { eyes: 'variant01' },
   });
-  assert.ok(croodlesUrl.includes('https://api.dicebear.com/9.x/croodles-neutral/svg?'));
+  assert.ok(croodlesUrl.includes('https://api.dicebear.com/10.x/croodles-neutral/svg?'));
   assert.ok(croodlesUrl.includes('seed=Felix'));
   assert.ok(croodlesUrl.includes('backgroundColor=b6e3f4'));
   assert.ok(croodlesUrl.includes('radius=50'));
   assert.ok(croodlesUrl.includes('scale=120'));
   assert.ok(croodlesUrl.includes('eyes=variant01'));
+});
+
+test('parseAvatar: handles comma-separated extra components in 10.x style URLs', () => {
+  const parsed = parseAvatar('https://api.dicebear.com/10.x/bottts/svg?seed=Felix&mouth=bite,diagram&top=antenna');
+  assert.equal(parsed.style, 'bottts');
+  assert.equal(parsed.seed, 'Felix');
+  // Extra options with first variant or validated variant for single-select playground
+  assert.ok(parsed.options.extra);
+  assert.equal(parsed.options.extra?.top, 'antenna');
+});
+
+test('parseAvatar: roundtrip with formatAvatar produces exact persistence string', () => {
+  const initial = formatAvatar('bottts', 'Felix', {
+    backgroundColor: 'b6e3f4',
+    radius: 20,
+    flip: true,
+    scale: 110,
+    extra: { mouth: 'bite', top: 'antenna' },
+  });
+
+  const parsed = parseAvatar(initial);
+  assert.equal(parsed.style, 'bottts');
+  assert.equal(parsed.seed, 'Felix');
+  assert.equal(parsed.options.backgroundColor, 'b6e3f4');
+  assert.equal(parsed.options.radius, 20);
+  assert.equal(parsed.options.flip, true);
+  assert.equal(parsed.options.scale, 110);
+  assert.deepEqual(parsed.options.extra, { mouth: 'bite', top: 'antenna' });
+
+  // Autofill roundtrip back to formatAvatar
+  const second = formatAvatar(parsed.style, parsed.seed, parsed.options);
+  assert.equal(initial, second);
 });
 
 test('generateRandomSeed: returns non-empty random string', () => {
