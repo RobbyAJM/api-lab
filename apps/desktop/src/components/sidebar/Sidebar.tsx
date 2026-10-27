@@ -1216,8 +1216,8 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
         }}
         className={`w-full flex items-center justify-between px-2 py-1 rounded-md text-xs transition text-left cursor-pointer ${
           isActive
-            ? 'bg-zinc-800/70 text-zinc-100 font-medium'
-            : 'hover:bg-zinc-900/70 text-zinc-400 hover:text-zinc-200'
+            ? 'bg-primary/10 text-zinc-100 font-medium'
+            : 'hover:bg-zinc-800/50 text-zinc-400 hover:text-zinc-200'
         }`}
       >
         <div className="flex items-center gap-2 truncate flex-1 min-w-0">

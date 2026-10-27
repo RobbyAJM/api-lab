@@ -4,6 +4,7 @@ import {
   formatResponseSize,
   formatElapsedTime,
   formatStatusCode,
+  getHttpStatusColorClasses,
   formatTraceRequestBody,
   formatCopyTrace,
   substituteVariables,
@@ -32,14 +33,39 @@ test('formatStatusCode handles HTTP codes', () => {
   assert.equal(ok.label, '200 OK');
   assert.equal(ok.isSuccess, true);
   assert.equal(ok.isError, false);
+  assert.equal(ok.category, '2xx');
 
   const notFound = formatStatusCode('http', 404, 'Not Found');
   assert.equal(notFound.label, '404 Not Found');
   assert.equal(notFound.isSuccess, false);
   assert.equal(notFound.isError, true);
+  assert.equal(notFound.category, '4xx');
 
   const redirect = formatStatusCode('http', 301, 'Moved Permanently');
   assert.equal(redirect.isWarning, true);
+  assert.equal(redirect.category, '3xx');
+});
+
+test('getHttpStatusColorClasses maps HTTP status codes to semantic colors accurately', () => {
+  const s200 = getHttpStatusColorClasses(200);
+  assert.equal(s200.category, '2xx');
+  assert.equal(s200.hex, '#22c55e');
+
+  const s301 = getHttpStatusColorClasses(301);
+  assert.equal(s301.category, '3xx');
+  assert.equal(s301.hex, '#3b82f6');
+
+  const s404 = getHttpStatusColorClasses(404);
+  assert.equal(s404.category, '4xx');
+  assert.equal(s404.hex, '#f59e0b');
+
+  const s500 = getHttpStatusColorClasses(500);
+  assert.equal(s500.category, '5xx');
+  assert.equal(s500.hex, '#ef4444');
+
+  const s0 = getHttpStatusColorClasses(0);
+  assert.equal(s0.category, 'error');
+  assert.equal(s0.hex, '#ef4444');
 });
 
 test('formatStatusCode handles gRPC codes with standard status label', () => {

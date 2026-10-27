@@ -3,19 +3,19 @@ name: API Lab Workbench
 description: High-density, mineral dark workbench for HTTP and gRPC engineering. Edge-to-edge chrome, crisp 1px hairlines, zero decorative slop.
 
 colors:
-  ground: "oklch(14% 0.01 260)"           # #0e1015 - page background
-  surface: "oklch(17% 0.012 260)"         # #14171f - sidebar & panels
-  surface-raised: "oklch(20% 0.014 260)"  # #1a1e28 - inputs, active tabs
-  surface-hover: "oklch(23% 0.016 260)"   # #212634 - hover states
-  hairline: "oklch(27% 0.015 260 / 0.5)"  # 1px border rule
-  hairline-strong: "oklch(40% 0.03 260)"  # active border rule
+  ground: "#0f172a"                       # #0f172a - page background
+  surface: "#111827"                      # #111827 - sidebar & panels
+  surface-raised: "#1f2937"               # #1f2937 - inputs, active tabs
+  surface-hover: "#273548"                # #273548 - hover states
+  hairline: "#374151"                     # #374151 - 1px border rule
+  hairline-strong: "#4b5563"              # #4b5563 - active border rule
 
-  text-high: "oklch(94% 0.005 260)"       # primary text, values
-  text-med: "oklch(72% 0.01 260)"         # labels, inactive text
-  text-low: "oklch(50% 0.015 260)"        # placeholders, hotkeys
+  text-high: "#f9fafb"                    # #f9fafb - primary text, values
+  text-med: "#9ca3af"                     # #9ca3af - labels, inactive text
+  text-low: "#6b7280"                     # #6b7280 - placeholders, hotkeys
 
-  accent-primary: "oklch(54.6% 0.245 278)" # #4f46e5 - logo indigo execution CTA
-  accent-gradient: "oklch(56.3% 0.248 289)" # #6947e6 - logo violet execution gradient stop
+  accent-primary: "#14b8a6"               # #14b8a6 - scientific teal execution CTA
+  accent-gradient: "#06b6d4"              # #06b6d4 - secondary cyan brand gradient stop
   accent-grpc: "oklch(68% 0.18 290)"      # gRPC reflection accent
 
   method-get: "oklch(72% 0.17 155)"

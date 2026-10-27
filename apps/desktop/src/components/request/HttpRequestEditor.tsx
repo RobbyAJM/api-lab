@@ -578,7 +578,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         <button
           onClick={handleSend}
           disabled={sending}
-          className="px-4 py-2 bg-primary hover:bg-primary-hover active:bg-blue-700 disabled:opacity-50 text-white font-semibold rounded text-xs flex items-center gap-1.5 transition h-9 flex-shrink-0 cursor-pointer shadow-sm"
+          className="px-4 py-2 bg-primary hover:bg-primary-hover active:bg-teal-700 disabled:opacity-50 text-white font-semibold rounded text-xs flex items-center gap-1.5 transition h-9 flex-shrink-0 cursor-pointer shadow-sm"
           title="Send request (Ctrl+Enter)"
         >
           <span>{sending ? 'Sending...' : 'Send'}</span>

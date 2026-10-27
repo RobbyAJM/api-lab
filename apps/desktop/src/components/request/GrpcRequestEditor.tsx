@@ -1260,7 +1260,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           className={`px-4 py-2 text-xs font-semibold rounded transition flex items-center justify-center gap-1.5 h-9 flex-shrink-0 cursor-pointer shadow-sm ${
             isStreamingRpc && isCurrentEndpointStreaming
               ? 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700'
-              : 'bg-primary hover:bg-primary-hover active:bg-blue-700 disabled:opacity-50 text-white'
+              : 'bg-primary hover:bg-primary-hover active:bg-teal-700 disabled:opacity-50 text-white'
           }`}
           title={isStreamingRpc && isCurrentEndpointStreaming ? "Cancel stream" : "Invoke method (Ctrl+Enter)"}
         >
@@ -1400,7 +1400,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   type="button"
                   onClick={isCurrentEndpointStreaming ? handleSendStreamMessage : handleStartStream}
                   disabled={sending || (!isCurrentEndpointStreaming && (!selectedService || !selectedMethod))}
-                  className="px-4 py-1.5 text-xs font-semibold rounded transition bg-primary hover:bg-primary-hover active:bg-blue-700 text-white disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                  className="px-4 py-1.5 text-xs font-semibold rounded transition bg-primary hover:bg-primary-hover active:bg-teal-700 text-white disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
                   title={isCurrentEndpointStreaming ? "Send message to stream (Ctrl+Enter)" : "Start stream with message (Ctrl+Enter)"}
                 >
                   Send

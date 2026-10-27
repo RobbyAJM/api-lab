@@ -25,6 +25,11 @@ export default {
           border: 'rgb(var(--color-secondary) / 0.35)',
           foreground: '#ffffff',
         },
+        accent: {
+          DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+          subtle: 'rgb(var(--color-accent) / 0.15)',
+          foreground: '#0f172a',
+        },
         // Themeable mineral / custom palette: dynamic CSS variables with alpha support
         zinc: {
           950: 'rgb(var(--color-zinc-950) / <alpha-value>)',

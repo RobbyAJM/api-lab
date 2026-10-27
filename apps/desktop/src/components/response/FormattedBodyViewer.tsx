@@ -187,7 +187,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
                   ) : (
                     tokens.map((token, tIdx) => {
                       let colorClass = 'text-zinc-200';
-                      if (token.type === 'key') colorClass = 'text-indigo-400 font-medium';
+                      if (token.type === 'key') colorClass = 'text-teal-400 font-medium';
                       else if (token.type === 'string') colorClass = 'text-emerald-300';
                       else if (token.type === 'number') colorClass = 'text-cyan-400';
                       else if (token.type === 'boolean') colorClass = 'text-orange-400 font-medium';
@@ -242,7 +242,7 @@ export const FormattedBodyViewer: React.FC<FormattedBodyViewerProps> = ({
               ) : (
                 tokens.map((token, tIdx) => {
                   let colorClass = 'text-zinc-200';
-                  if (token.type === 'tag') colorClass = 'text-indigo-400 font-semibold';
+                  if (token.type === 'tag') colorClass = 'text-teal-400 font-semibold';
                   else if (token.type === 'attr-name') colorClass = 'text-amber-400 font-medium';
                   else if (token.type === 'attr-val') colorClass = 'text-emerald-300';
                   else if (token.type === 'doctype') colorClass = 'text-purple-400 font-bold';

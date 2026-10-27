@@ -51,18 +51,34 @@ test('getThemeById: finds themes by ID and falls back to default on unknown', ()
   assert.equal(fallbackNull.id, DEFAULT_THEME_ID);
 });
 
-test('resolveThemeVariables: preserves exact mineral dark values for default api-lab theme', () => {
+test('resolveThemeVariables: preserves exact Scientific Teal values for default api-lab theme', () => {
   const defaultTheme = getThemeById('api-lab');
   const vars = resolveThemeVariables(defaultTheme);
 
-  assert.equal(vars['--color-zinc-950'], '11 12 14');
-  assert.equal(vars['--color-zinc-900'], '17 19 23');
-  assert.equal(vars['--color-zinc-850'], '22 25 31');
-  assert.equal(vars['--color-zinc-800'], '32 36 44');
-  assert.equal(vars['--color-zinc-750'], '41 46 57');
-  assert.equal(vars['--color-zinc-700'], '53 60 74');
-  assert.equal(vars['--color-primary'], '79 70 229');
-  assert.equal(vars['--color-secondary'], '99 102 241');
+  assert.equal(vars['--color-zinc-950'], '15 23 42');
+  assert.equal(vars['--color-zinc-900'], '17 24 39');
+  assert.equal(vars['--color-zinc-850'], '31 41 55');
+  assert.equal(vars['--color-zinc-800'], '39 53 72');
+  assert.equal(vars['--color-zinc-700'], '55 65 81');
+  assert.equal(vars['--color-zinc-500'], '107 114 128');
+  assert.equal(vars['--color-zinc-400'], '156 163 175');
+  assert.equal(vars['--color-zinc-100'], '249 250 251');
+  assert.equal(vars['--color-primary'], '20 184 166');
+  assert.equal(vars['--color-primary-hover'], '13 148 136');
+  assert.equal(vars['--color-secondary'], '6 182 212');
+  assert.equal(vars['--color-accent'], '110 231 183');
+});
+
+test('resolveThemeVariables: preserves exact Light Theme values for api-lab-light', () => {
+  const lightTheme = getThemeById('api-lab-light');
+  const vars = resolveThemeVariables(lightTheme);
+
+  assert.equal(vars['--color-zinc-950'], '248 250 252');
+  assert.equal(vars['--color-zinc-900'], '255 255 255');
+  assert.equal(vars['--color-zinc-800'], '241 245 249');
+  assert.equal(vars['--color-zinc-750'], '226 232 240');
+  assert.equal(vars['--color-zinc-100'], '15 23 42');
+  assert.equal(vars['--color-primary'], '20 184 166');
 });
 
 test('resolveThemeVariables: derives distinct palettes for other themes', () => {
@@ -87,6 +103,7 @@ test('generateThemeCss: outputs complete valid CSS text block', () => {
 test('THEMES list contains popular Opencode themes and light themes', () => {
   const ids = THEMES.map((t) => t.id);
   assert.ok(ids.includes('api-lab'));
+  assert.ok(ids.includes('api-lab-light'));
   assert.ok(ids.includes('dracula'));
   assert.ok(ids.includes('catppuccin'));
   assert.ok(ids.includes('nord'));
@@ -102,12 +119,12 @@ test('THEMES list contains popular Opencode themes and light themes', () => {
   assert.ok(ids.includes('vesper-light'));
   assert.ok(ids.includes('solar-dark'));
   assert.ok(ids.includes('solar-light'));
-  assert.ok(THEMES.length >= 27);
+  assert.ok(THEMES.length >= 28);
 });
 
 test('sortThemes: pins api-lab to top, then dark themes A-Z, then light themes A-Z', () => {
   assert.equal(THEMES[0].id, 'api-lab');
-  assert.equal(THEMES[0].name, 'API Lab Mineral (Default)');
+  assert.equal(THEMES[0].name, 'API Lab Scientific Teal (Default)');
 
   const darkThemes = THEMES.filter((t) => !t.isLight);
   const lightThemes = THEMES.filter((t) => t.isLight);

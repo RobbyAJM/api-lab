@@ -22,11 +22,73 @@ export function formatElapsedTime(ms: number): string {
   return `${(ms / 1000).toFixed(0)}s`;
 }
 
+export type HttpStatusCategory = '2xx' | '3xx' | '4xx' | '5xx' | 'error' | 'neutral';
+
+export interface HttpStatusColorClasses {
+  badge: string;
+  dot: string;
+  hex: string;
+  category: HttpStatusCategory;
+}
+
+/**
+ * Returns Tailwind badge classes, indicator dot class, and hex color for HTTP status codes.
+ */
+export function getHttpStatusColorClasses(statusCode: number): HttpStatusColorClasses {
+  if (statusCode >= 200 && statusCode < 300) {
+    return {
+      badge: 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/60',
+      dot: 'bg-[#22c55e]',
+      hex: '#22c55e',
+      category: '2xx',
+    };
+  }
+  if (statusCode >= 300 && statusCode < 400) {
+    return {
+      badge: 'bg-blue-950/60 text-blue-400 border border-blue-800/60',
+      dot: 'bg-[#3b82f6]',
+      hex: '#3b82f6',
+      category: '3xx',
+    };
+  }
+  if (statusCode >= 400 && statusCode < 500) {
+    return {
+      badge: 'bg-amber-950/60 text-amber-400 border border-amber-800/60',
+      dot: 'bg-[#f59e0b]',
+      hex: '#f59e0b',
+      category: '4xx',
+    };
+  }
+  if (statusCode >= 500 && statusCode < 600) {
+    return {
+      badge: 'bg-red-950/60 text-red-400 border border-red-800/60',
+      dot: 'bg-[#ef4444]',
+      hex: '#ef4444',
+      category: '5xx',
+    };
+  }
+  if (statusCode === 0) {
+    return {
+      badge: 'bg-red-950/60 text-red-400 border border-red-800/60',
+      dot: 'bg-[#ef4444]',
+      hex: '#ef4444',
+      category: 'error',
+    };
+  }
+  return {
+    badge: 'bg-zinc-800 text-zinc-300 border border-zinc-700',
+    dot: 'bg-[#94a3b8]',
+    hex: '#94a3b8',
+    category: 'neutral',
+  };
+}
+
 export interface StatusBadgeInfo {
   label: string;
   isSuccess: boolean;
   isWarning: boolean;
   isError: boolean;
+  category?: HttpStatusCategory;
 }
 
 /**
@@ -42,11 +104,13 @@ export function formatStatusCode(
     const isWarning = code >= 300 && code < 400;
     const isError = code >= 400 || code === 0;
     const textPart = statusText ? ` ${statusText}` : '';
+    const colorInfo = getHttpStatusColorClasses(code);
     return {
       label: `${code}${textPart}`.trim(),
       isSuccess,
       isWarning,
       isError,
+      category: colorInfo.category,
     };
   }
 
@@ -59,6 +123,7 @@ export function formatStatusCode(
     isSuccess,
     isWarning: false,
     isError,
+    category: isSuccess ? '2xx' : 'error',
   };
 }
 
