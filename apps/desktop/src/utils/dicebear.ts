@@ -99,7 +99,7 @@ export function parseAvatar(raw?: string | null): ParsedAvatar {
     const bg = queryParams.get('backgroundColor');
     if (bg) options.backgroundColor = bg;
 
-    const rad = queryParams.get('radius');
+    const rad = queryParams.get('borderRadius') ?? queryParams.get('radius');
     if (rad !== null) {
       const parsedRad = parseInt(rad, 10);
       if (!isNaN(parsedRad)) options.radius = parsedRad;
@@ -127,8 +127,16 @@ export function parseAvatar(raw?: string | null): ParsedAvatar {
 
     const extra: Record<string, string> = {};
     for (const [k, v] of queryParams.entries()) {
-      if (!['backgroundColor', 'radius', 'flip', 'rotate', 'scale', 'seed'].includes(k) && v) {
-        extra[k] = v;
+      if (
+        !['backgroundColor', 'radius', 'borderRadius', 'flip', 'rotate', 'scale', 'seed'].includes(k) &&
+        !k.endsWith('Probability') &&
+        v
+      ) {
+        const compId = k.endsWith('Variant') ? k.slice(0, -7) : k;
+        const firstVal = v.split(',')[0].trim();
+        if (firstVal) {
+          extra[compId] = firstVal;
+        }
       }
     }
     if (Object.keys(extra).length > 0) {
@@ -243,7 +251,8 @@ export function getDiceBearUrl(
     params.set('backgroundColor', options.backgroundColor.replace(/^#/, ''));
   }
   if (options.radius !== undefined && options.radius > 0) {
-    params.set('radius', String(options.radius));
+    // ponytail: DiceBear 10.x uses borderRadius (0-50); upgrade if schema changes
+    params.set('borderRadius', String(options.radius));
   }
   if (options.flip) {
     params.set('flip', 'horizontal');
@@ -258,7 +267,10 @@ export function getDiceBearUrl(
 
   const cleanExtra = sanitizeExtraComponents(safeStyle, options.extra);
   for (const [k, v] of Object.entries(cleanExtra)) {
-    if (v) params.set(k, v);
+    if (v) {
+      params.set(`${k}Variant`, v);
+      params.set(`${k}Probability`, '100');
+    }
   }
 
   return `https://api.dicebear.com/10.x/${safeStyle}/svg?${params.toString()}`;

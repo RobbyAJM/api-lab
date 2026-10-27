@@ -92,8 +92,9 @@ test('getDiceBearUrl: generates expected URL and strips invalid variants to prev
     extra: { eyes: 'variant01', mouth: 'bite' },
   });
   assert.ok(botttsUrl.includes('https://api.dicebear.com/10.x/bottts/svg?'));
-  assert.ok(botttsUrl.includes('mouth=bite'));
-  assert.ok(!botttsUrl.includes('eyes=variant01'));
+  assert.ok(botttsUrl.includes('mouthVariant=bite'));
+  assert.ok(botttsUrl.includes('mouthProbability=100'));
+  assert.ok(!botttsUrl.includes('eyesVariant=variant01'));
 
   // variant01 is valid in croodles-neutral
   const croodlesUrl = getDiceBearUrl('croodles-neutral', 'Felix', {
@@ -106,18 +107,20 @@ test('getDiceBearUrl: generates expected URL and strips invalid variants to prev
   assert.ok(croodlesUrl.includes('https://api.dicebear.com/10.x/croodles-neutral/svg?'));
   assert.ok(croodlesUrl.includes('seed=Felix'));
   assert.ok(croodlesUrl.includes('backgroundColor=b6e3f4'));
-  assert.ok(croodlesUrl.includes('radius=50'));
+  assert.ok(croodlesUrl.includes('borderRadius=50'));
   assert.ok(croodlesUrl.includes('scale=1.2'));
   assert.ok(croodlesUrl.includes('flip=horizontal'));
-  assert.ok(croodlesUrl.includes('eyes=variant01'));
+  assert.ok(croodlesUrl.includes('eyesVariant=variant01'));
+  assert.ok(croodlesUrl.includes('eyesProbability=100'));
 });
 
-test('parseAvatar: handles comma-separated extra components in 10.x style URLs', () => {
-  const parsed = parseAvatar('https://api.dicebear.com/10.x/bottts/svg?seed=Felix&mouth=bite,diagram&top=antenna');
+test('parseAvatar: handles comma-separated extra components and Variant suffix in 10.x style URLs', () => {
+  const parsed = parseAvatar('https://api.dicebear.com/10.x/bottts/svg?seed=Felix&mouthVariant=bite,diagram&topVariant=antenna&borderRadius=30&topProbability=100');
   assert.equal(parsed.style, 'bottts');
   assert.equal(parsed.seed, 'Felix');
-  // Extra options with first variant or validated variant for single-select playground
+  assert.equal(parsed.options.radius, 30);
   assert.ok(parsed.options.extra);
+  assert.equal(parsed.options.extra?.mouth, 'bite');
   assert.equal(parsed.options.extra?.top, 'antenna');
 });
 

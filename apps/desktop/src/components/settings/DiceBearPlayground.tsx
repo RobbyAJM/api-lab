@@ -59,6 +59,8 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
   const [failedThumbs, setFailedThumbs] = useState<Record<string, boolean>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const dropdownListRef = useRef<HTMLDivElement>(null);
+  const dropdownScrollPos = useRef<number>(0);
 
   const styleDef = getStyleDefinition(style);
 
@@ -77,9 +79,15 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
 
   useEffect(() => {
     if (styleDropdownOpen) {
-      setTimeout(() => searchInputRef.current?.focus(), 50);
-    } else {
-      setStyleSearchQuery('');
+      if (dropdownListRef.current) {
+        dropdownListRef.current.scrollTop = dropdownScrollPos.current;
+      }
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+        if (dropdownListRef.current) {
+          dropdownListRef.current.scrollTop = dropdownScrollPos.current;
+        }
+      }, 50);
     }
   }, [styleDropdownOpen]);
 
@@ -280,7 +288,13 @@ export const DiceBearPlayground: React.FC<DiceBearPlaygroundProps> = ({
                 </div>
 
                 {/* Filtered Styles List */}
-                <div className="overflow-y-auto divide-y divide-zinc-800/80 py-1">
+                <div
+                  ref={dropdownListRef}
+                  onScroll={(e) => {
+                    dropdownScrollPos.current = e.currentTarget.scrollTop;
+                  }}
+                  className="overflow-y-auto divide-y divide-zinc-800/80 py-1"
+                >
                   {filteredStyles.length === 0 ? (
                     <div className="p-4 text-center text-xs text-zinc-500">
                       No matching avatar styles
