@@ -141,10 +141,10 @@ export const Sidebar: React.FC = () => {
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
-      className="relative bg-zinc-900 border-r border-zinc-800/60 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
+      className="relative bg-zinc-950 border-r border-zinc-800/60 flex flex-col h-full select-none text-zinc-300 flex-shrink-0"
     >
       {/* Brand Header */}
-      <div className="px-3 py-2 border-b border-zinc-800/60 flex items-center justify-between bg-zinc-900">
+      <div className="px-3 py-2 border-b border-zinc-800/60 flex items-center justify-between bg-zinc-950">
         <div className="flex items-center gap-2">
           <img src={appLogo} alt="API Lab" className="w-5 h-5 rounded object-contain" />
           <span className="font-semibold text-xs text-zinc-100 tracking-tight">API Lab</span>
@@ -169,7 +169,7 @@ export const Sidebar: React.FC = () => {
       </div>
 
       {/* Collections & Folders List */}
-      <div className="flex-1 overflow-y-auto px-2 space-y-1">
+      <div className="flex-1 overflow-y-auto pl-2 pr-1.5 space-y-1 min-h-0">
         {collections.map((coll) => (
           <CollectionNode
             key={coll.id}
@@ -207,7 +207,7 @@ export const Sidebar: React.FC = () => {
       {/* Horizontal Resizable Splitter Handle (New Feature 2) */}
       <div
         onMouseDown={startResizing}
-        className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize hover:bg-zinc-700 active:bg-zinc-600 transition-colors z-40"
+        className="absolute top-0 -right-1 bottom-0 w-2 cursor-col-resize hover:bg-zinc-700/60 active:bg-zinc-600 transition-colors z-40"
         title="Drag to resize sidebar width"
       />
 

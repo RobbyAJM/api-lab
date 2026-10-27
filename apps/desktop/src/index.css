@@ -45,18 +45,18 @@ input, textarea, select {
 
 /* Precision scrollbars */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--color-zinc-800));
-  border-radius: 2px;
+  background: rgb(var(--color-zinc-700));
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--color-zinc-700));
+  background: rgb(var(--color-zinc-500));
 }
 
 @keyframes responseProgressMove {
