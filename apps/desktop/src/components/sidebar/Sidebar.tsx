@@ -49,6 +49,10 @@ import {
   isCollectionHighlighted,
   type FolderTreeNode,
 } from '../../utils/folderTree';
+import {
+  validateCollectionName,
+  buildCreateCollectionPayload,
+} from '../../utils/collectionCreation';
 
 export const Sidebar: React.FC = () => {
   const queryClient = useQueryClient();
@@ -138,6 +142,40 @@ export const Sidebar: React.FC = () => {
     },
   });
 
+  // Create Collection
+  const [isCreatingCollection, setIsCreatingCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [createCollectionError, setCreateCollectionError] = useState<string | null>(null);
+
+  const createCollectionMutation = useMutation({
+    mutationFn: (name: string) =>
+      apiRequest(`/workspaces/${activeWorkspaceId}/collections`, {
+        method: 'POST',
+        body: JSON.stringify(buildCreateCollectionPayload(name)),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['collections', activeWorkspaceId] });
+      setNewCollectionName('');
+      setCreateCollectionError(null);
+      setIsCreatingCollection(false);
+    },
+    onError: (err: any) => {
+      setCreateCollectionError(err.message || 'Failed to create collection');
+    },
+  });
+
+  const handleCreateCollection = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!activeWorkspaceId) return;
+    const validation = validateCollectionName(newCollectionName);
+    if (!validation.valid) {
+      setCreateCollectionError(validation.error || 'Invalid collection name');
+      return;
+    }
+    setCreateCollectionError(null);
+    createCollectionMutation.mutate(validation.name);
+  };
+
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
@@ -159,6 +197,17 @@ export const Sidebar: React.FC = () => {
         <span>Collections</span>
         <div className="flex items-center gap-1 text-zinc-400">
           <button
+            onClick={() => {
+              setIsCreatingCollection((prev) => !prev);
+              setNewCollectionName('');
+              setCreateCollectionError(null);
+            }}
+            className="hover:text-zinc-200 p-0.5 rounded transition"
+            title="New Collection"
+          >
+            <FolderPlus size={13} />
+          </button>
+          <button
             onClick={() => setCollapseSignal((s) => s + 1)}
             className="hover:text-zinc-200 p-0.5 rounded transition"
             title="Collapse All"
@@ -170,6 +219,56 @@ export const Sidebar: React.FC = () => {
 
       {/* Collections & Folders List */}
       <div className="flex-1 overflow-y-auto pl-2 pr-1.5 space-y-1 min-h-0">
+        {isCreatingCollection && (
+          <div className="p-1.5 pl-2 flex flex-col gap-1 bg-zinc-900/60 border border-zinc-800 rounded mb-1">
+            <div className="flex items-center gap-1">
+              <Folder size={12} className="text-zinc-400 flex-shrink-0" />
+              <input
+                type="text"
+                value={newCollectionName}
+                onChange={(e) => {
+                  setNewCollectionName(e.target.value);
+                  if (createCollectionError) setCreateCollectionError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleCreateCollection();
+                  if (e.key === 'Escape') {
+                    setIsCreatingCollection(false);
+                    setNewCollectionName('');
+                    setCreateCollectionError(null);
+                  }
+                }}
+                placeholder="Collection name..."
+                autoFocus
+                className="flex-1 bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-zinc-700"
+              />
+              <button
+                type="button"
+                onClick={() => handleCreateCollection()}
+                disabled={!newCollectionName.trim() || createCollectionMutation.isPending}
+                className="p-1 hover:text-emerald-400 text-zinc-400 disabled:opacity-40 transition"
+                title="Save"
+              >
+                <Check size={12} />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCreatingCollection(false);
+                  setNewCollectionName('');
+                  setCreateCollectionError(null);
+                }}
+                className="p-1 hover:text-zinc-200 text-zinc-400 transition"
+                title="Cancel"
+              >
+                <X size={12} />
+              </button>
+            </div>
+            {createCollectionError && (
+              <span className="text-[10px] text-red-400 font-mono pl-4">{createCollectionError}</span>
+            )}
+          </div>
+        )}
         {collections.map((coll) => (
           <CollectionNode
             key={coll.id}
