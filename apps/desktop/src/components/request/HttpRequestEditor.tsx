@@ -217,15 +217,13 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       if (!swaggerFolderInfo?.swaggerUrl) return null;
       return await fetchSwaggerSpec(swaggerFolderInfo.swaggerUrl);
     },
-    enabled: !!swaggerFolderInfo?.swaggerUrl && !endpoint.config?.specification,
+    enabled: !!swaggerFolderInfo?.swaggerUrl && (!endpoint.config?.specification || !endpoint.config?.summary),
     staleTime: 5 * 60 * 1000,
   });
 
   const endpointSpec = React.useMemo(() => {
-    if (endpoint.config?.specification) {
-      return endpoint.config.specification;
-    }
-    if (!swaggerDoc) return null;
+    let spec = endpoint.config?.specification || null;
+    if (!swaggerDoc) return spec;
     const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo?.swaggerUrl || '');
     for (const svc of parsed.services) {
       for (const ep of svc.endpoints) {
@@ -233,11 +231,15 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           ep.method.toUpperCase() === method.toUpperCase() &&
           (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
         ) {
-          return ep.specification || null;
+          if (!spec) return ep.specification || null;
+          if (!spec.summary && ep.summary) {
+            return { ...spec, summary: ep.summary };
+          }
+          return spec;
         }
       }
     }
-    return null;
+    return spec;
   }, [endpoint.config?.specification, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
 
   const folderPath = React.useMemo(() => {
@@ -262,6 +264,26 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
     return null;
   }, [endpoint.config?.summary, endpointSpec?.summary, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+
+  const displayEndpointName = React.useMemo(() => {
+    if (
+      (requestSummary && endpoint.name === requestSummary) ||
+      (isSwaggerEndpoint && endpoint.name.includes(' ') && endpoint.config?.url)
+    ) {
+      if (endpoint.config?.url) {
+        try {
+          return new URL(endpoint.config.url).pathname;
+        } catch {
+          return endpoint.config.url.split('?')[0].replace(/^https?:\/\/[^\/]+/, '') || endpoint.name;
+        }
+      }
+    }
+    return endpoint.name;
+  }, [endpoint.name, requestSummary, isSwaggerEndpoint, endpoint.config?.url]);
+
+  useEffect(() => {
+    setEditNameValue(displayEndpointName);
+  }, [displayEndpointName]);
 
   const handleSaveRename = async () => {
     const trimmed = editNameValue.trim();
@@ -710,7 +732,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               className="text-white font-semibold hover:text-primary transition truncate text-left flex-shrink-0"
               title="Click to rename"
             >
-              {endpoint.name}
+              {displayEndpointName}
             </button>
           )}
 

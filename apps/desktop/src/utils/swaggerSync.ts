@@ -20,6 +20,7 @@ export interface SwaggerSyncPlan {
   }[];
   endpointsToUpdate: {
     endpoint: Endpoint;
+    newName?: string;
     newConfig: Record<string, any>;
   }[];
 }
@@ -206,18 +207,21 @@ export function planSwaggerSync(
 
         const { updatedPayload, changed } = reconcileHttpPayload(curPayload, freshPayload);
 
+        const nameChanged = match.name !== fep.name;
         const urlChanged = match.config?.url !== fep.fullUrl;
         const methodChanged = match.config?.method?.toUpperCase() !== fep.method.toUpperCase();
         const summaryChanged = fep.summary !== undefined && match.config?.summary !== fep.summary;
 
-        if (changed || urlChanged || methodChanged || summaryChanged) {
+        if (changed || urlChanged || methodChanged || summaryChanged || nameChanged) {
           endpointsToUpdate.push({
             endpoint: match,
+            newName: nameChanged ? fep.name : undefined,
             newConfig: {
               ...match.config,
               url: fep.fullUrl,
               method: fep.method,
               summary: fep.summary ?? match.config?.summary,
+              specification: fep.specification ?? match.config?.specification,
               query_params: fep.queryParams,
               path_variables: fep.pathVariables,
               headers: fep.headers,
@@ -351,9 +355,13 @@ export async function executeSwaggerSync(
   // 5. Update existing endpoints
   for (const u of plan.endpointsToUpdate) {
     try {
-      await api.patch(`/endpoints/${u.endpoint.id}`, {
+      const patchBody: Record<string, any> = {
         config: u.newConfig,
-      });
+      };
+      if (u.newName) {
+        patchBody.name = u.newName;
+      }
+      await api.patch(`/endpoints/${u.endpoint.id}`, patchBody);
       updatedEndpointsCount++;
     } catch {
       // ignore

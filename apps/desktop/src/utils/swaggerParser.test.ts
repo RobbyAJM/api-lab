@@ -403,7 +403,7 @@ test('parseSwaggerSpec: converts path variable {id} to :id and extracts path par
   assert.deepEqual(ep.queryParams, [
     ['verbose', 'true', 'Include full logs'],
   ]);
-  assert.equal(ep.name, '/manager/api/v1/emergency-contact-status/:id');
+  assert.equal(ep.name, '/manager/api/v1/emergency-contact-status/{id}');
   assert.equal(ep.summary, 'Get Emergency Contact Status');
   assert.equal(ep.specification?.summary, 'Get Emergency Contact Status');
 });

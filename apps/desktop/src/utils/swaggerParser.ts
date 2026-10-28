@@ -467,10 +467,10 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
       }
 
       const normalizedPath = convertSwaggerPathToApiPath(pathKey);
+      const rawPath = pathKey.startsWith('/') ? pathKey : `/${pathKey}`;
 
-      // Format endpoint name: operationId > normalizedPath (summary kept distinct for breadcrumb display)
-      let epName = operation.operationId || normalizedPath;
-      epName = epName.trim();
+      // Format endpoint name: operationId > rawPath (e.g. /api/v1/user/{id}/update)
+      let epName = (operation.operationId || rawPath).trim();
 
       const fullUrl = `${baseUrl}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
 

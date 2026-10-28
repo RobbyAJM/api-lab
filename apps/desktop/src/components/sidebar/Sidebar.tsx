@@ -1333,7 +1333,10 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   // Do not display summary in sidebar; show clean operation name or path
   const summary = endpoint.config?.summary || endpoint.config?.specification?.summary;
   let displayName = endpoint.name;
-  if (summary && displayName === summary) {
+  if (
+    (summary && displayName === summary) ||
+    (endpoint.config?.specification && displayName.includes(' ') && endpoint.config?.url)
+  ) {
     if (endpoint.config?.url) {
       try {
         displayName = new URL(endpoint.config.url).pathname;

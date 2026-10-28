@@ -139,6 +139,22 @@ export const EndpointTabBar: React.FC = () => {
             const isActive = ep.id === activeEndpointId;
             const dirty = isEndpointDirty(ep.id);
 
+            // Clean endpoint name for tab display, avoiding full summary strings
+            const tabSummary = ep.config?.summary || ep.config?.specification?.summary;
+            let tabDisplayName = ep.name;
+            if (
+              (tabSummary && tabDisplayName === tabSummary) ||
+              (ep.config?.specification && tabDisplayName.includes(' ') && ep.config?.url)
+            ) {
+              if (ep.config?.url) {
+                try {
+                  tabDisplayName = new URL(ep.config.url).pathname;
+                } catch {
+                  tabDisplayName = ep.config.url.split('?')[0].replace(/^https?:\/\/[^\/]+/, '') || ep.name;
+                }
+              }
+            }
+
             return (
               <div
                 key={ep.id}
@@ -164,10 +180,10 @@ export const EndpointTabBar: React.FC = () => {
                     ? 'bg-zinc-900 border-zinc-800 text-zinc-100 font-medium border-t border-t-primary'
                     : 'bg-zinc-950 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border-zinc-850'
                 }`}
-                title={`${ep.name} (${ep.protocol.toUpperCase()})`}
+                title={`${tabDisplayName} (${ep.protocol.toUpperCase()})`}
               >
                 {renderMethodBadge(ep)}
-                <span className="truncate max-w-[120px] text-xs font-medium">{ep.name}</span>
+                <span className="truncate max-w-[120px] text-xs font-medium">{tabDisplayName}</span>
 
                 {/* Unsaved Changes Indicator Dot */}
                 {dirty && (
