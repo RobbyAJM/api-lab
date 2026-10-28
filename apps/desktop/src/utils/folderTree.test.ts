@@ -14,6 +14,7 @@ import {
   resolveRootFolderId,
   resolveInheritedGrpcAddress,
   getAncestorFolderIds,
+  getFolderPath,
   isCollectionHighlighted,
   cascadeUpdateFolderGrpcAddress,
 } from './folderTree.ts';
@@ -459,6 +460,23 @@ test('resolveInheritedGrpcAddress: inherits gRPC address for direct child and de
   assert.equal(resLegacy.isInherited, true);
   assert.equal(resLegacy.inheritedAddress, 'grpc.internal:50051');
   assert.equal(resLegacy.folderId, 'f-legacy-root');
+});
+
+test('getFolderPath: resolves ordered folder path from root down to current folder', () => {
+  // f-root-1 -> f-child-auth -> f-grandchild-sub
+  const path = getFolderPath(mockFolders, 'f-grandchild-sub');
+  assert.equal(path.length, 3);
+  assert.equal(path[0].id, 'f-root-1');
+  assert.equal(path[1].id, 'f-child-auth');
+  assert.equal(path[2].id, 'f-grandchild-sub');
+
+  const rootPath = getFolderPath(mockFolders, 'f-root-1');
+  assert.equal(rootPath.length, 1);
+  assert.equal(rootPath[0].id, 'f-root-1');
+
+  assert.deepEqual(getFolderPath(mockFolders, null), []);
+  assert.deepEqual(getFolderPath(mockFolders, undefined), []);
+  assert.deepEqual(getFolderPath(mockFolders, 'non-existent'), []);
 });
 
 test('getAncestorFolderIds: collects full ancestor folder path up to root', () => {

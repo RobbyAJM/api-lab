@@ -13,6 +13,7 @@ export interface SwaggerFieldSummary {
 }
 
 export interface SwaggerEndpointSpecification {
+  summary?: string;
   requestTypeName?: string;
   requestFields: SwaggerFieldSummary[];
   responseTypeName?: string;
@@ -336,6 +337,7 @@ export function extractSwaggerSpecification(
   }
 
   return {
+    summary: operation?.summary,
     requestTypeName,
     requestFields,
     responseTypeName,
@@ -465,10 +467,10 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
       }
 
       const normalizedPath = convertSwaggerPathToApiPath(pathKey);
+      const rawPath = pathKey.startsWith('/') ? pathKey : `/${pathKey}`;
 
-      // Format endpoint name: operationId > summary > method + path
-      let epName = operation.operationId || operation.summary || `${method} ${normalizedPath}`;
-      epName = epName.trim();
+      // Format endpoint name: operationId > rawPath (e.g. /api/v1/user/{id}/update)
+      let epName = (operation.operationId || rawPath).trim();
 
       const fullUrl = `${baseUrl}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
 

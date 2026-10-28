@@ -140,6 +140,7 @@ interface AppState {
     collectionId: string;
     initialTab?: 'general' | 'auth' | 'headers';
   } | null;
+  revealedFolderId: string | null;
 
   setAuth: (token: string, user: UserSummary, workspace?: WorkspaceSummary) => void;
   logout: () => void;
@@ -178,6 +179,8 @@ interface AppState {
   closeFolderSettingsModal: () => void;
   openCollectionSettingsModal: (collectionId: string, initialTab?: 'general' | 'auth' | 'headers') => void;
   closeCollectionSettingsModal: () => void;
+  revealFolder: (folderId: string) => void;
+  clearRevealedFolder: () => void;
 }
 
 const initialTheme =
@@ -749,4 +752,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
     }),
   closeCollectionSettingsModal: () => set({ collectionSettingsModal: null }),
+  revealedFolderId: null,
+  revealFolder: (folderId: string) => set({ revealedFolderId: folderId }),
+  clearRevealedFolder: () => set({ revealedFolderId: null }),
 }));

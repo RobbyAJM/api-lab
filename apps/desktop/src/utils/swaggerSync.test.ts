@@ -254,3 +254,81 @@ test('executeSwaggerSync: executes deletes, creations, and patches', async () =>
   assert.ok(deletes.includes('/folders/folder-del'));
   assert.ok(patches.some((p) => p.path === '/endpoints/ep-up'));
 });
+
+test('planSwaggerSync & executeSwaggerSync: updates endpoint name when name was legacy summary', async () => {
+  const rootFolderId = 'root-swagger';
+  const existingFolders: CollectionFolder[] = [
+    {
+      id: 'f-auth',
+      collection_id: 'coll-1',
+      parent_folder_id: rootFolderId,
+      name: 'AuthAPI',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const existingEndpoints: Endpoint[] = [
+    {
+      id: 'ep-login',
+      collection_id: 'coll-1',
+      folder_id: 'f-auth',
+      name: 'Logs user into system', // Legacy summary as name
+      protocol: 'http',
+      config: {
+        method: 'POST',
+        url: 'https://api.example.com/auth/login',
+        summary: 'Logs user into system',
+      },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const freshSpec: ParsedSwaggerSpec = {
+    title: 'Auth',
+    version: '1.0.0',
+    baseUrl: 'https://api.example.com',
+    services: [
+      {
+        name: 'AuthAPI',
+        endpoints: [
+          {
+            name: 'loginUser', // operationId
+            method: 'POST',
+            path: '/auth/login',
+            fullUrl: 'https://api.example.com/auth/login',
+            serviceTag: 'AuthAPI',
+            summary: 'Logs user into system',
+            queryParams: [],
+            headers: {},
+            bodyType: 'none',
+            body: '',
+          },
+        ],
+      },
+    ],
+  };
+
+  const plan = planSwaggerSync(rootFolderId, existingFolders, existingEndpoints, freshSpec);
+  assert.equal(plan.endpointsToUpdate.length, 1);
+  assert.equal(plan.endpointsToUpdate[0].newName, 'loginUser');
+
+  const patches: { path: string; body: any }[] = [];
+  const mockApi = {
+    delete: async () => {},
+    post: async () => ({ id: 'new' }),
+    patch: async (path: string, body: any) => {
+      patches.push({ path, body });
+      return body;
+    },
+  };
+
+  await executeSwaggerSync('coll-1', rootFolderId, plan, mockApi);
+  assert.equal(patches.length, 1);
+  assert.equal(patches[0].path, '/endpoints/ep-login');
+  assert.equal(patches[0].body.name, 'loginUser');
+});
