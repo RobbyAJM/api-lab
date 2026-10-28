@@ -34,6 +34,18 @@ test('getAllShortcuts: returns registered shortcuts list', () => {
   assert.ok(settings);
   assert.equal(settings.keyLabel, 'Ctrl + ,');
   assert.equal(settings.macKeyLabel, '⌘ + ,');
+  const zoomIn = shortcuts.find((s) => s.id === 'zoom_in');
+  assert.ok(zoomIn);
+  assert.equal(zoomIn.keyLabel, 'Ctrl + +');
+  assert.equal(zoomIn.macKeyLabel, '⌘ + +');
+  const zoomOut = shortcuts.find((s) => s.id === 'zoom_out');
+  assert.ok(zoomOut);
+  assert.equal(zoomOut.keyLabel, 'Ctrl + -');
+  assert.equal(zoomOut.macKeyLabel, '⌘ + -');
+  const zoomReset = shortcuts.find((s) => s.id === 'zoom_reset');
+  assert.ok(zoomReset);
+  assert.equal(zoomReset.keyLabel, 'Ctrl + 0');
+  assert.equal(zoomReset.macKeyLabel, '⌘ + 0');
 });
 
 test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
@@ -95,6 +107,17 @@ test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
   assert.equal(matchesShortcut({ key: ']', ctrlKey: true }, 'next_tab'), true);
   assert.equal(matchesShortcut({ key: ']', metaKey: true }, 'next_tab'), true);
   assert.equal(matchesShortcut({ key: ']', ctrlKey: true, altKey: true }, 'next_tab'), false);
+
+  // zoom_in / zoom_out / zoom_reset
+  assert.equal(matchesShortcut({ key: '+', ctrlKey: true }, 'zoom_in'), true);
+  assert.equal(matchesShortcut({ key: '=', metaKey: true }, 'zoom_in'), true);
+  assert.equal(matchesShortcut({ key: '+', ctrlKey: true, altKey: true }, 'zoom_in'), false);
+  assert.equal(matchesShortcut({ key: '-', ctrlKey: true }, 'zoom_out'), true);
+  assert.equal(matchesShortcut({ key: '_', metaKey: true }, 'zoom_out'), true);
+  assert.equal(matchesShortcut({ key: '-', ctrlKey: true, altKey: true }, 'zoom_out'), false);
+  assert.equal(matchesShortcut({ key: '0', ctrlKey: true }, 'zoom_reset'), true);
+  assert.equal(matchesShortcut({ key: '0', metaKey: true }, 'zoom_reset'), true);
+  assert.equal(matchesShortcut({ key: '0', ctrlKey: true, altKey: true }, 'zoom_reset'), false);
 });
 
 test('getTabNumberFromEvent: parses 1-9 to 0-based tab index', () => {
