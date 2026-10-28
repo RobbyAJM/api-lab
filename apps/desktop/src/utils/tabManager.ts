@@ -9,6 +9,12 @@ export interface TabResponseData {
   streamMessages?: any[];
 }
 
+/**
+ * Standard layout height and border tokens for workbench tab bar and sidebar brand alignment.
+ */
+export const WORKBENCH_TAB_BAR_HEIGHT_CLASS = 'h-9';
+export const WORKBENCH_HEADER_BORDER_CLASS = 'border-zinc-800/80';
+
 export interface TabState {
   openEndpoints: Endpoint[];
   activeEndpointId: string | null;

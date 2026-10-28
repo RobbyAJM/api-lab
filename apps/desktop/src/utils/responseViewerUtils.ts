@@ -199,6 +199,13 @@ export function formatTraceRequestBody(
   return body.split('\n').map((l) => `  ${l}`).join('\n');
 }
 
+/**
+ * Layout styling classes for the request execution progress indicator.
+ * Absolute positioning guarantees zero layout shift (CLS) during execution state transitions.
+ */
+export const RESPONSE_PROGRESS_BAR_CONTAINER_CLASS =
+  'absolute top-0 inset-x-0 h-[2px] z-10 pointer-events-none overflow-hidden bg-zinc-900';
+
 export interface FormatCopyTraceOptions {
   endpoint: Endpoint;
   response?: (HttpExecutionResponse & { error?: string }) | (GrpcExecutionResponse & { error?: string }) | null;

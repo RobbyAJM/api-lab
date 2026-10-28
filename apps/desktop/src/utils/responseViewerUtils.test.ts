@@ -9,6 +9,7 @@ import {
   formatCopyTrace,
   substituteVariables,
   extractAddressFromError,
+  RESPONSE_PROGRESS_BAR_CONTAINER_CLASS,
 } from './responseViewerUtils.ts';
 import type { Endpoint } from '@api-lab/api-types';
 
@@ -323,5 +324,14 @@ test('formatCopyTrace falls back to error details address if variable is not in 
   assert.ok(trace.includes('Endpoint: 127.0.0.1:3100'));
   assert.equal(trace.includes('{{NUCONNECTOR_GRPC_URL}}'), false);
 });
+
+test('RESPONSE_PROGRESS_BAR_CONTAINER_CLASS enforces absolute zero-CLS layout', () => {
+  assert.ok(RESPONSE_PROGRESS_BAR_CONTAINER_CLASS.includes('absolute'));
+  assert.ok(RESPONSE_PROGRESS_BAR_CONTAINER_CLASS.includes('top-0'));
+  assert.ok(RESPONSE_PROGRESS_BAR_CONTAINER_CLASS.includes('inset-x-0'));
+  assert.ok(RESPONSE_PROGRESS_BAR_CONTAINER_CLASS.includes('pointer-events-none'));
+  assert.ok(RESPONSE_PROGRESS_BAR_CONTAINER_CLASS.includes('h-[2px]'));
+});
+
 
 

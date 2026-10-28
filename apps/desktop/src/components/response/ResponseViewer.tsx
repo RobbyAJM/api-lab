@@ -36,6 +36,7 @@ import {
   formatElapsedTime,
   formatCopyTrace,
   getHttpStatusColors,
+  RESPONSE_PROGRESS_BAR_CONTAINER_CLASS,
 } from '../../utils/responseViewerUtils';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
@@ -298,10 +299,10 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
       : 0;
 
   return (
-    <div className="w-full flex-1 flex flex-col min-h-0 bg-zinc-950 text-zinc-300 overflow-hidden">
+    <div className="relative w-full flex-1 flex flex-col min-h-0 bg-zinc-950 text-zinc-300 overflow-hidden">
       {/* Moving Smooth Gradient Progress Bar (Active Theme Follower) */}
       {isExecuting && (
-        <div className="relative w-full h-[2px] overflow-hidden bg-zinc-900 flex-shrink-0">
+        <div className={RESPONSE_PROGRESS_BAR_CONTAINER_CLASS}>
           <div className="response-progress-gradient absolute inset-0 h-full w-full" />
         </div>
       )}

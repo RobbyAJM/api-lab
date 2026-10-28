@@ -69,7 +69,7 @@ export const EndpointTabBar: React.FC = () => {
 
   if (openEndpoints.length === 0) {
     return (
-      <div className="flex items-center justify-between h-10 px-3 bg-zinc-950 border-b border-zinc-800/80 select-none flex-shrink-0">
+      <div className="flex items-center justify-between h-9 px-3 bg-zinc-950 border-b border-zinc-800/80 select-none flex-shrink-0">
         <button
           type="button"
           onClick={() => setCommandPaletteOpen(true)}
@@ -132,7 +132,7 @@ export const EndpointTabBar: React.FC = () => {
 
   return (
     <>
-      <div className="flex items-center justify-between h-9 bg-zinc-950 border-b border-zinc-800 select-none flex-shrink-0">
+      <div className="flex items-center justify-between h-9 bg-zinc-950 border-b border-zinc-800/80 select-none flex-shrink-0">
         {/* Left: Open Tabs + Add Tab Button */}
         <div className="flex items-center overflow-x-auto scrollbar-none flex-1 min-w-0 h-full">
           {openEndpoints.map((ep) => {
