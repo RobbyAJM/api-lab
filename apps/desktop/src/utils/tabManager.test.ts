@@ -16,6 +16,8 @@ import {
   getEndpointResponseFromState,
   switchWorkspaceTabs,
   removeWorkspaceTabs,
+  WORKBENCH_TAB_BAR_HEIGHT_CLASS,
+  WORKBENCH_HEADER_BORDER_CLASS,
   type TabState,
   type WorkspaceTabMap,
 } from './tabManager.ts';
@@ -743,3 +745,9 @@ test('removeWorkspaceTabs: prunes deleted workspace without affecting others', (
   const unchanged = removeWorkspaceTabs(updated, 'non-existent');
   assert.equal(unchanged, updated);
 });
+
+test('workbench layout tokens enforce h-9 and border-zinc-800/80 symmetry', () => {
+  assert.equal(WORKBENCH_TAB_BAR_HEIGHT_CLASS, 'h-9');
+  assert.equal(WORKBENCH_HEADER_BORDER_CLASS, 'border-zinc-800/80');
+});
+
