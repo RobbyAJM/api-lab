@@ -17,6 +17,7 @@ export interface SwaggerEndpointSpecification {
   requestFields: SwaggerFieldSummary[];
   responseTypeName?: string;
   responseFields: SwaggerFieldSummary[];
+  schemas?: Record<string, SwaggerFieldSummary[]>;
 }
 
 export interface ParsedHttpEndpoint {
@@ -315,11 +316,31 @@ export function extractSwaggerSpecification(
     }
   }
 
+  // 3. Collect all definition schemas for DTO drilldown
+  const allSchemas: Record<string, SwaggerFieldSummary[]> = {};
+  const defs = doc.definitions || doc.components?.schemas || {};
+  for (const [defName, defSchema] of Object.entries(defs)) {
+    if (!defSchema || typeof defSchema !== 'object') continue;
+    const props = (defSchema as any).properties || {};
+    const reqList = Array.isArray((defSchema as any).required) ? (defSchema as any).required : [];
+    const fields: SwaggerFieldSummary[] = [];
+    for (const [propName, propSchema] of Object.entries(props)) {
+      fields.push({
+        name: propName,
+        type: formatSwaggerPropertyType(propSchema, doc),
+        required: reqList.includes(propName),
+        description: (propSchema as any)?.description,
+      });
+    }
+    allSchemas[defName] = fields;
+  }
+
   return {
     requestTypeName,
     requestFields,
     responseTypeName,
     responseFields,
+    schemas: allSchemas,
   };
 }
 

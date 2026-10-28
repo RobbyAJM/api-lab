@@ -353,11 +353,15 @@ pub struct GrpcMethodSummary {
 pub struct GrpcServiceSummary {
     pub name: String,
     pub methods: Vec<GrpcMethodSummary>,
+    #[serde(default)]
+    pub schemas: HashMap<String, Vec<GrpcFieldSummary>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcReflectionResponse {
     pub services: Vec<GrpcServiceSummary>,
+    #[serde(default)]
+    pub schemas: HashMap<String, Vec<GrpcFieldSummary>>,
     pub error: Option<String>,
 }
 

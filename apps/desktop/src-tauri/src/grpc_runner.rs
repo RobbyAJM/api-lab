@@ -87,6 +87,7 @@ pub async fn run_grpc_reflection(
         Err(e) => {
             return GrpcReflectionResponse {
                 services: Vec::new(),
+                schemas: HashMap::new(),
                 error: Some(e.to_string()),
             };
         }
