@@ -239,6 +239,11 @@ export interface GrpcReflectionRequest {
   use_tls?: boolean;
 }
 
+export interface GrpcFieldSummary {
+  name: string;
+  field_type: string;
+}
+
 export interface GrpcMethodSummary {
   name: string;
   input_type: string;
@@ -246,6 +251,8 @@ export interface GrpcMethodSummary {
   is_client_streaming?: boolean;
   is_server_streaming?: boolean;
   stream_type?: 'unary' | 'omni_stream' | 'bidi_stream';
+  request_fields?: GrpcFieldSummary[];
+  response_fields?: GrpcFieldSummary[];
 }
 
 export interface GrpcServiceSummary {

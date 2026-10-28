@@ -122,6 +122,42 @@ export function formatMethodStreamingLabel(
   return 'Unary RPC';
 }
 
+export function formatGrpcStreamTag(
+  streamType?: string,
+  isClientStreaming?: boolean,
+  isServerStreaming?: boolean
+): 'Unary' | 'Bidi Stream' | 'Omni Stream' {
+  if (streamType === 'bidi_stream' || (isClientStreaming && isServerStreaming)) {
+    return 'Bidi Stream';
+  }
+  if (streamType === 'omni_stream' || isServerStreaming || isClientStreaming) {
+    return 'Omni Stream';
+  }
+  return 'Unary';
+}
+
+export interface GrpcSpecField {
+  name: string;
+  type: string;
+}
+
+export function extractFieldsFromSamplePayload(payload: any): GrpcSpecField[] {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return [];
+  return Object.entries(payload).map(([k, v]) => {
+    let type = 'string';
+    if (typeof v === 'number') {
+      type = Number.isInteger(v) ? 'int32' : 'double';
+    } else if (typeof v === 'boolean') {
+      type = 'bool';
+    } else if (Array.isArray(v)) {
+      type = 'repeated';
+    } else if (v && typeof v === 'object') {
+      type = 'OneOf';
+    }
+    return { name: k, type };
+  });
+}
+
 /**
  * Filters discovered gRPC services and methods by query keywords.
  * Matches service names and method names.

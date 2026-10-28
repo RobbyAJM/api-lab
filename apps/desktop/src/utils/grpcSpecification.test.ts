@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   formatRpcSignature,
   formatMethodStreamingLabel,
+  formatGrpcStreamTag,
+  extractFieldsFromSamplePayload,
   getGrpcStatusLabel,
   formatExecutionError,
   filterGrpcServices,
@@ -27,6 +29,34 @@ test('formatMethodStreamingLabel: identifies Unary, Server Stream, Client Stream
   assert.equal(formatMethodStreamingLabel(undefined, true, false), 'Client Stream');
   assert.equal(formatMethodStreamingLabel('bidi_stream', true, true), 'Bidirectional Stream');
   assert.equal(formatMethodStreamingLabel(undefined, true, true), 'Bidirectional Stream');
+});
+
+test('formatGrpcStreamTag: returns Unary, Bidi Stream, or Omni Stream', () => {
+  assert.equal(formatGrpcStreamTag('unary', false, false), 'Unary');
+  assert.equal(formatGrpcStreamTag(undefined, false, false), 'Unary');
+  assert.equal(formatGrpcStreamTag('bidi_stream', true, true), 'Bidi Stream');
+  assert.equal(formatGrpcStreamTag(undefined, true, true), 'Bidi Stream');
+  assert.equal(formatGrpcStreamTag('omni_stream', false, true), 'Omni Stream');
+  assert.equal(formatGrpcStreamTag(undefined, false, true), 'Omni Stream');
+  assert.equal(formatGrpcStreamTag(undefined, true, false), 'Omni Stream');
+});
+
+test('extractFieldsFromSamplePayload: derives field types from sample payload', () => {
+  const sample = {
+    login: 12345,
+    symbol: 'XAUIDR',
+    active: true,
+    tags: ['a', 'b'],
+    details: { nested: 'val' },
+  };
+  const fields = extractFieldsFromSamplePayload(sample);
+  assert.deepEqual(fields, [
+    { name: 'login', type: 'int32' },
+    { name: 'symbol', type: 'string' },
+    { name: 'active', type: 'bool' },
+    { name: 'tags', type: 'repeated' },
+    { name: 'details', type: 'OneOf' },
+  ]);
 });
 
 test('getGrpcStatusLabel: maps standard status codes to canonical names', () => {

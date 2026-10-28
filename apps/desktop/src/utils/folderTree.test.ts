@@ -9,6 +9,7 @@ import {
   getFolderGrpcUrl,
   isSwaggerFolder,
   getFolderSwaggerUrl,
+  findSwaggerFolderForEndpoint,
   getSidebarItemType,
   resolveRootFolderId,
   resolveInheritedGrpcAddress,
@@ -303,6 +304,56 @@ test('isSwaggerFolder and getFolderSwaggerUrl: identifies swagger folder with co
   assert.equal(isSwaggerFolder(legacySwaggerFolder, settings), true);
   assert.equal(getFolderSwaggerUrl(legacySwaggerFolder, settings), 'http://localhost:9090/swagger/combined/nuconnector.swagger.json');
   assert.equal(getSidebarItemType('folder', legacySwaggerFolder, settings), 'swagger_folder');
+});
+
+test('findSwaggerFolderForEndpoint: finds swagger folder for direct and nested subfolder endpoints', () => {
+  const folders: CollectionFolder[] = [
+    {
+      id: 'f-swag-root',
+      collection_id: 'c1',
+      parent_folder_id: null,
+      name: 'Swagger APIs',
+      swagger_url: 'http://localhost:9090/swagger.json',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-swag-sub',
+      collection_id: 'c1',
+      parent_folder_id: 'f-swag-root',
+      name: 'TradeAPI',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-other',
+      collection_id: 'c1',
+      parent_folder_id: null,
+      name: 'Other',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  // Direct child of swagger root
+  const resDirect = findSwaggerFolderForEndpoint('f-swag-root', folders);
+  assert.ok(resDirect);
+  assert.equal(resDirect.swaggerUrl, 'http://localhost:9090/swagger.json');
+
+  // Subfolder under swagger root
+  const resSub = findSwaggerFolderForEndpoint('f-swag-sub', folders);
+  assert.ok(resSub);
+  assert.equal(resSub.swaggerUrl, 'http://localhost:9090/swagger.json');
+
+  // Non-swagger folder
+  const resOther = findSwaggerFolderForEndpoint('f-other', folders);
+  assert.equal(resOther, null);
+
+  // Null endpointFolderId
+  assert.equal(findSwaggerFolderForEndpoint(null, folders), null);
 });
 
 test('resolveRootFolderId: resolves root folder for root, child, and grandchild', () => {

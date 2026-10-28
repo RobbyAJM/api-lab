@@ -274,6 +274,82 @@ test('parseSwaggerSpec: parses OpenAPI 3.x with requestBody', () => {
   assert.ok(ep.body.includes('999'));
 });
 
+test('extractSwaggerSpecification: extracts request and response specification correctly', () => {
+  const doc: SwaggerDoc = {
+    swagger: '2.0',
+    paths: {
+      '/trade/spot': {
+        post: {
+          operationId: 'TradeSpotRequest',
+          tags: ['TradeAPI'],
+          parameters: [
+            {
+              in: 'body',
+              name: 'body',
+              schema: {
+                $ref: '#/definitions/TradeSpotRequest',
+              },
+            },
+          ],
+          responses: {
+            '200': {
+              schema: {
+                $ref: '#/definitions/TradeResponse',
+              },
+            },
+          },
+        },
+      },
+    },
+    definitions: {
+      TradeSpotRequest: {
+        type: 'object',
+        properties: {
+          login: { type: 'integer', format: 'uint64' },
+          symbol: { type: 'string' },
+          side: { type: 'string' },
+          _volume: { oneOf: [{ type: 'number' }] },
+        },
+      },
+      TradeResponse: {
+        type: 'object',
+        properties: {
+          code: { type: 'integer', format: 'int32' },
+          message: { type: 'string' },
+          details: { $ref: '#/definitions/TradeDetails' },
+          _order_value: { 'x-oneof': true },
+        },
+      },
+      TradeDetails: {
+        type: 'object',
+        properties: {
+          order_id: { type: 'string' },
+        },
+      },
+    },
+  };
+
+  const parsed = parseSwaggerSpec(doc, 'http://localhost:9090/swagger.json');
+  const ep = parsed.services[0].endpoints[0];
+  assert.ok(ep.specification);
+  assert.equal(ep.specification.requestTypeName, 'TradeSpotRequest');
+  assert.equal(ep.specification.responseTypeName, 'TradeResponse');
+
+  assert.deepEqual(ep.specification.requestFields, [
+    { name: 'login', type: 'uint64', required: false, description: undefined },
+    { name: 'symbol', type: 'string', required: false, description: undefined },
+    { name: 'side', type: 'string', required: false, description: undefined },
+    { name: '_volume', type: 'OneOf', required: false, description: undefined },
+  ]);
+
+  assert.deepEqual(ep.specification.responseFields, [
+    { name: 'code', type: 'int32', required: false, description: undefined },
+    { name: 'message', type: 'string', required: false, description: undefined },
+    { name: 'details', type: 'TradeDetails', required: false, description: undefined },
+    { name: '_order_value', type: 'OneOf', required: false, description: undefined },
+  ]);
+});
+
 test('parseSwaggerSpec: converts path variable {id} to :id and extracts path parameters', () => {
   const doc: SwaggerDoc = {
     swagger: '2.0',

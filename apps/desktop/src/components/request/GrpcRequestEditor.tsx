@@ -22,9 +22,6 @@ import {
   Save,
   RefreshCw,
   Wand2,
-  BookOpen,
-  Copy,
-  Check,
   ChevronDown,
   Radio,
   ArrowDownUp,
@@ -32,8 +29,6 @@ import {
   Shield,
   Search,
   X,
-  Eye,
-  EyeOff,
   Settings,
 } from 'lucide-react';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
@@ -48,9 +43,11 @@ import { applyCollectionSettingsToGrpc } from '../../utils/collectionSettings';
 import { syncEnvironmentVariables } from '../../utils/envSync';
 import { shouldAutoDetectTls } from '../../utils/grpcReflectionGenerator';
 import {
-  formatRpcSignature,
   filterGrpcServices,
+  formatGrpcStreamTag,
+  extractFieldsFromSamplePayload,
 } from '../../utils/grpcSpecification';
+import { EndpointSpecificationView } from '../common/EndpointSpecificationView';
 import { getEffectiveEndpointConfig, isConfigDirty } from '../../utils/tabManager';
 import { parseJsonWithComments } from '../../utils/jsonComments';
 import {
@@ -131,10 +128,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [maxMsgSizeMb, setMaxMsgSizeMb] = useState(
     initialConfig.max_msg_size_mb !== undefined ? String(initialConfig.max_msg_size_mb) : '4'
   );
-
-  // Specification state
-  const [showReqSchemaPreview, setShowReqSchemaPreview] = useState(false);
-  const [showResSchemaPreview, setShowResSchemaPreview] = useState(false);
 
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
 
@@ -287,8 +280,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookLogs, setHookLogs] = useState<string[]>([]);
 
   const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'authorization' | 'scripts' | 'options' | 'specification'>('payload');
-  const [copiedSpec, setCopiedSpec] = useState<'signature' | 'input' | 'output' | 'sample' | null>(null);
-  const [sampleSpecLoading, setSampleSpecLoading] = useState(false);
   const [specSamplePayload, setSpecSamplePayload] = useState<any>(null);
   const [schemaSamplePayload, setSchemaSamplePayload] = useState<any>(null);
   const [generatingPayload, setGeneratingPayload] = useState(false);
@@ -323,8 +314,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       setAuth(cfg.auth || { auth_type: 'inherit' });
       setTimeoutSeconds(cfg.timeout_seconds !== undefined ? String(cfg.timeout_seconds) : '30');
       setMaxMsgSizeMb(cfg.max_msg_size_mb !== undefined ? String(cfg.max_msg_size_mb) : '4');
-      setShowReqSchemaPreview(false);
-      setShowResSchemaPreview(false);
       if (Array.isArray(cfg.metadata_list)) {
         setMetadata(cfg.metadata_list.map((item: any) => [
           String(item[0] || ''),
@@ -484,7 +473,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       let isCancelled = false;
       (async () => {
         try {
-          setSampleSpecLoading(true);
           const activeVars = await resolveVariables();
           const res = await generateNativeGrpcSamplePayload(
             {
@@ -500,8 +488,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           }
         } catch {
           // ignore
-        } finally {
-          if (!isCancelled) setSampleSpecLoading(false);
         }
       })();
       return () => {
@@ -1675,201 +1661,57 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           </div>
         )}
 
-        {activeTab === 'specification' && (
-          <div className="h-full flex flex-col space-y-3 overflow-y-auto pr-1">
-            {currentMethodObj ? (
-              <>
-                {/* Method Overview Pill */}
-                <div className="p-2.5 bg-zinc-900/60 border border-zinc-800 rounded-md flex items-center justify-between text-xs select-none">
-                  <div className="flex items-center gap-2 font-mono text-xs">
-                    <span className="text-secondary font-semibold">rpc</span>
-                    <span className="text-white font-bold">{currentMethodObj.name}</span>
-                    <span className="text-zinc-500">(</span>
-                    <span className="text-amber-300 font-medium">{currentMethodObj.input_type || 'Empty'}</span>
-                    <span className="text-zinc-500">)</span>
-                    <span className="text-secondary font-semibold">returns</span>
-                    <span className="text-zinc-500">(</span>
-                    <span className="text-emerald-300 font-medium">{currentMethodObj.output_type || 'Empty'}</span>
-                    <span className="text-zinc-500">);</span>
-                  </div>
+        {activeTab === 'specification' && (() => {
+          const streamTag = formatGrpcStreamTag(
+            currentMethodObj?.stream_type || streamType,
+            currentMethodObj?.is_client_streaming,
+            currentMethodObj?.is_server_streaming
+          );
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const sig = formatRpcSignature(
-                        currentMethodObj.name,
-                        currentMethodObj.input_type,
-                        currentMethodObj.output_type
-                      );
-                      navigator.clipboard.writeText(sig);
-                      setCopiedSpec('signature');
-                      setTimeout(() => setCopiedSpec(null), 2000);
-                    }}
-                    className="text-[11px] text-zinc-400 hover:text-zinc-200 bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-2 py-0.5 rounded flex items-center gap-1 transition"
-                    title="Copy RPC signature"
-                  >
-                    {copiedSpec === 'signature' ? (
-                      <>
-                        <Check size={11} className="text-emerald-400" />
-                        <span className="text-emerald-400">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy size={11} />
-                        <span>Copy</span>
-                      </>
-                    )}
-                  </button>
-                </div>
+          const reqFields =
+            currentMethodObj?.request_fields && currentMethodObj.request_fields.length > 0
+              ? currentMethodObj.request_fields.map((f) => ({ name: f.name, type: f.field_type }))
+              : specSamplePayload
+              ? extractFieldsFromSamplePayload(specSamplePayload)
+              : schemaSamplePayload
+              ? extractFieldsFromSamplePayload(schemaSamplePayload)
+              : [];
 
-                {/* 2 Clean Cards: Request & Response Structs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 min-h-0">
-                  {/* Card 1: Request Type */}
-                  <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-md p-3 space-y-2.5">
-                    <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-400" />
-                        <span className="font-semibold text-zinc-200 text-xs">Request Message Struct</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (currentMethodObj.input_type) {
-                            navigator.clipboard.writeText(currentMethodObj.input_type);
-                            setCopiedSpec('input');
-                            setTimeout(() => setCopiedSpec(null), 2000);
-                          }
-                        }}
-                        className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 font-mono transition"
-                      >
-                        {copiedSpec === 'input' ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
-                        <span>Copy Type</span>
-                      </button>
-                    </div>
+          const resFields =
+            currentMethodObj?.response_fields && currentMethodObj.response_fields.length > 0
+              ? currentMethodObj.response_fields.map((f) => ({ name: f.name, type: f.field_type }))
+              : lastGrpcResponse?.body && typeof lastGrpcResponse.body === 'object'
+              ? extractFieldsFromSamplePayload(lastGrpcResponse.body)
+              : [];
 
-                    <div className="space-y-1 font-mono text-xs">
-                      <div className="text-[11px] text-zinc-400 flex items-center justify-between">
-                        <span>Type:</span>
-                        <code className="text-amber-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-[10px]">
-                          {currentMethodObj.input_type || 'Unknown'}
-                        </code>
-                      </div>
-                      <div className="text-[11px] text-zinc-400 flex items-center justify-between">
-                        <span>Streaming:</span>
-                        <span className="text-zinc-300">
-                          {currentMethodObj.is_client_streaming ? 'Client Streaming' : 'Unary'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Toggle button: Show/Hide schema preview */}
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowReqSchemaPreview(!showReqSchemaPreview)}
-                        className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded px-2.5 py-1 transition flex items-center gap-1.5"
-                      >
-                        {showReqSchemaPreview ? <EyeOff size={12} /> : <Eye size={12} />}
-                        <span>{showReqSchemaPreview ? 'Hide schema preview' : 'Show schema preview'}</span>
-                      </button>
-
-                      {showReqSchemaPreview && (
-                        <div className="mt-2 bg-zinc-950 border border-zinc-850 rounded p-2.5 font-mono text-[11px] text-zinc-300 max-h-52 overflow-auto">
-                          {sampleSpecLoading ? (
-                            <span className="text-zinc-500 italic">Loading reflected structure...</span>
-                          ) : specSamplePayload ? (
-                            <pre className="whitespace-pre">
-                              {JSON.stringify(specSamplePayload, null, 2)}
-                            </pre>
-                          ) : payloadStr && payloadStr.trim() !== '{}' ? (
-                            <pre className="whitespace-pre">{payloadStr}</pre>
-                          ) : (
-                            <span className="text-zinc-500 italic">No schema structure available.</span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Card 2: Response Type */}
-                  <div className="flex flex-col bg-zinc-900/40 border border-zinc-800 rounded-md p-3 space-y-2.5">
-                    <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span className="font-semibold text-zinc-200 text-xs">Response Message Struct</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (currentMethodObj.output_type) {
-                            navigator.clipboard.writeText(currentMethodObj.output_type);
-                            setCopiedSpec('output');
-                            setTimeout(() => setCopiedSpec(null), 2000);
-                          }
-                        }}
-                        className="text-[10px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 font-mono transition"
-                      >
-                        {copiedSpec === 'output' ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
-                        <span>Copy Type</span>
-                      </button>
-                    </div>
-
-                    <div className="space-y-1 font-mono text-xs">
-                      <div className="text-[11px] text-zinc-400 flex items-center justify-between">
-                        <span>Type:</span>
-                        <code className="text-emerald-300 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800 text-[10px]">
-                          {currentMethodObj.output_type || 'Unknown'}
-                        </code>
-                      </div>
-                      <div className="text-[11px] text-zinc-400 flex items-center justify-between">
-                        <span>Streaming:</span>
-                        <span className="text-zinc-300">
-                          {currentMethodObj.is_server_streaming ? 'Server Streaming' : 'Unary'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Toggle button: Show/Hide schema preview */}
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowResSchemaPreview(!showResSchemaPreview)}
-                        className="text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded px-2.5 py-1 transition flex items-center gap-1.5"
-                      >
-                        {showResSchemaPreview ? <EyeOff size={12} /> : <Eye size={12} />}
-                        <span>{showResSchemaPreview ? 'Hide schema preview' : 'Show schema preview'}</span>
-                      </button>
-
-                      {showResSchemaPreview && (
-                        <div className="mt-2 bg-zinc-950 border border-zinc-850 rounded p-2.5 font-mono text-[11px] text-zinc-300 max-h-52 overflow-auto">
-                          {lastGrpcResponse && lastGrpcResponse.body ? (
-                            <pre className="whitespace-pre">
-                              {typeof lastGrpcResponse.body === 'string'
-                                ? lastGrpcResponse.body
-                                : JSON.stringify(lastGrpcResponse.body, null, 2)}
-                            </pre>
-                          ) : (
-                            <span className="text-zinc-500 italic">
-                              Invoke method to view live decoded response payload.
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center p-8 text-center text-zinc-500">
-                <BookOpen size={28} className="text-zinc-600 mb-2" />
-                <span className="text-xs font-semibold text-zinc-300">No Method Specification</span>
-                <span className="text-[11px] text-zinc-500 mt-0.5">
-                  Select a gRPC service and method above to view its protobuf type definitions.
-                </span>
-              </div>
-            )}
-          </div>
-        )}
+          return (
+            <EndpointSpecificationView
+              serviceName={shortServiceName || selectedService}
+              methodName={selectedMethod || (currentMethodObj?.name ?? '')}
+              badge={{
+                label: streamTag,
+                variant: streamTag === 'Unary' ? 'unary' : 'stream',
+              }}
+              request={
+                currentMethodObj
+                  ? {
+                      typeName: currentMethodObj.input_type || 'Empty',
+                      fields: reqFields,
+                    }
+                  : null
+              }
+              response={
+                currentMethodObj
+                  ? {
+                      typeName: currentMethodObj.output_type || 'Empty',
+                      fields: resFields,
+                    }
+                  : null
+              }
+              emptyMessage="Select a gRPC service and method above to view its protobuf type definitions."
+            />
+          );
+        })()}
       </div>
     </div>
   );

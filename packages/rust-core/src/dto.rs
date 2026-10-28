@@ -329,6 +329,12 @@ pub struct GrpcReflectionRequest {
     pub use_tls: Option<bool>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct GrpcFieldSummary {
+    pub name: String,
+    pub field_type: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcMethodSummary {
     pub name: String,
@@ -337,6 +343,10 @@ pub struct GrpcMethodSummary {
     pub is_client_streaming: bool,
     pub is_server_streaming: bool,
     pub stream_type: String,
+    #[serde(default)]
+    pub request_fields: Vec<GrpcFieldSummary>,
+    #[serde(default)]
+    pub response_fields: Vec<GrpcFieldSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

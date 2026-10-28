@@ -304,6 +304,32 @@ export function getFolderSwaggerUrl(
   return null;
 }
 
+/**
+ * Traverses folder ancestry to find if the endpoint belongs to a Swagger folder.
+ */
+export function findSwaggerFolderForEndpoint(
+  endpointFolderId: string | undefined | null,
+  folders: CollectionFolder[],
+  collectionSettings?: Record<string, any>
+): { folder: CollectionFolder; swaggerUrl: string } | null {
+  if (!endpointFolderId || !folders.length) return null;
+  const folderMap = new Map<string, CollectionFolder>(folders.map((f) => [f.id, f]));
+  let currentId: string | null = endpointFolderId;
+  const visited = new Set<string>();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const folder = folderMap.get(currentId);
+    if (!folder) break;
+    const swaggerUrl = getFolderSwaggerUrl(folder, collectionSettings);
+    if (swaggerUrl) {
+      return { folder, swaggerUrl };
+    }
+    currentId = folder.parent_folder_id ?? null;
+  }
+  return null;
+}
+
 export type SidebarItemType =
   | 'collection'
   | 'reflection_folder'

@@ -23,6 +23,7 @@ export interface PlannedSwaggerEndpoint {
     header_descriptions?: Record<string, string>;
     body_type: 'none' | 'json';
     body: string;
+    specification?: any;
   };
 }
 
@@ -86,6 +87,7 @@ export function planSwaggerHierarchy(options: {
           header_descriptions: ep.headerDescriptions,
           body_type: ep.bodyType,
           body: ep.body,
+          specification: ep.specification,
         },
       });
       totalEndpoints++;
