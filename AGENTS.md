@@ -49,6 +49,13 @@ Vendored skills live under `.opencode/skills/`:
 
 ---
 
+## Development & Testing
+
+- Ensure every implemented or modified function is independently testable without launching the app. Refactor into standalone functions when necessary.
+- Run relevant tests and verify the changes work correctly.
+
+---
+
 ## Development & Verification Commands
 
 ```bash
