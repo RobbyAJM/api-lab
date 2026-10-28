@@ -492,6 +492,35 @@ export async function cascadeUpdateFolderGrpcAddress(
 }
 
 /**
+ * Resolves full ordered path of folders leading to folderId,
+ * ordered from root ancestor down to current folder [root, ..., current].
+ */
+export function getFolderPath(
+  folders: CollectionFolder[],
+  folderId?: string | null
+): CollectionFolder[] {
+  if (!folderId) return [];
+  const folderMap = new Map<string, CollectionFolder>();
+  for (const f of folders) {
+    folderMap.set(f.id, f);
+  }
+
+  const path: CollectionFolder[] = [];
+  let currId: string | null | undefined = folderId;
+  const visited = new Set<string>();
+
+  while (currId && !visited.has(currId)) {
+    visited.add(currId);
+    const f = folderMap.get(currId);
+    if (!f) break;
+    path.push(f);
+    currId = f.parent_folder_id;
+  }
+
+  return path.reverse();
+}
+
+/**
  * Resolves all ancestor folder IDs containing the given folderId,
  * walking up the parent_folder_id chain to the root folder.
  */

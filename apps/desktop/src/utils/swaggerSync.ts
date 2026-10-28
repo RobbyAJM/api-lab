@@ -208,14 +208,16 @@ export function planSwaggerSync(
 
         const urlChanged = match.config?.url !== fep.fullUrl;
         const methodChanged = match.config?.method?.toUpperCase() !== fep.method.toUpperCase();
+        const summaryChanged = fep.summary !== undefined && match.config?.summary !== fep.summary;
 
-        if (changed || urlChanged || methodChanged) {
+        if (changed || urlChanged || methodChanged || summaryChanged) {
           endpointsToUpdate.push({
             endpoint: match,
             newConfig: {
               ...match.config,
               url: fep.fullUrl,
               method: fep.method,
+              summary: fep.summary ?? match.config?.summary,
               query_params: fep.queryParams,
               path_variables: fep.pathVariables,
               headers: fep.headers,
@@ -305,6 +307,7 @@ export async function executeSwaggerSync(
           config: {
             method: ep.method,
             url: ep.fullUrl,
+            summary: ep.summary,
             query_params: ep.queryParams,
             path_variables: ep.pathVariables,
             headers: ep.headers,
@@ -330,6 +333,7 @@ export async function executeSwaggerSync(
         config: {
           method: c.endpoint.method,
           url: c.endpoint.fullUrl,
+          summary: c.endpoint.summary,
           query_params: c.endpoint.queryParams,
           path_variables: c.endpoint.pathVariables,
           headers: c.endpoint.headers,

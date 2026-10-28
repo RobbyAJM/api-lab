@@ -35,7 +35,7 @@ import {
   resolveInheritedAuth,
   getInheritedAuthHeader,
 } from '../../utils/folderSettings';
-import { findSwaggerFolderForEndpoint } from '../../utils/folderTree';
+import { findSwaggerFolderForEndpoint, getFolderPath } from '../../utils/folderTree';
 import { fetchSwaggerSpec } from '../../utils/swaggerGenerator';
 import { parseSwaggerSpec } from '../../utils/swaggerParser';
 import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
@@ -62,6 +62,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     openCollectionSettingsModal,
     setEndpointExecuting,
     setExecutedRequest,
+    revealFolder,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -69,6 +70,12 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   currentVersionRef.current = currentVersion;
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState(endpoint.name);
+  useEffect(() => {
+    setEditNameValue(endpoint.name);
+  }, [endpoint.name]);
 
   const draft = useAppStore.getState().endpointDrafts[endpoint.id];
   const initialConfig = getEffectiveEndpointConfig(endpoint, draft);
@@ -232,6 +239,59 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
     return null;
   }, [endpoint.config?.specification, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+
+  const folderPath = React.useMemo(() => {
+    return getFolderPath(folders, endpoint.folder_id);
+  }, [folders, endpoint.folder_id]);
+
+  const requestSummary = React.useMemo(() => {
+    if (endpoint.config?.summary) return endpoint.config.summary;
+    if (endpointSpec?.summary) return endpointSpec.summary;
+    if (swaggerDoc) {
+      const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo?.swaggerUrl || '');
+      for (const svc of parsed.services) {
+        for (const ep of svc.endpoints) {
+          if (
+            ep.method.toUpperCase() === method.toUpperCase() &&
+            (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
+          ) {
+            return ep.summary || null;
+          }
+        }
+      }
+    }
+    return null;
+  }, [endpoint.config?.summary, endpointSpec?.summary, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+
+  const handleSaveRename = async () => {
+    const trimmed = editNameValue.trim();
+    setIsEditingName(false);
+    if (!trimmed || trimmed === endpoint.name) {
+      setEditNameValue(endpoint.name);
+      return;
+    }
+    try {
+      const res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: trimmed,
+          version: currentVersionRef.current,
+        }),
+      });
+      setCurrentVersion(res.version);
+      currentVersionRef.current = res.version;
+      setActiveEndpoint(res);
+      queryClient.setQueryData<Endpoint[]>(
+        ['endpoints', endpoint.collection_id],
+        (prev) => prev?.map((ep) => (ep.id === res.id ? res : ep)) || [res]
+      );
+      setStatusMessage('Renamed successfully');
+      setTimeout(() => setStatusMessage(null), 2000);
+    } catch (err: any) {
+      setStatusMessage(`Error renaming: ${err.message}`);
+      setEditNameValue(endpoint.name);
+    }
+  };
 
   useEffect(() => {
     if (activeTab === 'specification' && !isSwaggerEndpoint) {
@@ -610,11 +670,61 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden select-none">
       {/* Breadcrumbs Row + Save Button (Image 1) */}
       <div className="px-4 py-2 flex items-center justify-between text-xs select-none flex-shrink-0">
-        <div className="flex items-center gap-1.5 font-mono text-[11px] truncate mr-2">
+        <div className="flex items-center gap-1.5 font-mono text-[11px] truncate mr-2 min-w-0">
           <Globe size={13} className="text-emerald-400 flex-shrink-0" />
-          <span className="text-zinc-400">{collection?.name?.toUpperCase() || 'COLLECTION'}</span>
-          <span className="text-zinc-600">&gt;</span>
-          <span className="text-white font-semibold">{endpoint.name}</span>
+          <span className="text-zinc-400 flex-shrink-0">{collection?.name?.toUpperCase() || 'COLLECTION'}</span>
+          {folderPath.map((f) => (
+            <React.Fragment key={f.id}>
+              <span className="text-zinc-600 flex-shrink-0">&gt;</span>
+              <button
+                type="button"
+                onClick={() => revealFolder(f.id)}
+                className="text-zinc-400 hover:text-zinc-200 hover:underline flex-shrink-0 transition"
+                title={`Show folder "${f.name}" in sidebar`}
+              >
+                {f.name}
+              </button>
+            </React.Fragment>
+          ))}
+          <span className="text-zinc-600 flex-shrink-0">&gt;</span>
+          {isEditingName ? (
+            <input
+              type="text"
+              value={editNameValue}
+              onChange={(e) => setEditNameValue(e.target.value)}
+              onBlur={handleSaveRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveRename();
+                if (e.key === 'Escape') {
+                  setEditNameValue(endpoint.name);
+                  setIsEditingName(false);
+                }
+              }}
+              autoFocus
+              className="bg-zinc-900 border border-primary/50 text-white font-semibold text-[11px] font-mono px-1.5 py-0.5 rounded outline-none h-5 flex-shrink-0"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsEditingName(true)}
+              className="text-white font-semibold hover:text-primary transition truncate text-left flex-shrink-0"
+              title="Click to rename"
+            >
+              {endpoint.name}
+            </button>
+          )}
+
+          {requestSummary && (
+            <>
+              <span className="text-zinc-700 flex-shrink-0 font-mono">|</span>
+              <span
+                className="text-zinc-400 font-sans text-xs truncate max-w-sm flex-shrink-0"
+                title={requestSummary}
+              >
+                {requestSummary}
+              </span>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-shrink-0">

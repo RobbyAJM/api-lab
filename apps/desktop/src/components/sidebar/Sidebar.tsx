@@ -390,17 +390,27 @@ const CollectionNode: React.FC<{
     queryFn: () => apiRequest(`/collections/${collection.id}/endpoints`),
   });
 
-  const { activeEndpointId, activeEndpoint, setActiveEndpoint } = useAppStore();
+  const { activeEndpointId, activeEndpoint, setActiveEndpoint, revealedFolderId } = useAppStore();
   const isCollHighlighted = isCollectionHighlighted(collection.id, activeEndpoint);
-  const highlightedFolderIds = isCollHighlighted
-    ? getAncestorFolderIds(folders, activeEndpoint?.folder_id)
-    : new Set<string>();
+  const containsRevealedFolder = Boolean(revealedFolderId && folders.some((f) => f.id === revealedFolderId));
+  const highlightedFolderIds = React.useMemo(() => {
+    const ids = isCollHighlighted
+      ? getAncestorFolderIds(folders, activeEndpoint?.folder_id)
+      : new Set<string>();
+    if (containsRevealedFolder && revealedFolderId) {
+      const revealedAncestors = getAncestorFolderIds(folders, revealedFolderId);
+      for (const id of revealedAncestors) {
+        ids.add(id);
+      }
+    }
+    return ids;
+  }, [isCollHighlighted, folders, activeEndpoint?.folder_id, containsRevealedFolder, revealedFolderId]);
 
   useEffect(() => {
-    if (isCollHighlighted) {
+    if (isCollHighlighted || containsRevealedFolder) {
       setIsOpen(true);
     }
-  }, [isCollHighlighted, activeEndpointId]);
+  }, [isCollHighlighted, containsRevealedFolder, activeEndpointId]);
 
   // Auto-restore last active endpoint strictly once on initial boot
   const hasAttemptedRestoreRef = useRef(false);
@@ -883,7 +893,15 @@ const FolderTreeNodeComponent: React.FC<{
   onSyncSwagger,
 }) => {
   const queryClient = useQueryClient();
-  const { openReflectionSettingsModal, openSwaggerSettingsModal, openFolderSettingsModal } = useAppStore();
+  const {
+    openReflectionSettingsModal,
+    openSwaggerSettingsModal,
+    openFolderSettingsModal,
+    revealedFolderId,
+    clearRevealedFolder,
+  } = useAppStore();
+  const folderRef = useRef<HTMLDivElement>(null);
+  const isTargetRevealed = revealedFolderId === node.folder.id;
   const [isOpen, setIsOpen] = useState(true);
   const [showAddSubFolder, setShowAddSubFolder] = useState(false);
   const [showAddSubEndpoint, setShowAddSubEndpoint] = useState(false);
@@ -900,10 +918,20 @@ const FolderTreeNodeComponent: React.FC<{
   const swaggerUrl = getFolderSwaggerUrl(node.folder, collectionSettings);
 
   useEffect(() => {
-    if (isFolderHighlighted) {
+    if (isFolderHighlighted || isTargetRevealed) {
       setIsOpen(true);
     }
-  }, [isFolderHighlighted]);
+  }, [isFolderHighlighted, isTargetRevealed]);
+
+  useEffect(() => {
+    if (isTargetRevealed) {
+      folderRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const timer = setTimeout(() => {
+        clearRevealedFolder();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isTargetRevealed, clearRevealedFolder]);
 
   // Close context menu on outside click or global close event
   useEffect(() => {
@@ -977,6 +1005,7 @@ const FolderTreeNodeComponent: React.FC<{
 
   return (
     <div
+      ref={folderRef}
       className="pl-1 relative"
       onContextMenu={(e) => {
         e.preventDefault();
@@ -987,7 +1016,9 @@ const FolderTreeNodeComponent: React.FC<{
     >
       <div
         className={`flex items-center justify-between w-full py-1 text-xs group rounded-md px-1.5 transition ${
-          isFolderHighlighted
+          isTargetRevealed
+            ? 'bg-primary/15 text-zinc-100 ring-1 ring-primary/60 font-medium'
+            : isFolderHighlighted
             ? 'bg-zinc-900/80 text-zinc-100 border border-zinc-800/80 font-medium'
             : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'
         }`}
@@ -1299,6 +1330,19 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const method = endpoint.protocol === 'http' ? endpoint.config?.method || 'GET' : 'gRPC';
   const streamType = endpoint.config?.stream_type || 'unary';
 
+  // Do not display summary in sidebar; show clean operation name or path
+  const summary = endpoint.config?.summary || endpoint.config?.specification?.summary;
+  let displayName = endpoint.name;
+  if (summary && displayName === summary) {
+    if (endpoint.config?.url) {
+      try {
+        displayName = new URL(endpoint.config.url).pathname;
+      } catch {
+        displayName = endpoint.config.url.split('?')[0].replace(/^https?:\/\/[^\/]+/, '') || endpoint.name;
+      }
+    }
+  }
+
   return (
     <div
       onContextMenu={(e) => {
@@ -1351,7 +1395,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
               <Radio size={11} />
             </span>
           )}
-          <span className="truncate">{endpoint.name}</span>
+          <span className="truncate">{displayName}</span>
         </div>
 
         <div className="flex items-center gap-1 flex-shrink-0">

@@ -403,4 +403,30 @@ test('parseSwaggerSpec: converts path variable {id} to :id and extracts path par
   assert.deepEqual(ep.queryParams, [
     ['verbose', 'true', 'Include full logs'],
   ]);
+  assert.equal(ep.name, '/manager/api/v1/emergency-contact-status/:id');
+  assert.equal(ep.summary, 'Get Emergency Contact Status');
+  assert.equal(ep.specification?.summary, 'Get Emergency Contact Status');
+});
+
+test('parseSwaggerSpec: prioritizes operationId over path for ep.name while storing summary separately', () => {
+  const doc: SwaggerDoc = {
+    swagger: '2.0',
+    host: 'httpbin.org',
+    basePath: '',
+    paths: {
+      '/users/{id}': {
+        get: {
+          operationId: 'getUserById',
+          summary: 'Retrieve User by ID',
+          tags: ['Users'],
+        },
+      },
+    },
+  };
+
+  const parsed = parseSwaggerSpec(doc, 'https://httpbin.org/swagger.json');
+  const ep = parsed.services[0].endpoints[0];
+  assert.equal(ep.name, 'getUserById');
+  assert.equal(ep.summary, 'Retrieve User by ID');
+  assert.equal(ep.specification?.summary, 'Retrieve User by ID');
 });

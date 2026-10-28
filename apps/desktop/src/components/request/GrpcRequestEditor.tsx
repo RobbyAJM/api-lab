@@ -35,7 +35,7 @@ import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
-import { resolveInheritedGrpcAddress } from '../../utils/folderTree';
+import { resolveInheritedGrpcAddress, getFolderPath } from '../../utils/folderTree';
 import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
 import { runBeforeHook, runAfterHook, type HookTestResult } from '../../utils/hookRunner';
@@ -93,6 +93,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     openCollectionSettingsModal,
     setEndpointExecuting,
     setExecutedRequest,
+    revealFolder,
   } = useAppStore();
 
   const [currentVersion, setCurrentVersion] = useState<number>(endpoint.version);
@@ -100,6 +101,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   currentVersionRef.current = currentVersion;
   const isSavingRef = useRef(false);
   const pendingSaveRef = useRef(false);
+
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState(endpoint.name);
+  useEffect(() => {
+    setEditNameValue(endpoint.name);
+  }, [endpoint.name]);
 
   const draft = useAppStore.getState().endpointDrafts[endpoint.id];
   const initialConfig = getEffectiveEndpointConfig(endpoint, draft);
@@ -202,6 +209,40 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const effectiveServerAddress = inheritedInfo.isInherited
     ? (inheritedInfo.inheritedAddress || '')
     : serverAddress;
+
+  const folderPath = React.useMemo(() => {
+    return getFolderPath(folders, endpoint.folder_id);
+  }, [folders, endpoint.folder_id]);
+
+  const handleSaveRename = async () => {
+    const trimmed = editNameValue.trim();
+    setIsEditingName(false);
+    if (!trimmed || trimmed === endpoint.name) {
+      setEditNameValue(endpoint.name);
+      return;
+    }
+    try {
+      const res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: trimmed,
+          version: currentVersionRef.current,
+        }),
+      });
+      setCurrentVersion(res.version);
+      currentVersionRef.current = res.version;
+      setActiveEndpoint(res);
+      queryClient.setQueryData<Endpoint[]>(
+        ['endpoints', endpoint.collection_id],
+        (prev) => prev?.map((ep) => (ep.id === res.id ? res : ep)) || [res]
+      );
+      setStatusMessage('Renamed successfully');
+      setTimeout(() => setStatusMessage(null), 2000);
+    } catch (err: any) {
+      setStatusMessage(`Error renaming: ${err.message}`);
+      setEditNameValue(endpoint.name);
+    }
+  };
 
   const effectiveTls = explicitTlsToggled
     ? useTls
@@ -1026,7 +1067,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     <div className="flex-1 flex flex-col bg-zinc-950 overflow-hidden select-none">
       {/* Breadcrumbs Row + Save Button (Image 1) */}
       <div className="px-4 py-2 flex items-center justify-between text-xs select-none flex-shrink-0">
-        <div className="flex items-center gap-1.5 font-mono text-[11px] truncate mr-2">
+        <div className="flex items-center gap-1.5 font-mono text-[11px] truncate mr-2 min-w-0">
           {streamType === 'bidi_stream' ? (
             <ArrowLeftRight size={13} className="text-amber-400 flex-shrink-0" />
           ) : streamType === 'omni_stream' ? (
@@ -1034,18 +1075,61 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           ) : (
             <Radio size={13} className="text-secondary flex-shrink-0" />
           )}
-          <span className="text-zinc-400">{collection?.name?.toUpperCase() || 'COLLECTION'}</span>
-          <span className="text-zinc-600">&gt;</span>
-          <span className="text-zinc-400">{shortServiceName || 'Service'}</span>
-          <span className="text-zinc-600">&gt;</span>
-          <span className="text-white font-semibold">{selectedMethod || endpoint.name}</span>
+          <span className="text-zinc-400 flex-shrink-0">{collection?.name?.toUpperCase() || 'COLLECTION'}</span>
+          {folderPath.length > 0 ? (
+            folderPath.map((f) => (
+              <React.Fragment key={f.id}>
+                <span className="text-zinc-600 flex-shrink-0">&gt;</span>
+                <button
+                  type="button"
+                  onClick={() => revealFolder(f.id)}
+                  className="text-zinc-400 hover:text-zinc-200 hover:underline flex-shrink-0 transition"
+                  title={`Show folder "${f.name}" in sidebar`}
+                >
+                  {f.name}
+                </button>
+              </React.Fragment>
+            ))
+          ) : shortServiceName ? (
+            <>
+              <span className="text-zinc-600 flex-shrink-0">&gt;</span>
+              <span className="text-zinc-400 flex-shrink-0">{shortServiceName}</span>
+            </>
+          ) : null}
+          <span className="text-zinc-600 flex-shrink-0">&gt;</span>
+          {isEditingName ? (
+            <input
+              type="text"
+              value={editNameValue}
+              onChange={(e) => setEditNameValue(e.target.value)}
+              onBlur={handleSaveRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSaveRename();
+                if (e.key === 'Escape') {
+                  setEditNameValue(endpoint.name);
+                  setIsEditingName(false);
+                }
+              }}
+              autoFocus
+              className="bg-zinc-900 border border-primary/50 text-white font-semibold text-[11px] font-mono px-1.5 py-0.5 rounded outline-none h-5 flex-shrink-0"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsEditingName(true)}
+              className="text-white font-semibold hover:text-primary transition truncate text-left flex-shrink-0"
+              title="Click to rename"
+            >
+              {endpoint.name}
+            </button>
+          )}
           {streamType === 'bidi_stream' && (
-            <span className="ml-1 px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/50 text-amber-300 text-[10px] font-sans">
+            <span className="ml-1 px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/50 text-amber-300 text-[10px] font-sans flex-shrink-0">
               Bidi Stream
             </span>
           )}
           {streamType === 'omni_stream' && (
-            <span className="ml-1 px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/50 text-amber-300 text-[10px] font-sans">
+            <span className="ml-1 px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/50 text-amber-300 text-[10px] font-sans flex-shrink-0">
               Omni Stream
             </span>
           )}
