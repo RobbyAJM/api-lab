@@ -100,6 +100,27 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     description: 'Close active modal / command palette',
     category: 'General',
   },
+  {
+    id: 'zoom_in',
+    keyLabel: 'Ctrl + +',
+    macKeyLabel: '⌘ + +',
+    description: 'Zoom in UI',
+    category: 'General',
+  },
+  {
+    id: 'zoom_out',
+    keyLabel: 'Ctrl + -',
+    macKeyLabel: '⌘ + -',
+    description: 'Zoom out UI',
+    category: 'General',
+  },
+  {
+    id: 'zoom_reset',
+    keyLabel: 'Ctrl + 0',
+    macKeyLabel: '⌘ + 0',
+    description: 'Reset UI zoom',
+    category: 'General',
+  },
 ];
 
 export function getAllShortcuts(): ShortcutDefinition[] {
@@ -147,6 +168,12 @@ export function matchesShortcut(event: KeyboardEventLike, shortcutId: string): b
       return isMod && !event.shiftKey && !event.altKey && key === ']';
     case 'escape':
       return key === 'Escape';
+    case 'zoom_in':
+      return isMod && !event.altKey && (key === '=' || key === '+');
+    case 'zoom_out':
+      return isMod && !event.altKey && (key === '-' || key === '_');
+    case 'zoom_reset':
+      return isMod && !event.altKey && key === '0';
     default:
       return false;
   }

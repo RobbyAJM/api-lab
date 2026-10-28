@@ -25,6 +25,7 @@ import { TopBar } from './components/topbar/TopBar';
 import { BackendUnavailableModal } from './components/common/BackendUnavailableModal';
 import { EmptyWorkspaceView } from './components/common/EmptyWorkspaceView';
 import { matchesShortcut, getTabNumberFromEvent } from './utils/shortcuts';
+import { applyZoom, calculateNextZoom, parseStoredZoom, ZOOM_STORAGE_KEY } from './utils/zoom';
 import { getAdjacentEndpoint } from './utils/tabManager';
 import { BACKEND_STATUS_EVENT } from './api/client';
 import { testServerConnection, getServerUrl } from './utils/serverConfig';
@@ -70,6 +71,9 @@ export const App: React.FC = () => {
   const [requestHeightPercent, setRequestHeightPercent] = useState<number>(() => {
     const saved = localStorage.getItem('api_lab_request_height_pct');
     return saved ? Math.max(25, Math.min(80, Number(saved))) : 52;
+  });
+  const [zoomFactor, setZoomFactor] = useState<number>(() => {
+    return parseStoredZoom(typeof localStorage !== 'undefined' ? localStorage.getItem(ZOOM_STORAGE_KEY) : null);
   });
   const mainContainerRef = useRef<HTMLDivElement>(null);
   const isResizingVerticalRef = useRef(false);
@@ -150,9 +154,46 @@ export const App: React.FC = () => {
     }
   }, [meError, openAuthModal]);
 
+  // Initial UI zoom restore
+  useEffect(() => {
+    void applyZoom(zoomFactor);
+  }, []);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Zoom Controls (Ctrl/Cmd + +, Ctrl/Cmd + -, Ctrl/Cmd + 0)
+      if (matchesShortcut(e, 'zoom_in')) {
+        e.preventDefault();
+        setZoomFactor((curr) => {
+          const next = calculateNextZoom(curr, 'in');
+          localStorage.setItem(ZOOM_STORAGE_KEY, String(next));
+          void applyZoom(next);
+          return next;
+        });
+        return;
+      }
+      if (matchesShortcut(e, 'zoom_out')) {
+        e.preventDefault();
+        setZoomFactor((curr) => {
+          const next = calculateNextZoom(curr, 'out');
+          localStorage.setItem(ZOOM_STORAGE_KEY, String(next));
+          void applyZoom(next);
+          return next;
+        });
+        return;
+      }
+      if (matchesShortcut(e, 'zoom_reset')) {
+        e.preventDefault();
+        setZoomFactor(() => {
+          const next = calculateNextZoom(1.0, 'reset');
+          localStorage.setItem(ZOOM_STORAGE_KEY, String(next));
+          void applyZoom(next);
+          return next;
+        });
+        return;
+      }
+
       if (backendUnavailable) return;
       // 1. Open / Toggle Command Palette (Ctrl + K)
       if (matchesShortcut(e, 'open_command')) {
