@@ -1708,6 +1708,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                     }
                   : null
               }
+              schemas={currentServiceObj?.schemas}
               emptyMessage="Select a gRPC service and method above to view its protobuf type definitions."
             />
           );

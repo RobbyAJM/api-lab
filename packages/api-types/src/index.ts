@@ -258,10 +258,12 @@ export interface GrpcMethodSummary {
 export interface GrpcServiceSummary {
   name: string;
   methods: GrpcMethodSummary[];
+  schemas?: Record<string, GrpcFieldSummary[]>;
 }
 
 export interface GrpcReflectionResponse {
   services: GrpcServiceSummary[];
+  schemas?: Record<string, GrpcFieldSummary[]>;
   error?: string;
 }
 

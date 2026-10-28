@@ -269,6 +269,25 @@ mod tests {
             ..Default::default()
         };
 
+        let details_msg = DescriptorProto {
+            name: Some("TradeDetails".to_string()),
+            field: vec![
+                FieldDescriptorProto {
+                    name: Some("order_id".to_string()),
+                    number: Some(1),
+                    r#type: Some(Type::String as i32),
+                    ..Default::default()
+                },
+                FieldDescriptorProto {
+                    name: Some("price".to_string()),
+                    number: Some(2),
+                    r#type: Some(Type::Double as i32),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
         let svc = ServiceDescriptorProto {
             name: Some("TradeAPI".to_string()),
             method: vec![MethodDescriptorProto {
@@ -285,7 +304,7 @@ mod tests {
         let file_proto = FileDescriptorProto {
             name: Some("trade.proto".to_string()),
             package: Some("nutrade".to_string()),
-            message_type: vec![req_msg, res_msg],
+            message_type: vec![req_msg, res_msg, details_msg],
             service: vec![svc],
             ..Default::default()
         };
@@ -323,6 +342,15 @@ mod tests {
         assert_eq!(m.response_fields[2].field_type, "TradeDetails");
         assert_eq!(m.response_fields[3].name, "_order_value");
         assert_eq!(m.response_fields[3].field_type, "OneOf");
+
+        // Schemas dictionary contains TradeDetails
+        assert!(s.schemas.contains_key("TradeDetails"));
+        let td_fields = &s.schemas["TradeDetails"];
+        assert_eq!(td_fields.len(), 2);
+        assert_eq!(td_fields[0].name, "order_id");
+        assert_eq!(td_fields[0].field_type, "string");
+        assert_eq!(td_fields[1].name, "price");
+        assert_eq!(td_fields[1].field_type, "double");
     }
 }
 

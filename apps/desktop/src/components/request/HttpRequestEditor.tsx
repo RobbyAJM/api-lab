@@ -1301,6 +1301,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   }
                 : null
             }
+            schemas={endpointSpec?.schemas}
             emptyMessage="No request or response specification found in the Swagger definition for this operation."
           />
         )}

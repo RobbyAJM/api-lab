@@ -348,6 +348,12 @@ test('extractSwaggerSpecification: extracts request and response specification c
     { name: 'details', type: 'TradeDetails', required: false, description: undefined },
     { name: '_order_value', type: 'OneOf', required: false, description: undefined },
   ]);
+
+  assert.ok(ep.specification.schemas);
+  assert.ok(ep.specification.schemas['TradeDetails']);
+  assert.deepEqual(ep.specification.schemas['TradeDetails'], [
+    { name: 'order_id', type: 'string', required: false, description: undefined },
+  ]);
 });
 
 test('parseSwaggerSpec: converts path variable {id} to :id and extracts path parameters', () => {

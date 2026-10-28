@@ -223,6 +223,7 @@ pub async fn discover_services(
 
     GrpcReflectionResponse {
         services: Vec::new(),
+        schemas: HashMap::new(),
         error: Some(format!(
             "Reflection discovery failed: {err_msg}. gRPC server reflection unavailable on target; reflection required."
         )),
@@ -296,12 +297,14 @@ async fn try_discover_v1(
     }
 
     let summaries = extract_summaries(&raw_protos);
+    let all_schemas = extract_all_schemas(&raw_protos);
     if summaries.is_empty() {
         return Err("No user services discovered via v1 reflection".into());
     }
 
     Ok(GrpcReflectionResponse {
         services: summaries,
+        schemas: all_schemas,
         error: None,
     })
 }
@@ -373,15 +376,18 @@ async fn try_discover_v1alpha(
     }
 
     let summaries = extract_summaries(&raw_protos);
+    let all_schemas = extract_all_schemas(&raw_protos);
     if summaries.is_empty() {
         return Ok(GrpcReflectionResponse {
             services: Vec::new(),
+            schemas: HashMap::new(),
             error: Some("No user services discovered via reflection. gRPC server reflection unavailable on target; reflection required.".into()),
         });
     }
 
     Ok(GrpcReflectionResponse {
         services: summaries,
+        schemas: all_schemas,
         error: None,
     })
 }
@@ -499,8 +505,29 @@ pub fn extract_message_fields(
     fields
 }
 
+pub fn extract_all_schemas(
+    raw_protos: &HashMap<String, FileDescriptorProto>,
+) -> HashMap<String, Vec<GrpcFieldSummary>> {
+    let msg_map = collect_messages(raw_protos);
+    let mut schemas = HashMap::new();
+
+    for (key, msg) in &msg_map {
+        if key.starts_with('.') {
+            continue;
+        }
+        let fields = extract_message_fields(&msg_map, key);
+        if let Some(short_name) = msg.name.as_deref() {
+            schemas.insert(short_name.to_string(), fields.clone());
+        }
+        schemas.insert(key.to_string(), fields);
+    }
+
+    schemas
+}
+
 pub fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> Vec<GrpcServiceSummary> {
     let msg_map = collect_messages(raw_protos);
+    let all_schemas = extract_all_schemas(raw_protos);
     let mut summaries = Vec::new();
     for proto in raw_protos.values() {
         let pkg = proto.package.as_deref().unwrap_or("");
@@ -548,6 +575,7 @@ pub fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> V
             summaries.push(GrpcServiceSummary {
                 name: svc_name,
                 methods,
+                schemas: all_schemas.clone(),
             });
         }
     }
