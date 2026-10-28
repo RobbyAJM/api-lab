@@ -35,6 +35,11 @@ import {
   resolveInheritedAuth,
   getInheritedAuthHeader,
 } from '../../utils/folderSettings';
+import { findSwaggerFolderForEndpoint } from '../../utils/folderTree';
+import { fetchSwaggerSpec } from '../../utils/swaggerGenerator';
+import { parseSwaggerSpec } from '../../utils/swaggerParser';
+import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
+import { EndpointSpecificationView } from '../common/EndpointSpecificationView';
 
 export interface MultipartField {
   name: string;
@@ -87,7 +92,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
     return normalizedUrl;
   });
-  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'scripts'>('params');
+  const [activeTab, setActiveTab] = useState<'params' | 'headers' | 'body' | 'auth' | 'scripts' | 'specification'>('params');
 
   const [pathVariables, setPathVariables] = useState<[string, string, string, boolean][]>(() => {
     const saved = (initialConfig.path_variables || []) as Array<any>;
@@ -192,6 +197,47 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       openCollectionSettingsModal(endpoint.collection_id, 'auth');
     }
   }, [resolvedInheritedAuth, endpoint.folder_id, endpoint.collection_id, openFolderSettingsModal, openCollectionSettingsModal]);
+
+  const swaggerFolderInfo = React.useMemo(() => {
+    return findSwaggerFolderForEndpoint(endpoint.folder_id, folders, collection?.settings);
+  }, [endpoint.folder_id, folders, collection?.settings]);
+
+  const isSwaggerEndpoint = Boolean(swaggerFolderInfo || endpoint.config?.specification);
+
+  const { data: swaggerDoc } = useQuery({
+    queryKey: ['swaggerSpec', swaggerFolderInfo?.swaggerUrl],
+    queryFn: async () => {
+      if (!swaggerFolderInfo?.swaggerUrl) return null;
+      return await fetchSwaggerSpec(swaggerFolderInfo.swaggerUrl);
+    },
+    enabled: !!swaggerFolderInfo?.swaggerUrl && !endpoint.config?.specification,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const endpointSpec = React.useMemo(() => {
+    if (endpoint.config?.specification) {
+      return endpoint.config.specification;
+    }
+    if (!swaggerDoc) return null;
+    const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo?.swaggerUrl || '');
+    for (const svc of parsed.services) {
+      for (const ep of svc.endpoints) {
+        if (
+          ep.method.toUpperCase() === method.toUpperCase() &&
+          (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
+        ) {
+          return ep.specification || null;
+        }
+      }
+    }
+    return null;
+  }, [endpoint.config?.specification, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+
+  useEffect(() => {
+    if (activeTab === 'specification' && !isSwaggerEndpoint) {
+      setActiveTab('params');
+    }
+  }, [activeTab, isSwaggerEndpoint]);
 
   // Resolve active environment variables
   async function resolveVariables(): Promise<Record<string, string>> {
@@ -704,6 +750,18 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               </span>
             )}
           </button>
+          {isSwaggerEndpoint && (
+            <button
+              onClick={() => setActiveTab('specification')}
+              className={`py-2 flex items-center gap-1.5 font-medium border-b-2 transition ${
+                activeTab === 'specification'
+                  ? 'border-primary text-zinc-100'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <span>Specification</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1215,6 +1273,35 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             onPostScriptChange={setPostResponseScript}
             tests={hookTests}
             logs={hookLogs}
+          />
+        )}
+
+        {/* Specification Panel (for Swagger Folder endpoints) */}
+        {activeTab === 'specification' && (
+          <EndpointSpecificationView
+            serviceName={swaggerFolderInfo?.folder.name || 'Swagger'}
+            methodName={endpoint.name}
+            badge={{
+              label: method,
+              colorClass: getHttpMethodBadgeClass(method, true),
+            }}
+            request={
+              endpointSpec?.requestFields && endpointSpec.requestFields.length > 0
+                ? {
+                    typeName: endpointSpec.requestTypeName || 'RequestBody',
+                    fields: endpointSpec.requestFields,
+                  }
+                : null
+            }
+            response={
+              endpointSpec?.responseFields && endpointSpec.responseFields.length > 0
+                ? {
+                    typeName: endpointSpec.responseTypeName || 'ResponseBody',
+                    fields: endpointSpec.responseFields,
+                  }
+                : null
+            }
+            emptyMessage="No request or response specification found in the Swagger definition for this operation."
           />
         )}
       </div>

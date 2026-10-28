@@ -5,6 +5,20 @@
 
 import { convertSwaggerPathToApiPath } from './pathVariables.ts';
 
+export interface SwaggerFieldSummary {
+  name: string;
+  type: string;
+  required?: boolean;
+  description?: string;
+}
+
+export interface SwaggerEndpointSpecification {
+  requestTypeName?: string;
+  requestFields: SwaggerFieldSummary[];
+  responseTypeName?: string;
+  responseFields: SwaggerFieldSummary[];
+}
+
 export interface ParsedHttpEndpoint {
   name: string;
   method: string; // 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
@@ -20,6 +34,7 @@ export interface ParsedHttpEndpoint {
   headerDescriptions?: Record<string, string>;
   bodyType: 'none' | 'json';
   body: string; // JSON string payload
+  specification?: SwaggerEndpointSpecification;
 }
 
 export interface ParsedSwaggerService {
@@ -164,6 +179,150 @@ export function generateSampleFromSchema(
   return {};
 }
 
+export function getSchemaTypeName(schema: any): string | undefined {
+  if (!schema) return undefined;
+  if (schema.title && typeof schema.title === 'string') return schema.title;
+  if (schema.$ref && typeof schema.$ref === 'string') {
+    const parts = schema.$ref.split('/');
+    return parts[parts.length - 1];
+  }
+  return undefined;
+}
+
+export function formatSwaggerPropertyType(propSchema: any, doc: SwaggerDoc): string {
+  if (!propSchema) return 'string';
+  if (propSchema.oneOf || propSchema['x-oneof']) return 'OneOf';
+  if (propSchema.$ref) {
+    const name = getSchemaTypeName(propSchema);
+    if (name) return name;
+  }
+  if (propSchema.type === 'array' || propSchema.items) {
+    if (propSchema.items) {
+      const itemType = formatSwaggerPropertyType(propSchema.items, doc);
+      return `${itemType}[]`;
+    }
+    return 'array';
+  }
+  if (propSchema.format) {
+    const f = String(propSchema.format).toLowerCase();
+    if (['int64', 'int32', 'uint64', 'uint32', 'float', 'double'].includes(f)) {
+      return f;
+    }
+  }
+  if (propSchema.type) {
+    if (propSchema.type === 'integer') return 'int32';
+    if (propSchema.type === 'number') return 'double';
+    return String(propSchema.type);
+  }
+  return 'string';
+}
+
+export function extractSwaggerSpecification(
+  operation: any,
+  doc: SwaggerDoc,
+  allParams: any[] = []
+): SwaggerEndpointSpecification {
+  // 1. Request
+  let requestTypeName: string | undefined;
+  const requestFields: SwaggerFieldSummary[] = [];
+
+  let reqSchema: any = null;
+  // Swagger 2.0 body param
+  for (const p of allParams) {
+    if (p && p.in === 'body' && p.schema) {
+      reqSchema = p.schema;
+      break;
+    }
+  }
+  // OpenAPI 3.x requestBody
+  if (!reqSchema && operation?.requestBody?.content) {
+    const content = operation.requestBody.content;
+    const jsonContent =
+      content['application/json'] ||
+      content['*/*'] ||
+      Object.values(content)[0];
+    if (jsonContent?.schema) {
+      reqSchema = jsonContent.schema;
+    }
+  }
+
+  if (reqSchema) {
+    requestTypeName = getSchemaTypeName(reqSchema) || 'RequestBody';
+    const resolvedReq = reqSchema.$ref ? resolveRef(reqSchema.$ref, doc) : reqSchema;
+    const props = resolvedReq?.properties || {};
+    const requiredList = Array.isArray(resolvedReq?.required) ? resolvedReq.required : [];
+
+    for (const [propName, propSchema] of Object.entries(props)) {
+      requestFields.push({
+        name: propName,
+        type: formatSwaggerPropertyType(propSchema, doc),
+        required: requiredList.includes(propName),
+        description: (propSchema as any)?.description,
+      });
+    }
+  } else if (allParams.length > 0) {
+    const nonBody = allParams.filter((p) => p && p.name && p.in !== 'body');
+    if (nonBody.length > 0) {
+      requestTypeName = 'Parameters';
+      for (const p of nonBody) {
+        requestFields.push({
+          name: p.name,
+          type: p.type || (p.schema ? formatSwaggerPropertyType(p.schema, doc) : 'string'),
+          required: !!p.required,
+          description: p.description,
+        });
+      }
+    }
+  }
+
+  // 2. Response
+  let responseTypeName: string | undefined;
+  const responseFields: SwaggerFieldSummary[] = [];
+
+  const responses = operation?.responses || {};
+  const successKey =
+    Object.keys(responses).find((k) => k.startsWith('2')) ||
+    (responses['default'] ? 'default' : Object.keys(responses)[0]);
+
+  if (successKey && responses[successKey]) {
+    const respObj = responses[successKey];
+    let resSchema = respObj.schema;
+    if (!resSchema && respObj.content) {
+      const content = respObj.content;
+      const jsonContent =
+        content['application/json'] ||
+        content['*/*'] ||
+        Object.values(content)[0];
+      if (jsonContent?.schema) {
+        resSchema = jsonContent.schema;
+      }
+    }
+
+    if (resSchema) {
+      responseTypeName = getSchemaTypeName(resSchema) || 'ResponseBody';
+      const resolvedRes = resSchema.$ref ? resolveRef(resSchema.$ref, doc) : resSchema;
+      const props = resolvedRes?.properties || {};
+      const requiredList = Array.isArray(resolvedRes?.required) ? resolvedRes.required : [];
+
+      for (const [propName, propSchema] of Object.entries(props)) {
+        responseFields.push({
+          name: propName,
+          type: formatSwaggerPropertyType(propSchema, doc),
+          required: requiredList.includes(propName),
+          description: (propSchema as any)?.description,
+        });
+      }
+    }
+  }
+
+  return {
+    requestTypeName,
+    requestFields,
+    responseTypeName,
+    responseFields,
+  };
+}
+
 /**
  * Derives the base URL from swagger doc + source URL.
  */
@@ -292,6 +451,8 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
 
       const fullUrl = `${baseUrl}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
 
+      const specification = extractSwaggerSpecification(operation, doc, allParams);
+
       const endpoint: ParsedHttpEndpoint = {
         name: epName,
         method,
@@ -307,6 +468,7 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
         headerDescriptions,
         bodyType: hasBody ? 'json' : 'none',
         body: hasBody && bodySample !== null ? JSON.stringify(bodySample, null, 2) : '',
+        specification,
       };
 
       if (!servicesMap.has(primaryTag)) {

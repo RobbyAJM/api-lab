@@ -186,5 +186,143 @@ mod tests {
         assert_eq!(t6.host_port, "localhost:50051");
         assert_eq!(t6.use_tls, true);
     }
+
+    #[test]
+    fn test_extract_summaries_with_fields_and_oneofs() {
+        use prost_types::{
+            field_descriptor_proto::Type, DescriptorProto, FieldDescriptorProto,
+            FileDescriptorProto, MethodDescriptorProto, OneofDescriptorProto,
+            ServiceDescriptorProto,
+        };
+        use std::collections::HashMap;
+
+        let req_msg = DescriptorProto {
+            name: Some("TradeSpotRequest".to_string()),
+            field: vec![
+                FieldDescriptorProto {
+                    name: Some("login".to_string()),
+                    number: Some(1),
+                    r#type: Some(Type::Uint64 as i32),
+                    ..Default::default()
+                },
+                FieldDescriptorProto {
+                    name: Some("symbol".to_string()),
+                    number: Some(2),
+                    r#type: Some(Type::String as i32),
+                    ..Default::default()
+                },
+                FieldDescriptorProto {
+                    name: Some("side".to_string()),
+                    number: Some(3),
+                    r#type: Some(Type::String as i32),
+                    ..Default::default()
+                },
+                FieldDescriptorProto {
+                    name: Some("volume".to_string()),
+                    number: Some(4),
+                    r#type: Some(Type::Double as i32),
+                    oneof_index: Some(0),
+                    ..Default::default()
+                },
+            ],
+            oneof_decl: vec![OneofDescriptorProto {
+                name: Some("_volume".to_string()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let res_msg = DescriptorProto {
+            name: Some("TradeResponse".to_string()),
+            field: vec![
+                FieldDescriptorProto {
+                    name: Some("code".to_string()),
+                    number: Some(1),
+                    r#type: Some(Type::Int32 as i32),
+                    ..Default::default()
+                },
+                FieldDescriptorProto {
+                    name: Some("message".to_string()),
+                    number: Some(2),
+                    r#type: Some(Type::String as i32),
+                    ..Default::default()
+                },
+                FieldDescriptorProto {
+                    name: Some("details".to_string()),
+                    number: Some(3),
+                    r#type: Some(Type::Message as i32),
+                    type_name: Some(".TradeDetails".to_string()),
+                    ..Default::default()
+                },
+                FieldDescriptorProto {
+                    name: Some("order_value".to_string()),
+                    number: Some(4),
+                    r#type: Some(Type::Double as i32),
+                    oneof_index: Some(0),
+                    ..Default::default()
+                },
+            ],
+            oneof_decl: vec![OneofDescriptorProto {
+                name: Some("_order_value".to_string()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let svc = ServiceDescriptorProto {
+            name: Some("TradeAPI".to_string()),
+            method: vec![MethodDescriptorProto {
+                name: Some("TradeSpotRequest".to_string()),
+                input_type: Some(".nutrade.TradeSpotRequest".to_string()),
+                output_type: Some(".nutrade.TradeResponse".to_string()),
+                client_streaming: Some(false),
+                server_streaming: Some(false),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let file_proto = FileDescriptorProto {
+            name: Some("trade.proto".to_string()),
+            package: Some("nutrade".to_string()),
+            message_type: vec![req_msg, res_msg],
+            service: vec![svc],
+            ..Default::default()
+        };
+
+        let mut map = HashMap::new();
+        map.insert("trade.proto".to_string(), file_proto);
+
+        let summaries = client::extract_summaries(&map);
+        assert_eq!(summaries.len(), 1);
+        let s = &summaries[0];
+        assert_eq!(s.name, "nutrade.TradeAPI");
+        assert_eq!(s.methods.len(), 1);
+        let m = &s.methods[0];
+        assert_eq!(m.name, "TradeSpotRequest");
+        assert_eq!(m.stream_type, "unary");
+
+        // Request fields
+        assert_eq!(m.request_fields.len(), 4);
+        assert_eq!(m.request_fields[0].name, "login");
+        assert_eq!(m.request_fields[0].field_type, "uint64");
+        assert_eq!(m.request_fields[1].name, "symbol");
+        assert_eq!(m.request_fields[1].field_type, "string");
+        assert_eq!(m.request_fields[2].name, "side");
+        assert_eq!(m.request_fields[2].field_type, "string");
+        assert_eq!(m.request_fields[3].name, "_volume");
+        assert_eq!(m.request_fields[3].field_type, "OneOf");
+
+        // Response fields
+        assert_eq!(m.response_fields.len(), 4);
+        assert_eq!(m.response_fields[0].name, "code");
+        assert_eq!(m.response_fields[0].field_type, "int32");
+        assert_eq!(m.response_fields[1].name, "message");
+        assert_eq!(m.response_fields[1].field_type, "string");
+        assert_eq!(m.response_fields[2].name, "details");
+        assert_eq!(m.response_fields[2].field_type, "TradeDetails");
+        assert_eq!(m.response_fields[3].name, "_order_value");
+        assert_eq!(m.response_fields[3].field_type, "OneOf");
+    }
 }
 

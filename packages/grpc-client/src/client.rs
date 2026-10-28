@@ -6,7 +6,7 @@ use prost_reflect::{DescriptorPool, DynamicMessage};
 use prost_types::FileDescriptorProto;
 use serde::de::DeserializeSeed;
 use rust_core::dto::{
-    GrpcExecutionRequest, GrpcExecutionResponse, GrpcMethodSummary, GrpcReflectionRequest,
+    GrpcExecutionRequest, GrpcExecutionResponse, GrpcFieldSummary, GrpcMethodSummary, GrpcReflectionRequest,
     GrpcReflectionResponse, GrpcSamplePayloadRequest, GrpcSamplePayloadResponse, GrpcServiceSummary,
 };
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint};
@@ -386,7 +386,121 @@ async fn try_discover_v1alpha(
     })
 }
 
-fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> Vec<GrpcServiceSummary> {
+fn format_proto_field_type(field: &prost_types::FieldDescriptorProto) -> String {
+    let base_type = match field.r#type {
+        Some(1) => "double".to_string(),
+        Some(2) => "float".to_string(),
+        Some(3) => "int64".to_string(),
+        Some(4) => "uint64".to_string(),
+        Some(5) => "int32".to_string(),
+        Some(6) => "fixed64".to_string(),
+        Some(7) => "fixed32".to_string(),
+        Some(8) => "bool".to_string(),
+        Some(9) => "string".to_string(),
+        Some(10) => "group".to_string(),
+        Some(11) => {
+            field
+                .type_name
+                .as_deref()
+                .map(|s| s.trim_start_matches('.').split('.').last().unwrap_or(s).to_string())
+                .unwrap_or_else(|| "message".to_string())
+        }
+        Some(12) => "bytes".to_string(),
+        Some(13) => "uint32".to_string(),
+        Some(14) => {
+            field
+                .type_name
+                .as_deref()
+                .map(|s| s.trim_start_matches('.').split('.').last().unwrap_or(s).to_string())
+                .unwrap_or_else(|| "enum".to_string())
+        }
+        Some(15) => "sfixed32".to_string(),
+        Some(16) => "sfixed64".to_string(),
+        Some(17) => "sint32".to_string(),
+        Some(18) => "sint64".to_string(),
+        _ => "unknown".to_string(),
+    };
+
+    if field.label == Some(3) {
+        format!("{}[]", base_type)
+    } else {
+        base_type
+    }
+}
+
+fn add_message_to_map<'a>(
+    msg: &'a prost_types::DescriptorProto,
+    prefix: &str,
+    map: &mut HashMap<String, &'a prost_types::DescriptorProto>,
+) {
+    let msg_name = msg.name.as_deref().unwrap_or("");
+    let full_name = if prefix.is_empty() {
+        msg_name.to_string()
+    } else {
+        format!("{}.{}", prefix, msg_name)
+    };
+
+    map.insert(full_name.clone(), msg);
+    map.insert(format!(".{}", full_name), msg);
+    map.insert(msg_name.to_string(), msg);
+
+    for nested in &msg.nested_type {
+        add_message_to_map(nested, &full_name, map);
+    }
+}
+
+fn collect_messages<'a>(
+    protos: &'a HashMap<String, FileDescriptorProto>,
+) -> HashMap<String, &'a prost_types::DescriptorProto> {
+    let mut map = HashMap::new();
+    for proto in protos.values() {
+        let pkg = proto.package.as_deref().unwrap_or("");
+        for msg in &proto.message_type {
+            add_message_to_map(msg, pkg, &mut map);
+        }
+    }
+    map
+}
+
+pub fn extract_message_fields(
+    msg_map: &HashMap<String, &prost_types::DescriptorProto>,
+    message_type: &str,
+) -> Vec<GrpcFieldSummary> {
+    let clean = message_type.trim_start_matches('.');
+    let Some(msg) = msg_map.get(clean).or_else(|| msg_map.get(message_type)) else {
+        return Vec::new();
+    };
+
+    let mut fields = Vec::new();
+    let mut handled_oneofs = std::collections::HashSet::new();
+
+    for f in &msg.field {
+        if let Some(idx) = f.oneof_index {
+            let uidx = idx as usize;
+            if handled_oneofs.insert(uidx) {
+                let oneof_name = msg
+                    .oneof_decl
+                    .get(uidx)
+                    .and_then(|o| o.name.clone())
+                    .unwrap_or_else(|| format!("_{}", f.name.as_deref().unwrap_or("oneof")));
+                fields.push(GrpcFieldSummary {
+                    name: oneof_name,
+                    field_type: "OneOf".to_string(),
+                });
+            }
+        } else {
+            fields.push(GrpcFieldSummary {
+                name: f.name.clone().unwrap_or_default(),
+                field_type: format_proto_field_type(f),
+            });
+        }
+    }
+
+    fields
+}
+
+pub fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> Vec<GrpcServiceSummary> {
+    let msg_map = collect_messages(raw_protos);
     let mut summaries = Vec::new();
     for proto in raw_protos.values() {
         let pkg = proto.package.as_deref().unwrap_or("");
@@ -413,6 +527,11 @@ fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> Vec<G
                         "unary".to_string()
                     };
 
+                    let req_fields =
+                        extract_message_fields(&msg_map, m.input_type.as_deref().unwrap_or(""));
+                    let res_fields =
+                        extract_message_fields(&msg_map, m.output_type.as_deref().unwrap_or(""));
+
                     GrpcMethodSummary {
                         name: m.name.clone().unwrap_or_default(),
                         input_type: in_type.to_string(),
@@ -420,6 +539,8 @@ fn extract_summaries(raw_protos: &HashMap<String, FileDescriptorProto>) -> Vec<G
                         is_client_streaming: client_streaming,
                         is_server_streaming: server_streaming,
                         stream_type,
+                        request_fields: req_fields,
+                        response_fields: res_fields,
                     }
                 })
                 .collect();
