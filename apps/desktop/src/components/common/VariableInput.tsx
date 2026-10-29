@@ -2,8 +2,8 @@ import React, { useRef, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
-import { tokenizeVariables, type VariableSource } from '../../utils/variableHighlight';
-import { findHoveredVariableToken, type BoundingBox } from '../../utils/variableHover';
+import { tokenizeVariables, getVariableTokenClassName, type VariableSource } from '../../utils/variableHighlight';
+import { findHoveredVariableToken, createHoverTimerController, type BoundingBox } from '../../utils/variableHover';
 import { VariableHoverCard } from './VariableHoverCard';
 import type { Environment, VariableResponse } from '@api-lab/api-types';
 
@@ -30,7 +30,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
 }) => {
   const backdropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const clearTimerRef = useRef<any>(null);
+  const hoverTimer = useRef(createHoverTimerController()).current;
 
   const { activeWorkspaceId, activeEnvironmentId } = useAppStore();
 
@@ -161,16 +161,13 @@ export const VariableInput: React.FC<VariableInputProps> = ({
   }
 
   function scheduleClear() {
-    clearTimerRef.current = setTimeout(() => {
+    hoverTimer.schedule(() => {
       setHoverState(null);
-    }, 200);
+    }, 300);
   }
 
   function cancelClear() {
-    if (clearTimerRef.current) {
-      clearTimeout(clearTimerRef.current);
-      clearTimerRef.current = null;
-    }
+    hoverTimer.cancel();
   }
 
   function handleMouseMove(e: React.MouseEvent<HTMLInputElement>) {
@@ -191,9 +188,9 @@ export const VariableInput: React.FC<VariableInputProps> = ({
 
   useEffect(() => {
     return () => {
-      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+      hoverTimer.cancel();
     };
-  }, []);
+  }, [hoverTimer]);
 
   const tokens = tokenizeVariables(value, effectiveVars);
 
@@ -220,23 +217,11 @@ export const VariableInput: React.FC<VariableInputProps> = ({
               );
             }
 
-            if (token.isDefined) {
-              return (
-                <span
-                  key={idx}
-                  data-var-name={token.name}
-                  className="text-emerald-300 font-semibold bg-emerald-950/70 border border-emerald-800/60 rounded px-1 inline-block -my-0.5"
-                >
-                  {token.text}
-                </span>
-              );
-            }
-
             return (
               <span
                 key={idx}
                 data-var-name={token.name}
-                className="text-rose-300 font-semibold bg-rose-950/70 border border-rose-800/60 rounded px-1 inline-block -my-0.5"
+                className={getVariableTokenClassName(token.isDefined ?? false, false)}
               >
                 {token.text}
               </span>

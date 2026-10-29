@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   tokenizeVariables,
   tokenizeJsonLine,
+  getVariableTokenClassName,
   type VariableToken,
   type JsonSyntaxToken,
 } from './variableHighlight.ts';
@@ -169,4 +170,29 @@ test('tokenizeJsonLine: preserves slashes inside string literals', () => {
   assert.ok(str);
   assert.equal(str.text, '"https://example.com/api//v1"');
 });
+
+test('getVariableTokenClassName: avoids horizontal padding, borders, or inline-block that breaks character grid', () => {
+  const definedInput = getVariableTokenClassName(true, false);
+  const undefinedInput = getVariableTokenClassName(false, false);
+  const definedEditor = getVariableTokenClassName(true, true);
+  const undefinedEditor = getVariableTokenClassName(false, true);
+
+  const classes = [definedInput, undefinedInput, definedEditor, undefinedEditor];
+
+  for (const cls of classes) {
+    // Must not contain horizontal padding (px-), borders, inline-block, or margin that displaces cursor
+    assert.equal(/\bpx-/.test(cls), false, `Should not have horizontal padding: ${cls}`);
+    assert.equal(/\bborder\b/.test(cls), false, `Should not have border: ${cls}`);
+    assert.equal(/\binline-block\b/.test(cls), false, `Should not be inline-block: ${cls}`);
+    assert.equal(/-my-/.test(cls), false, `Should not have negative vertical margin: ${cls}`);
+    // Must use inset ring for zero-width box-shadow outline
+    assert.ok(cls.includes('ring-1 ring-inset'), `Must use ring-1 ring-inset: ${cls}`);
+  }
+
+  // Defined vs undefined color distinctions
+  assert.ok(definedInput.includes('text-emerald-300'));
+  assert.ok(undefinedInput.includes('text-rose-300'));
+  assert.ok(definedEditor.includes('font-bold'));
+});
+
 

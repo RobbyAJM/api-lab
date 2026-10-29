@@ -83,19 +83,26 @@ export const VariableHoverCard: React.FC<VariableHoverCardProps> = ({
 
   if (typeof document === 'undefined') return null;
 
+  const wrapperTop = pos.placement === 'bottom' ? Math.max(0, pos.y - 6) : pos.y;
+  const paddingTop = pos.placement === 'bottom' ? `${pos.y - wrapperTop}px` : '0px';
+  const paddingBottom = pos.placement === 'top' ? '6px' : '0px';
+
   return createPortal(
     <div
       style={{
         position: 'fixed',
         left: `${pos.x}px`,
-        top: `${pos.y}px`,
+        top: `${wrapperTop}px`,
         width: `${cardWidth}px`,
+        paddingTop,
+        paddingBottom,
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className="z-50 bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden font-sans text-xs text-zinc-100 animate-in fade-in zoom-in-95 duration-100 select-none"
+      className="z-50"
     >
-      {/* Header */}
+      <div className="bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden font-sans text-xs text-zinc-100 animate-in fade-in zoom-in-95 duration-100 select-none">
+        {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 text-[11px]">
         <div className="flex items-center gap-1.5 font-mono min-w-0">
           <span className="text-secondary font-bold truncate">
@@ -181,6 +188,7 @@ export const VariableHoverCard: React.FC<VariableHoverCardProps> = ({
             )}
           </button>
         </div>
+      </div>
       </div>
     </div>,
     document.body

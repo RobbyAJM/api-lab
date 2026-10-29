@@ -183,3 +183,39 @@ export function findHoveredVariableToken(
   }
   return null;
 }
+
+export interface HoverTimerController {
+  schedule: (fn: () => void, delayMs?: number) => void;
+  cancel: () => void;
+  isPending: () => boolean;
+}
+
+/**
+ * Creates a debounce timer controller for hover popovers.
+ * Cancels existing pending timers before scheduling new ones to prevent
+ * orphaned timer execution when moving cursor towards the popover.
+ */
+export function createHoverTimerController(): HoverTimerController {
+  let timer: any = null;
+
+  return {
+    schedule: (fn: () => void, delayMs = 300) => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      timer = setTimeout(() => {
+        timer = null;
+        fn();
+      }, delayMs);
+    },
+    cancel: () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    },
+    isPending: () => timer !== null,
+  };
+}
+

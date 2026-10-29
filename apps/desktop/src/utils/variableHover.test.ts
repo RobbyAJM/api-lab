@@ -5,6 +5,7 @@ import {
   maskSensitiveValue,
   calculateHoverCardPosition,
   findHoveredVariableToken,
+  createHoverTimerController,
 } from './variableHover.ts';
 import type { VariableResponse } from '@api-lab/api-types';
 
@@ -155,3 +156,51 @@ test('findHoveredVariableToken: hits target token or returns null', () => {
   // Null container
   assert.equal(findHoveredVariableToken(null, 100, 100), null);
 });
+
+test('createHoverTimerController: debounces, cancels prior timers, and executes latest callback', async () => {
+  const controller = createHoverTimerController();
+  assert.equal(controller.isPending(), false);
+
+  let executions = 0;
+  let lastVal = '';
+
+  // Simulate multiple fast mouse moves scheduling clear
+  controller.schedule(() => {
+    executions++;
+    lastVal = 'first';
+  }, 40);
+  assert.equal(controller.isPending(), true);
+
+  controller.schedule(() => {
+    executions++;
+    lastVal = 'second';
+  }, 40);
+  assert.equal(controller.isPending(), true);
+
+  controller.schedule(() => {
+    executions++;
+    lastVal = 'third';
+  }, 40);
+  assert.equal(controller.isPending(), true);
+
+  // Wait 70ms for the final scheduled timer to fire
+  await new Promise((resolve) => setTimeout(resolve, 70));
+
+  assert.equal(executions, 1, 'Only one timer should fire despite multiple schedule calls');
+  assert.equal(lastVal, 'third', 'The latest scheduled callback should be executed');
+  assert.equal(controller.isPending(), false);
+
+  // Test cancel prevents execution
+  controller.schedule(() => {
+    executions++;
+    lastVal = 'cancelled';
+  }, 40);
+  assert.equal(controller.isPending(), true);
+  controller.cancel();
+  assert.equal(controller.isPending(), false);
+
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  assert.equal(executions, 1, 'Cancelled timer must not fire');
+  assert.equal(lastVal, 'third');
+});
+
