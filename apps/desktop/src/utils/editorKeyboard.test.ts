@@ -8,6 +8,7 @@ import {
   handleToggleComment,
   handleDeleteLine,
   handleEditorKeyDown,
+  findAutocompleteQuery,
 } from './editorKeyboard.ts';
 import { EditorHistory } from './editorHistory.ts';
 
@@ -281,6 +282,44 @@ test('handleMoveLine: moves line up and down with Alt+ArrowUp / Alt+ArrowDown', 
   const bottomDown = handleEditorKeyDown(doc, 15, 15, { key: 'ArrowDown', altKey: true });
   assert.ok(bottomDown);
   assert.equal(bottomDown.text, doc);
+});
+
+test('handleMoveLine: moves multi-line selection block up and down', () => {
+  const doc = 'header\nblock_a\nblock_b\nfooter';
+
+  // Select "block_a\nblock_b" (index 7 to 22) and move down below footer
+  const moveBlockDown = handleEditorKeyDown(doc, 7, 22, { key: 'ArrowDown', altKey: true });
+  assert.ok(moveBlockDown);
+  assert.equal(moveBlockDown.text, 'header\nfooter\nblock_a\nblock_b');
+
+  // Move the block back up above footer
+  const moveBlockUp = handleEditorKeyDown(moveBlockDown.text, 14, 29, { key: 'ArrowUp', altKey: true });
+  assert.ok(moveBlockUp);
+  assert.equal(moveBlockUp.text, 'header\nblock_a\nblock_b\nfooter');
+});
+
+test('findAutocompleteQuery: captures keys and colon-values for autocomplete', () => {
+  // Key completion after brace: {"nam
+  const key1 = findAutocompleteQuery('{"nam', 5);
+  assert.ok(key1);
+  assert.equal(key1.query, 'nam');
+  assert.equal(key1.matchStart, 2);
+
+  // Key completion after comma: {"id": 1, "st
+  const key2 = findAutocompleteQuery('{"id": 1, "st', 15);
+  assert.ok(key2);
+  assert.equal(key2.query, 'st');
+  assert.equal(key2.matchStart, 13);
+
+  // Value completion after colon: {"status": "ACT
+  const val = findAutocompleteQuery('{"status": "ACT', 15);
+  assert.ok(val);
+  assert.equal(val.query, 'act');
+  assert.equal(val.matchStart, 12);
+
+  // Outside open string returns null
+  assert.equal(findAutocompleteQuery('{"status": 123', 14), null);
+  assert.equal(findAutocompleteQuery('hello world', 5), null);
 });
 
 

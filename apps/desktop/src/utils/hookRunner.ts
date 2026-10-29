@@ -227,7 +227,16 @@ function buildPmContext(
     const rawHeaders = req.headers;
     pmRequest.headers = new Proxy(rawHeaders, {
       get(target: any, prop: string | symbol) {
-        if (prop === 'get') return (k: string) => target[k] ?? target[k.toLowerCase()];
+        if (prop === 'get') {
+          return (k: string) => {
+            if (target[k] !== undefined) return target[k];
+            const lower = String(k).toLowerCase();
+            for (const key of Object.keys(target)) {
+              if (key.toLowerCase() === lower) return target[key];
+            }
+            return undefined;
+          };
+        }
         if (prop === 'set') return (k: string, v: any) => { target[k] = String(v); };
         if (prop === 'add') return (k: string, v: any) => { target[k] = String(v); };
         return target[prop as string];
@@ -243,7 +252,16 @@ function buildPmContext(
     const rawMetadata = req.metadata;
     pmRequest.metadata = new Proxy(rawMetadata, {
       get(target: any, prop: string | symbol) {
-        if (prop === 'get') return (k: string) => target[k] ?? target[k.toLowerCase()];
+        if (prop === 'get') {
+          return (k: string) => {
+            if (target[k] !== undefined) return target[k];
+            const lower = String(k).toLowerCase();
+            for (const key of Object.keys(target)) {
+              if (key.toLowerCase() === lower) return target[key];
+            }
+            return undefined;
+          };
+        }
         if (prop === 'set') return (k: string, v: any) => { target[k] = String(v); };
         return target[prop as string];
       },

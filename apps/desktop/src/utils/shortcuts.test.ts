@@ -55,10 +55,16 @@ test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
   assert.equal(matchesShortcut({ key: 'Enter' }, 'send_request'), false);
   assert.equal(matchesShortcut({ key: 'a', ctrlKey: true }, 'send_request'), false);
 
-  // save_endpoint: Ctrl+S or Cmd+S
+  // save_endpoint: Ctrl+S or Cmd+S (without Shift)
   assert.equal(matchesShortcut({ key: 's', ctrlKey: true }, 'save_endpoint'), true);
   assert.equal(matchesShortcut({ key: 'S', metaKey: true }, 'save_endpoint'), true);
+  assert.equal(matchesShortcut({ key: 's', ctrlKey: true, shiftKey: true }, 'save_endpoint'), false);
   assert.equal(matchesShortcut({ key: 's' }, 'save_endpoint'), false);
+
+  // switch_workspace: Ctrl+Shift+S or Cmd+Shift+S
+  assert.equal(matchesShortcut({ key: 's', ctrlKey: true, shiftKey: true }, 'switch_workspace'), true);
+  assert.equal(matchesShortcut({ key: 'S', metaKey: true, shiftKey: true }, 'switch_workspace'), true);
+  assert.equal(matchesShortcut({ key: 's', ctrlKey: true }, 'switch_workspace'), false);
 
   // open_command: Ctrl+K or Cmd+K
   assert.equal(matchesShortcut({ key: 'k', ctrlKey: true }, 'open_command'), true);

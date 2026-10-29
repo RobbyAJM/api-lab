@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { tokenizeJsonLine, type VariableSource } from '../../utils/variableHighlight';
-import { handleEditorKeyDown } from '../../utils/editorKeyboard';
+import { handleEditorKeyDown, findAutocompleteQuery } from '../../utils/editorKeyboard';
 import { EditorHistory } from '../../utils/editorHistory';
 import { parseJsonWithComments } from '../../utils/jsonComments';
 import { findHoveredVariableToken, type BoundingBox } from '../../utils/variableHover';
@@ -199,14 +199,13 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
 
     if (e.altKey && e.key === 'Enter' && suggestions.length > 0) {
       e.preventDefault();
-      const beforeCursor = value.slice(0, textarea.selectionStart);
-      const match = beforeCursor.match(/(?:\{|,|:)\s*"([^"\n]*)$/);
-      const query = match?.[1].toLowerCase() || '';
+      const match = findAutocompleteQuery(value, textarea.selectionStart);
+      const query = match?.query || '';
       const items = suggestions.filter((item) => item.toLowerCase().includes(query)).slice(0, 8);
       if (items.length > 0) {
         setCompletion({
           items,
-          start: match ? textarea.selectionStart - match[1].length : textarea.selectionStart,
+          start: match ? match.matchStart : textarea.selectionStart,
           selected: 0,
           hasOpeningQuote: Boolean(match),
         });
@@ -308,14 +307,13 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     );
     onChange(fullText);
 
-    const match = fullText.slice(0, e.target.selectionStart).match(/(?:\{|,|:)\s*"([^"\n]*)$/);
+    const match = findAutocompleteQuery(fullText, e.target.selectionStart);
     if (suggestions.length > 0 && match) {
-      const query = match[1].toLowerCase();
-      const items = suggestions.filter((item) => item.toLowerCase().includes(query)).slice(0, 8);
+      const items = suggestions.filter((item) => item.toLowerCase().includes(match.query)).slice(0, 8);
       if (items.length > 0) {
         setCompletion({
           items,
-          start: e.target.selectionStart - match[1].length,
+          start: match.matchStart,
           selected: 0,
           hasOpeningQuote: true,
         });

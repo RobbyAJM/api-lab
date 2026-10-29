@@ -100,6 +100,56 @@ test('computeConflictDiffs: detects gRPC address, service and payload difference
   assert.equal(diffs[1].field, 'Payload');
 });
 
+test('computeConflictDiffs: detects headers, query params and auth changes', () => {
+  const remoteEndpoint: Endpoint = {
+    ...baseHttpEndpoint,
+    version: 3,
+    config: {
+      method: 'GET',
+      url: 'https://api.example.com/users/1',
+      headers: { 'X-Custom-Header': 'val2' },
+      query_params: [['limit', '50']],
+      auth: { auth_type: 'bearer', token: 'secret' },
+    },
+  };
+
+  const localConfig = {
+    method: 'GET',
+    url: 'https://api.example.com/users/1',
+    headers: { 'X-Custom-Header': 'val1' },
+    query_params: [['limit', '10']],
+    auth: { auth_type: 'none' },
+  };
+
+  const diffs = computeConflictDiffs(baseHttpEndpoint, remoteEndpoint, localConfig);
+  assert.equal(diffs.length, 3);
+  assert.equal(diffs[0].field, 'Headers');
+  assert.equal(diffs[1].field, 'Query Parameters');
+  assert.equal(diffs[2].field, 'Auth Type');
+  assert.equal(diffs[2].localVal, 'none');
+  assert.equal(diffs[2].remoteVal, 'bearer');
+});
+
+test('computeConflictDiffs: detects gRPC metadata differences', () => {
+  const remoteEndpoint: Endpoint = {
+    ...baseGrpcEndpoint,
+    version: 4,
+    config: {
+      ...baseGrpcEndpoint.config,
+      metadata: { authorization: 'Bearer token-remote' },
+    },
+  };
+
+  const localConfig = {
+    ...baseGrpcEndpoint.config,
+    metadata: { authorization: 'Bearer token-local' },
+  };
+
+  const diffs = computeConflictDiffs(baseGrpcEndpoint, remoteEndpoint, localConfig);
+  assert.equal(diffs.length, 1);
+  assert.equal(diffs[0].field, 'Metadata');
+});
+
 test('isTabConflicted: true when server version exceeds tab version', () => {
   const tabEp: Endpoint = { ...baseHttpEndpoint, version: 1 };
   const serverEndpoints: Endpoint[] = [{ ...baseHttpEndpoint, version: 2 }];

@@ -61,6 +61,36 @@ export function computeConflictDiffs(
         remoteVal: remotePost || '(empty)',
       });
     }
+
+    const localHeaders = JSON.stringify(localConfig.headers || {});
+    const remoteHeaders = JSON.stringify(remoteConfig.headers || {});
+    if (localHeaders !== remoteHeaders) {
+      diffs.push({
+        field: 'Headers',
+        localVal: localHeaders.length > 200 ? localHeaders.slice(0, 200) + '...' : localHeaders,
+        remoteVal: remoteHeaders.length > 200 ? remoteHeaders.slice(0, 200) + '...' : remoteHeaders,
+      });
+    }
+
+    const localParams = JSON.stringify(localConfig.query_params || []);
+    const remoteParams = JSON.stringify(remoteConfig.query_params || []);
+    if (localParams !== remoteParams) {
+      diffs.push({
+        field: 'Query Parameters',
+        localVal: localParams.length > 200 ? localParams.slice(0, 200) + '...' : localParams,
+        remoteVal: remoteParams.length > 200 ? remoteParams.slice(0, 200) + '...' : remoteParams,
+      });
+    }
+
+    const localAuth = localConfig.auth?.auth_type || 'none';
+    const remoteAuth = remoteConfig.auth?.auth_type || 'none';
+    if (localAuth !== remoteAuth) {
+      diffs.push({
+        field: 'Auth Type',
+        localVal: localAuth,
+        remoteVal: remoteAuth,
+      });
+    }
   } else {
     const localAddr = String(localConfig.server_address || '');
     const remoteAddr = String(remoteConfig.server_address || '');
@@ -87,6 +117,16 @@ export function computeConflictDiffs(
         field: 'Payload',
         localVal: localPayload.length > 200 ? localPayload.slice(0, 200) + '...' : localPayload,
         remoteVal: remotePayload.length > 200 ? remotePayload.slice(0, 200) + '...' : remotePayload,
+      });
+    }
+
+    const localMeta = JSON.stringify(localConfig.metadata || {});
+    const remoteMeta = JSON.stringify(remoteConfig.metadata || {});
+    if (localMeta !== remoteMeta) {
+      diffs.push({
+        field: 'Metadata',
+        localVal: localMeta.length > 200 ? localMeta.slice(0, 200) + '...' : localMeta,
+        remoteVal: remoteMeta.length > 200 ? remoteMeta.slice(0, 200) + '...' : remoteMeta,
       });
     }
   }

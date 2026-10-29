@@ -470,4 +470,64 @@ mod tests {
         let payload = generate_sample_payload(&msg_desc);
         assert_eq!(payload, json!({}));
     }
+
+    #[test]
+    fn test_well_known_types_generation() {
+        use prost_types::field_descriptor_proto::{Label, Type};
+
+        let timestamp_msg = DescriptorProto {
+            name: Some("Timestamp".to_string()),
+            field: vec![],
+            ..Default::default()
+        };
+        let string_val_msg = DescriptorProto {
+            name: Some("StringValue".to_string()),
+            field: vec![],
+            ..Default::default()
+        };
+        let wkt_file = FileDescriptorProto {
+            name: Some("google/protobuf/timestamp.proto".to_string()),
+            package: Some("google.protobuf".to_string()),
+            message_type: vec![timestamp_msg, string_val_msg],
+            ..Default::default()
+        };
+
+        let event_msg = DescriptorProto {
+            name: Some("Event".to_string()),
+            field: vec![
+                FieldDescriptorProto {
+                    name: Some("created_at".to_string()),
+                    number: Some(1),
+                    label: Some(Label::Optional as i32),
+                    r#type: Some(Type::Message as i32),
+                    type_name: Some(".google.protobuf.Timestamp".to_string()),
+                    ..Default::default()
+                },
+                FieldDescriptorProto {
+                    name: Some("note".to_string()),
+                    number: Some(2),
+                    label: Some(Label::Optional as i32),
+                    r#type: Some(Type::Message as i32),
+                    type_name: Some(".google.protobuf.StringValue".to_string()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let app_file = FileDescriptorProto {
+            name: Some("app.proto".to_string()),
+            package: Some("test".to_string()),
+            dependency: vec!["google/protobuf/timestamp.proto".to_string()],
+            message_type: vec![event_msg],
+            ..Default::default()
+        };
+
+        let mut pool = DescriptorPool::new();
+        pool.add_file_descriptor_protos(vec![wkt_file, app_file]).unwrap();
+        let msg_desc = pool.get_message_by_name("test.Event").unwrap();
+        let payload = generate_sample_payload(&msg_desc);
+
+        assert_eq!(payload["created_at"], "2026-10-29T12:00:00Z");
+        assert_eq!(payload["note"], "sample_string");
+    }
 }

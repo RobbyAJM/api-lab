@@ -39,6 +39,32 @@ test('HTTP Before Hook: modifies url, headers, and sets environment variables', 
   }
 });
 
+test('HTTP Before Hook: supports crypto.randomUUID() and case-insensitive header access', async () => {
+  const req: HttpRequestContext = {
+    url: 'https://api.example.com/items',
+    method: 'GET',
+    headers: { 'X-Existing': 'existing-val' },
+  };
+
+  const script = `
+    const uuid = crypto.randomUUID();
+    pm.environment.set('REQ_UUID', uuid);
+    pm.request.headers.set('X-Request-ID', uuid);
+    const existing = pm.request.headers.get('x-existing');
+    pm.environment.set('CHECK_EXISTING', existing);
+  `;
+
+  const result = await runBeforeHook(script, req, {});
+  assert.equal(result.error, undefined);
+  assert.ok(result.variables['REQ_UUID']);
+  assert.match(
+    result.variables['REQ_UUID'],
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  );
+  assert.equal(result.request.headers['X-Request-ID'], result.variables['REQ_UUID']);
+  assert.equal(result.variables['CHECK_EXISTING'], 'existing-val');
+});
+
 test('HTTP After Hook: inspects response, parses JSON, and sets token variable', async () => {
   const req: HttpRequestContext = {
     url: 'https://api.example.com/login',

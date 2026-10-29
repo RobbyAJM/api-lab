@@ -464,6 +464,26 @@ export function handleMoveLine(
 }
 
 /**
+ * Detects whether cursor is currently inside a JSON key or value string open for autocomplete.
+ * Matches:
+ * - Keys:   `{ "foo` or `, "foo`
+ * - Values: `: "foo` or `: "STATUS_`
+ * Returns the query string and matchStart to filter suggestions, or null if not in an autocomplete position.
+ */
+export function findAutocompleteQuery(
+  text: string,
+  cursorIndex: number
+): { query: string; matchStart: number } | null {
+  const beforeCursor = text.slice(0, cursorIndex);
+  const match = beforeCursor.match(/(?:\{|,|:)\s*"([^"\n]*)$/);
+  if (!match) return null;
+  return {
+    query: match[1].toLowerCase(),
+    matchStart: cursorIndex - match[1].length,
+  };
+}
+
+/**
  * Master dispatcher for code editor keyboard events.
  * Returns null if default browser behavior should proceed.
  */

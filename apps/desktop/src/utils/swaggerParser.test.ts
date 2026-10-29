@@ -432,6 +432,25 @@ test('parseSwaggerSpec: prioritizes operationId over path for ep.name while stor
   assert.equal(ep.specification?.summary, 'Retrieve User by ID');
 });
 
+test('parseSwaggerSpec: returns exact cached reference on repeated calls with identical doc', () => {
+  const doc: SwaggerDoc = {
+    swagger: '2.0',
+    paths: {
+      '/ping': {
+        get: {
+          responses: {
+            '200': { description: 'pong' },
+          },
+        },
+      },
+    },
+  };
+
+  const first = parseSwaggerSpec(doc, 'https://example.com/swagger.json');
+  const second = parseSwaggerSpec(doc, 'https://example.com/swagger.json');
+  assert.equal(first, second); // Identity comparison validates WeakMap caching
+});
+
 test('resolveSwaggerSamplePayload: resolves sample payload from matched endpoint or spec search', () => {
   const doc: SwaggerDoc = {
     swagger: '2.0',
