@@ -221,6 +221,7 @@ export function substituteVariables(
   text: string,
   variables?: Record<string, string>
 ): string {
+  if (typeof text !== 'string') return String(text ?? '');
   if (!text || !variables || Object.keys(variables).length === 0) return text;
   return text.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (match, key) => {
     const rawKey = key.trim();

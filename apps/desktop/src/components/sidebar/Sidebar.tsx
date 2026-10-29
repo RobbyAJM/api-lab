@@ -28,7 +28,7 @@ import {
   FolderPlus,
   ChevronsDownUp,
   RefreshCw,
-  Globe,
+  Search,
 } from 'lucide-react';
 import { GenerateGrpcModal } from './GenerateGrpcModal';
 import { GenerateSwaggerModal } from './GenerateSwaggerModal';
@@ -66,8 +66,16 @@ export const Sidebar: React.FC = () => {
     setAppSettingsTab,
   } = useAppStore();
 
-  const searchQuery = '';
+  const [searchQuery, setSearchQuery] = useState('');
   const [collapseSignal, setCollapseSignal] = useState(0);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeoutRef = useRef<any>(null);
+
+  const handleSidebarScroll = () => {
+    setIsScrolling(true);
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => setIsScrolling(false), 800);
+  };
 
   // Resizable sidebar state (New Feature 2)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -193,24 +201,43 @@ export const Sidebar: React.FC = () => {
         </span>
       </div>
 
-      {/* Collections Header */}
-      <div className="flex items-center justify-between px-3 pt-2.5 pb-1 text-[10px] font-semibold text-zinc-500 tracking-wider uppercase select-none">
-        <span>Collections</span>
-        <div className="flex items-center gap-1 text-zinc-400">
+      {/* Collections Header with Search (Task 14) */}
+      <div className="flex items-center justify-between px-2.5 pt-2 pb-1.5 gap-1.5 select-none">
+        <div className="relative flex-1 flex items-center">
+          <Search size={11} className="absolute left-2 text-zinc-500 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search collections, folders, requests..."
+            className="w-full bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/80 rounded pl-6 pr-5 py-1 text-[11px] text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-700"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-1.5 text-zinc-500 hover:text-zinc-300 p-0.5"
+              title="Clear search"
+            >
+              <X size={10} />
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-0.5 text-zinc-400 flex-shrink-0">
           <button
             onClick={() => {
               setIsCreatingCollection((prev) => !prev);
               setNewCollectionName('');
               setCreateCollectionError(null);
             }}
-            className="hover:text-zinc-200 p-0.5 rounded transition"
+            className="hover:text-zinc-200 p-1 rounded hover:bg-zinc-900 transition"
             title="New Collection"
           >
             <FolderPlus size={13} />
           </button>
           <button
             onClick={() => setCollapseSignal((s) => s + 1)}
-            className="hover:text-zinc-200 p-0.5 rounded transition"
+            className="hover:text-zinc-200 p-1 rounded hover:bg-zinc-900 transition"
             title="Collapse All"
           >
             <ChevronsDownUp size={13} />
@@ -218,8 +245,13 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Collections & Folders List */}
-      <div className="flex-1 overflow-y-auto pl-2 pr-1.5 space-y-1 min-h-0">
+      {/* Collections & Folders List (Task 12) */}
+      <div
+        onScroll={handleSidebarScroll}
+        className={`sidebar-scroll-area flex-1 overflow-y-auto pl-2 pr-2 mr-1 space-y-1 min-h-0 ${
+          isScrolling ? 'is-scrolling' : ''
+        }`}
+      >
         {isCreatingCollection && (
           <div className="p-1.5 pl-2 flex flex-col gap-1 bg-zinc-900/60 border border-zinc-800 rounded mb-1">
             <div className="flex items-center gap-1">
@@ -304,10 +336,10 @@ export const Sidebar: React.FC = () => {
         </button>
       </div>
 
-      {/* Horizontal Resizable Splitter Handle (New Feature 2) */}
+      {/* Horizontal Resizable Splitter Handle (Task 12) */}
       <div
         onMouseDown={startResizing}
-        className="absolute top-0 -right-1 bottom-0 w-2 cursor-col-resize hover:bg-zinc-700/60 active:bg-zinc-600 transition-colors z-40"
+        className="absolute top-0 right-0 bottom-0 w-1 cursor-col-resize hover:bg-zinc-700/80 active:bg-zinc-600 transition-colors z-20"
         title="Drag to resize sidebar width"
       />
 
@@ -645,46 +677,6 @@ const CollectionNode: React.FC<{
             <Folder size={12} className="text-amber-400" />
             <span>Add Folder</span>
           </button>
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setShowGrpcModal(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <FolderPlus size={12} className="text-secondary" />
-            <span>Generate gRPC</span>
-          </button>
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setShowSwaggerModal(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <Globe size={12} className="text-emerald-400" />
-            <span>Generate Swagger</span>
-          </button>
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setShowSyncModal(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <RefreshCw size={12} className="text-zinc-400" />
-            <span>Sync Reflection</span>
-          </button>
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setShowSwaggerSyncModal(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <RefreshCw size={12} className="text-emerald-400" />
-            <span>Sync Swagger</span>
-          </button>
           <div className="h-px bg-zinc-800 my-1" />
           <button
             onClick={() => {
@@ -839,18 +831,18 @@ const CollectionNode: React.FC<{
       {isExpanded && (
         <div className="pl-3 pr-1 pb-1 space-y-0.5">
           {/* Direct Collection Endpoints */}
-          {filteredTree.rootEndpoints.map((endpoint) => (
+          {(hasCollectionMatch && searchQuery ? fullTree : filteredTree).rootEndpoints.map((endpoint) => (
             <EndpointItem key={endpoint.id} endpoint={endpoint} />
           ))}
 
           {/* Root Folders and their recursive children */}
-          {filteredTree.rootFolders.map((node) => (
+          {(hasCollectionMatch && searchQuery ? fullTree : filteredTree).rootFolders.map((node) => (
             <FolderTreeNodeComponent
               key={node.folder.id}
               node={node}
               collectionId={collection.id}
               collectionSettings={collection.settings}
-              expandedFolderIds={matchedFolderIds}
+              expandedFolderIds={hasCollectionMatch && searchQuery ? new Set(folders.map((f) => f.id)) : matchedFolderIds}
               highlightedFolderIds={highlightedFolderIds}
               collapseSignal={collapseSignal}
               level={0}

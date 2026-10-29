@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Endpoint, Environment } from '@api-lab/api-types';
 import { X, Radio, ArrowDownUp, ArrowLeftRight, AlertTriangle, Plus } from 'lucide-react';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 import { getHttpMethodColor } from '../../utils/httpMethodUtils';
+import { isTabConflicted } from '../../utils/conflictDetector';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
 
 export const EndpointTabBar: React.FC = () => {
+  const queryClient = useQueryClient();
   const {
     openEndpoints,
     activeEndpointId,
@@ -138,6 +140,9 @@ export const EndpointTabBar: React.FC = () => {
           {openEndpoints.map((ep) => {
             const isActive = ep.id === activeEndpointId;
             const dirty = isEndpointDirty(ep.id);
+            const cachedEndpoints = queryClient.getQueryData<Endpoint[]>(['endpoints', ep.collection_id]);
+            const serverEp = cachedEndpoints?.find((item) => item.id === ep.id);
+            const isConflict = isTabConflicted(ep, cachedEndpoints);
 
             // Clean endpoint name for tab display, avoiding full summary strings
             const tabSummary = ep.config?.summary || ep.config?.specification?.summary;
@@ -184,6 +189,16 @@ export const EndpointTabBar: React.FC = () => {
               >
                 {renderMethodBadge(ep)}
                 <span className="truncate max-w-[120px] text-xs font-medium">{tabDisplayName}</span>
+
+                {/* Conflict Warning Indicator */}
+                {isConflict && (
+                  <span
+                    title={`Conflict: Remote changes detected on server (Server v${serverEp?.version} vs Tab v${ep.version})`}
+                    className="flex items-center flex-shrink-0"
+                  >
+                    <AlertTriangle size={11} className="text-amber-400 animate-pulse" />
+                  </span>
+                )}
 
                 {/* Unsaved Changes Indicator Dot */}
                 {dirty && (

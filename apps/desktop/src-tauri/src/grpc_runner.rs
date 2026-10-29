@@ -106,6 +106,7 @@ pub async fn run_grpc_sample_payload(
         Err(e) => {
             return GrpcSamplePayloadResponse {
                 payload: serde_json::Value::Null,
+                enums: HashMap::new(),
                 error: Some(e.to_string()),
             };
         }

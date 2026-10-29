@@ -4,8 +4,9 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection, CollectionFolder } from '@api-lab/api-types';
-import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp } from 'lucide-react';
+import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp, Wand2 } from 'lucide-react';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
+import { ConflictDiffModal } from './ConflictDiffModal';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
@@ -37,7 +38,7 @@ import {
 } from '../../utils/folderSettings';
 import { findSwaggerFolderForEndpoint, getFolderPath } from '../../utils/folderTree';
 import { fetchSwaggerSpec } from '../../utils/swaggerGenerator';
-import { parseSwaggerSpec } from '../../utils/swaggerParser';
+import { parseSwaggerSpec, resolveSwaggerSamplePayload } from '../../utils/swaggerParser';
 import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
 import { EndpointSpecificationView } from '../common/EndpointSpecificationView';
 
@@ -167,6 +168,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [conflictModalData, setConflictModalData] = useState<{ localConfig: any; remoteEndpoint: Endpoint } | null>(null);
 
   // Fetch parent collection for inherited settings
   const { data: collection } = useQuery<Collection>({
@@ -221,26 +223,32 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     staleTime: 5 * 60 * 1000,
   });
 
-  const endpointSpec = React.useMemo(() => {
-    let spec = endpoint.config?.specification || null;
-    if (!swaggerDoc) return spec;
-    const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo?.swaggerUrl || '');
+  const matchedSwaggerEndpoint = React.useMemo(() => {
+    if (!swaggerDoc || !swaggerFolderInfo?.swaggerUrl) return null;
+    const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo.swaggerUrl);
     for (const svc of parsed.services) {
       for (const ep of svc.endpoints) {
         if (
           ep.method.toUpperCase() === method.toUpperCase() &&
           (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
         ) {
-          if (!spec) return ep.specification || null;
-          if (!spec.summary && ep.summary) {
-            return { ...spec, summary: ep.summary };
-          }
-          return spec;
+          return ep;
         }
       }
     }
+    return null;
+  }, [swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+
+  const endpointSpec = React.useMemo(() => {
+    let spec = endpoint.config?.specification || null;
+    if (matchedSwaggerEndpoint) {
+      if (!spec) return matchedSwaggerEndpoint.specification || null;
+      if (!spec.summary && matchedSwaggerEndpoint.summary) {
+        return { ...spec, summary: matchedSwaggerEndpoint.summary };
+      }
+    }
     return spec;
-  }, [endpoint.config?.specification, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+  }, [endpoint.config?.specification, matchedSwaggerEndpoint]);
 
   const folderPath = React.useMemo(() => {
     return getFolderPath(folders, endpoint.folder_id);
@@ -249,21 +257,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const requestSummary = React.useMemo(() => {
     if (endpoint.config?.summary) return endpoint.config.summary;
     if (endpointSpec?.summary) return endpointSpec.summary;
-    if (swaggerDoc) {
-      const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo?.swaggerUrl || '');
-      for (const svc of parsed.services) {
-        for (const ep of svc.endpoints) {
-          if (
-            ep.method.toUpperCase() === method.toUpperCase() &&
-            (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
-          ) {
-            return ep.summary || null;
-          }
-        }
-      }
-    }
+    if (matchedSwaggerEndpoint?.summary) return matchedSwaggerEndpoint.summary;
     return null;
-  }, [endpoint.config?.summary, endpointSpec?.summary, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+  }, [endpoint.config?.summary, endpointSpec?.summary, matchedSwaggerEndpoint]);
 
   const displayEndpointName = React.useMemo(() => {
     if (
@@ -312,6 +308,23 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     } catch (err: any) {
       setStatusMessage(`Error renaming: ${err.message}`);
       setEditNameValue(endpoint.name);
+    }
+  };
+
+  const handleGenerateSwaggerSample = () => {
+    const sampleStr = resolveSwaggerSamplePayload(
+      method,
+      url,
+      endpoint.name,
+      swaggerDoc,
+      swaggerFolderInfo?.swaggerUrl,
+      matchedSwaggerEndpoint
+    );
+    if (sampleStr) {
+      setBodyType('json');
+      setBody(sampleStr);
+      setStatusMessage('Generated example JSON payload from Swagger schema');
+      setTimeout(() => setStatusMessage(null), 2500);
     }
   };
 
@@ -459,14 +472,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       } catch (err: any) {
         if (err?.message?.includes('version mismatch') || err?.status === 409) {
           const latest = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`);
-          currentVersionRef.current = latest.version;
-          res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              version: latest.version,
-              config: cfg,
-            }),
-          });
+          setConflictModalData({ localConfig: cfg, remoteEndpoint: latest });
+          setStatusMessage('Conflict: Another user saved changes on server');
+          return;
         } else {
           throw err;
         }
@@ -497,6 +505,57 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         saveChanges(options);
       }
     }
+  };
+
+  const handleForceOverwrite = async () => {
+    if (!conflictModalData) return;
+    const { localConfig: cfg, remoteEndpoint: latest } = conflictModalData;
+    try {
+      const res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          version: latest.version,
+          config: cfg,
+        }),
+      });
+      setCurrentVersion(res.version);
+      currentVersionRef.current = res.version;
+      clearEndpointDraft(endpoint.id);
+      setActiveEndpoint(res);
+      queryClient.setQueryData<Endpoint[]>(
+        ['endpoints', endpoint.collection_id],
+        (prev) => prev?.map((ep) => (ep.id === res.id ? res : ep)) || [res]
+      );
+      setConflictModalData(null);
+      setStatusMessage('Saved successfully (overwritten)');
+      setTimeout(() => setStatusMessage(null), 2000);
+    } catch (err: any) {
+      setStatusMessage(`Error overwriting: ${err.message}`);
+    }
+  };
+
+  const handleDiscardLocalEdits = () => {
+    if (!conflictModalData) return;
+    const { remoteEndpoint: latest } = conflictModalData;
+    setCurrentVersion(latest.version);
+    currentVersionRef.current = latest.version;
+    clearEndpointDraft(endpoint.id);
+    setActiveEndpoint(latest);
+    const cfg = latest.config || {};
+    setMethod(cfg.method || 'GET');
+    setUrl(cfg.url || 'https://httpbin.org/get');
+    setQueryParams((cfg.query_params || []) as QueryParamRow[]);
+    if (Array.isArray(cfg.headers_list)) {
+      setHeaders(cfg.headers_list);
+    }
+    setBodyType(cfg.body_type || 'json');
+    setBody(cfg.body || '');
+    setAuth(cfg.auth || { auth_type: 'none' });
+    setPreRequestScript(cfg.pre_request_script || '');
+    setPostResponseScript(cfg.post_response_script || cfg.post_request_script || '');
+    setConflictModalData(null);
+    setStatusMessage('Discarded local edits and loaded remote server version');
+    setTimeout(() => setStatusMessage(null), 2000);
   };
 
   // Keep working draft synchronized in store so tab switches retain unsaved edits
@@ -646,7 +705,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       // Sync variables modified by pm.environment.set to the active environment (Bug 2 Fix)
       const syncRes = await syncEnvironmentVariables(
-        beforeResult.variables,
+        currentVars,
         afterResult.variables,
         activeEnvironmentId,
         {
@@ -876,6 +935,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Scripts</span>
+            {Boolean(preRequestScript.trim() || postResponseScript.trim()) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            )}
             {hookTests.length > 0 && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
                 {hookTests.filter((t) => t.passed).length}/{hookTests.length}
@@ -965,51 +1027,65 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         {/* Body Panel */}
         {activeTab === 'body' && (
           <div className="space-y-3 h-full flex flex-col">
-            <div className="flex gap-4 items-center">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="bodyType"
-                  checked={bodyType === 'none'}
-                  onChange={() => setBodyType('none')}
-                />
-                <span>None</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="bodyType"
-                  checked={bodyType === 'json'}
-                  onChange={() => setBodyType('json')}
-                />
-                <span>JSON</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="bodyType"
-                  checked={bodyType === 'text'}
-                  onChange={() => setBodyType('text')}
-                />
-                <span>Plain Text</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="bodyType"
-                  checked={bodyType === 'form'}
-                  onChange={() => setBodyType('form')}
-                />
+            <div className="flex items-center justify-between">
+              <div className="flex gap-4 items-center">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bodyType"
+                    checked={bodyType === 'none'}
+                    onChange={() => setBodyType('none')}
+                  />
+                  <span>None</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bodyType"
+                    checked={bodyType === 'json'}
+                    onChange={() => setBodyType('json')}
+                  />
+                  <span>JSON</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bodyType"
+                    checked={bodyType === 'text'}
+                    onChange={() => setBodyType('text')}
+                  />
+                  <span>Plain Text</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bodyType"
+                    checked={bodyType === 'form'}
+                    onChange={() => setBodyType('form')}
+                  />
                   <span>Form URL-Encoded</span>
                 </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="radio" name="bodyType" checked={bodyType === 'multipart'} onChange={() => setBodyType('multipart')} />
-                <span>Multipart</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="radio" name="bodyType" checked={bodyType === 'binary'} onChange={() => setBodyType('binary')} />
-                <span>Binary</span>
-              </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="bodyType" checked={bodyType === 'multipart'} onChange={() => setBodyType('multipart')} />
+                  <span>Multipart</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="bodyType" checked={bodyType === 'binary'} onChange={() => setBodyType('binary')} />
+                  <span>Binary</span>
+                </label>
+              </div>
+
+              {isSwaggerEndpoint && (
+                <button
+                  type="button"
+                  onClick={handleGenerateSwaggerSample}
+                  title="Generate example JSON payload from Swagger schema"
+                  className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1 shadow-sm"
+                >
+                  <Wand2 size={11} className="text-zinc-400" />
+                  <span>Generate Example</span>
+                </button>
+              )}
             </div>
 
             {bodyType === 'json' ? (
@@ -1438,6 +1514,18 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           />
         )}
       </div>
+
+      {conflictModalData && (
+        <ConflictDiffModal
+          isOpen={true}
+          localEndpoint={endpoint}
+          remoteEndpoint={conflictModalData.remoteEndpoint}
+          localConfig={conflictModalData.localConfig}
+          onOverwrite={handleForceOverwrite}
+          onDiscardLocal={handleDiscardLocalEdits}
+          onClose={() => setConflictModalData(null)}
+        />
+      )}
     </div>
   );
 };

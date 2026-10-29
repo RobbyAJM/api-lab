@@ -26,6 +26,7 @@ export const CommandPaletteModal: React.FC = () => {
     closeEndpoint,
     closeOtherEndpoints,
     closeAllEndpoints,
+    setWorkspaceDropdownOpen,
   } = useAppStore();
 
   const [query, setQuery] = useState('');
@@ -114,6 +115,10 @@ export const CommandPaletteModal: React.FC = () => {
         }
       } else if (item.actionId === 'close_all_tabs') {
         closeAllEndpoints();
+      } else if (item.actionId === 'switch_workspace') {
+        setCommandPaletteOpen(false);
+        setWorkspaceDropdownOpen(true);
+        return;
       }
     } else {
       const recency = loadPaletteRecency();

@@ -5,6 +5,7 @@ import {
   generateSampleFromSchema,
   deriveBaseUrl,
   resolveRef,
+  resolveSwaggerSamplePayload,
   type SwaggerDoc,
 } from './swaggerParser.ts';
 
@@ -429,4 +430,69 @@ test('parseSwaggerSpec: prioritizes operationId over path for ep.name while stor
   assert.equal(ep.name, 'getUserById');
   assert.equal(ep.summary, 'Retrieve User by ID');
   assert.equal(ep.specification?.summary, 'Retrieve User by ID');
+});
+
+test('parseSwaggerSpec: returns exact cached reference on repeated calls with identical doc', () => {
+  const doc: SwaggerDoc = {
+    swagger: '2.0',
+    paths: {
+      '/ping': {
+        get: {
+          responses: {
+            '200': { description: 'pong' },
+          },
+        },
+      },
+    },
+  };
+
+  const first = parseSwaggerSpec(doc, 'https://example.com/swagger.json');
+  const second = parseSwaggerSpec(doc, 'https://example.com/swagger.json');
+  assert.equal(first, second); // Identity comparison validates WeakMap caching
+});
+
+test('resolveSwaggerSamplePayload: resolves sample payload from matched endpoint or spec search', () => {
+  const doc: SwaggerDoc = {
+    swagger: '2.0',
+    host: 'api.example.com',
+    paths: {
+      '/items': {
+        post: {
+          operationId: 'CreateItem',
+          parameters: [
+            {
+              name: 'body',
+              in: 'body',
+              schema: {
+                type: 'object',
+                properties: { title: { type: 'string', example: 'Book' } },
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+
+  const sample = resolveSwaggerSamplePayload(
+    'POST',
+    'https://api.example.com/items',
+    'CreateItem',
+    doc,
+    'https://api.example.com/swagger.json'
+  );
+
+  assert.ok(sample);
+  assert.ok(sample.includes('Book'));
+
+  // Fallback to matchedEndpoint directly
+  const direct = resolveSwaggerSamplePayload('GET', '/test', 'test', null, undefined, {
+    name: 'test',
+    method: 'GET',
+    path: '/test',
+    fullUrl: 'http://test',
+    bodyType: 'json',
+    body: '{"direct":true}',
+  } as any);
+  assert.equal(direct, '{"direct":true}');
 });

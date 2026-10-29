@@ -276,6 +276,7 @@ export interface GrpcSamplePayloadRequest {
 
 export interface GrpcSamplePayloadResponse {
   payload: any;
+  enums?: Record<string, string[]>;
   error?: string;
 }
 

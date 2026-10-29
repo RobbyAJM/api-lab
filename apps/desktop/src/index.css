@@ -59,6 +59,35 @@ input, textarea, select {
   background: rgb(var(--color-zinc-500));
 }
 
+/* Sidebar auto-hiding scrollbar (Task 12) */
+.sidebar-scroll-area {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 0.2s ease;
+}
+.sidebar-scroll-area:hover,
+.sidebar-scroll-area.is-scrolling {
+  scrollbar-color: rgb(var(--color-zinc-700)) transparent;
+}
+.sidebar-scroll-area::-webkit-scrollbar {
+  width: 5px;
+}
+.sidebar-scroll-area::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sidebar-scroll-area::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+.sidebar-scroll-area:hover::-webkit-scrollbar-thumb,
+.sidebar-scroll-area.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-zinc-700));
+}
+.sidebar-scroll-area::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-zinc-500));
+}
+
 @keyframes responseProgressMove {
   0% {
     transform: translateX(-100%);

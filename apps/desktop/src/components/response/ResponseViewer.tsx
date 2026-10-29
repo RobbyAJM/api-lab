@@ -240,18 +240,25 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     ? lastHttpResponse?.headers?.['content-type']
     : 'application/json';
 
-  const detectedFormat = detectResponseFormat(rawBody, contentType);
-  const formattedBody = formatResponseBody(rawBody, detectedFormat);
+  const detectedFormat = React.useMemo(
+    () => detectResponseFormat(rawBody, contentType),
+    [rawBody, contentType]
+  );
+  const formattedBody = React.useMemo(
+    () => formatResponseBody(rawBody, detectedFormat),
+    [rawBody, detectedFormat]
+  );
 
   // Saved response formatting and detection
+  const savedRawBody = savedResponse?.response_body || '';
   const savedContentType = savedResponse?.response_headers?.['content-type'];
-  const savedFormat = detectResponseFormat(
-    savedResponse?.response_body || '',
-    savedContentType
+  const savedFormat = React.useMemo(
+    () => detectResponseFormat(savedRawBody, savedContentType),
+    [savedRawBody, savedContentType]
   );
-  const formattedSavedBody = formatResponseBody(
-    savedResponse?.response_body || '',
-    savedFormat
+  const formattedSavedBody = React.useMemo(
+    () => formatResponseBody(savedRawBody, savedFormat),
+    [savedRawBody, savedFormat]
   );
 
   const headersDisplay = isHttp

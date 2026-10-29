@@ -55,10 +55,16 @@ test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
   assert.equal(matchesShortcut({ key: 'Enter' }, 'send_request'), false);
   assert.equal(matchesShortcut({ key: 'a', ctrlKey: true }, 'send_request'), false);
 
-  // save_endpoint: Ctrl+S or Cmd+S
+  // save_endpoint: Ctrl+S or Cmd+S (without Shift)
   assert.equal(matchesShortcut({ key: 's', ctrlKey: true }, 'save_endpoint'), true);
   assert.equal(matchesShortcut({ key: 'S', metaKey: true }, 'save_endpoint'), true);
+  assert.equal(matchesShortcut({ key: 's', ctrlKey: true, shiftKey: true }, 'save_endpoint'), false);
   assert.equal(matchesShortcut({ key: 's' }, 'save_endpoint'), false);
+
+  // switch_workspace: Ctrl+Shift+S or Cmd+Shift+S
+  assert.equal(matchesShortcut({ key: 's', ctrlKey: true, shiftKey: true }, 'switch_workspace'), true);
+  assert.equal(matchesShortcut({ key: 'S', metaKey: true, shiftKey: true }, 'switch_workspace'), true);
+  assert.equal(matchesShortcut({ key: 's', ctrlKey: true }, 'switch_workspace'), false);
 
   // open_command: Ctrl+K or Cmd+K
   assert.equal(matchesShortcut({ key: 'k', ctrlKey: true }, 'open_command'), true);
@@ -297,9 +303,17 @@ test('searchUnifiedCommandPalette: finds both commands and endpoints in Ctrl+K',
     assert.equal(res4[0].endpoint.name, 'Manager Login');
   }
 
-  // 5. Empty search returns commands plus endpoints
+  // 5. Search "switch workspace" finds switch workspace command
+  const resSwitch = searchUnifiedCommandPalette(endpoints, collections, 'switch workspace');
+  assert.equal(resSwitch.length, 1);
+  assert.equal(resSwitch[0].type, 'command');
+  if (resSwitch[0].type === 'command') {
+    assert.equal(resSwitch[0].actionId, 'switch_workspace');
+  }
+
+  // 6. Empty search returns commands plus endpoints
   const all = searchUnifiedCommandPalette(endpoints, collections, '');
-  assert.equal(all.length, 4); // 3 commands + 1 endpoint
+  assert.equal(all.length, 5); // 4 commands + 1 endpoint
 });
 
 test('navigateListIndex: wraps correctly for up and down arrow keys', () => {
