@@ -6,6 +6,7 @@ import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection, CollectionFolder } from '@api-lab/api-types';
 import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp, Wand2 } from 'lucide-react';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
+import { ConflictDiffModal } from './ConflictDiffModal';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
@@ -167,6 +168,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [conflictModalData, setConflictModalData] = useState<{ localConfig: any; remoteEndpoint: Endpoint } | null>(null);
 
   // Fetch parent collection for inherited settings
   const { data: collection } = useQuery<Collection>({
@@ -477,14 +479,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       } catch (err: any) {
         if (err?.message?.includes('version mismatch') || err?.status === 409) {
           const latest = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`);
-          currentVersionRef.current = latest.version;
-          res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              version: latest.version,
-              config: cfg,
-            }),
-          });
+          setConflictModalData({ localConfig: cfg, remoteEndpoint: latest });
+          setStatusMessage('Conflict: Another user saved changes on server');
+          return;
         } else {
           throw err;
         }
@@ -515,6 +512,57 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         saveChanges(options);
       }
     }
+  };
+
+  const handleForceOverwrite = async () => {
+    if (!conflictModalData) return;
+    const { localConfig: cfg, remoteEndpoint: latest } = conflictModalData;
+    try {
+      const res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          version: latest.version,
+          config: cfg,
+        }),
+      });
+      setCurrentVersion(res.version);
+      currentVersionRef.current = res.version;
+      clearEndpointDraft(endpoint.id);
+      setActiveEndpoint(res);
+      queryClient.setQueryData<Endpoint[]>(
+        ['endpoints', endpoint.collection_id],
+        (prev) => prev?.map((ep) => (ep.id === res.id ? res : ep)) || [res]
+      );
+      setConflictModalData(null);
+      setStatusMessage('Saved successfully (overwritten)');
+      setTimeout(() => setStatusMessage(null), 2000);
+    } catch (err: any) {
+      setStatusMessage(`Error overwriting: ${err.message}`);
+    }
+  };
+
+  const handleDiscardLocalEdits = () => {
+    if (!conflictModalData) return;
+    const { remoteEndpoint: latest } = conflictModalData;
+    setCurrentVersion(latest.version);
+    currentVersionRef.current = latest.version;
+    clearEndpointDraft(endpoint.id);
+    setActiveEndpoint(latest);
+    const cfg = latest.config || {};
+    setMethod(cfg.method || 'GET');
+    setUrl(cfg.url || 'https://httpbin.org/get');
+    setQueryParams((cfg.query_params || []) as QueryParamRow[]);
+    if (Array.isArray(cfg.headers_list)) {
+      setHeaders(cfg.headers_list);
+    }
+    setBodyType(cfg.body_type || 'json');
+    setBody(cfg.body || '');
+    setAuth(cfg.auth || { auth_type: 'none' });
+    setPreRequestScript(cfg.pre_request_script || '');
+    setPostResponseScript(cfg.post_response_script || cfg.post_request_script || '');
+    setConflictModalData(null);
+    setStatusMessage('Discarded local edits and loaded remote server version');
+    setTimeout(() => setStatusMessage(null), 2000);
   };
 
   // Keep working draft synchronized in store so tab switches retain unsaved edits
@@ -1473,6 +1521,18 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           />
         )}
       </div>
+
+      {conflictModalData && (
+        <ConflictDiffModal
+          isOpen={true}
+          localEndpoint={endpoint}
+          remoteEndpoint={conflictModalData.remoteEndpoint}
+          localConfig={conflictModalData.localConfig}
+          onOverwrite={handleForceOverwrite}
+          onDiscardLocal={handleDiscardLocalEdits}
+          onClose={() => setConflictModalData(null)}
+        />
+      )}
     </div>
   );
 };

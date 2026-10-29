@@ -28,7 +28,6 @@ import {
   FolderPlus,
   ChevronsDownUp,
   RefreshCw,
-  Globe,
   Search,
 } from 'lucide-react';
 import { GenerateGrpcModal } from './GenerateGrpcModal';

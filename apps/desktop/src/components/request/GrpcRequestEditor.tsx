@@ -32,6 +32,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
+import { ConflictDiffModal } from './ConflictDiffModal';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
@@ -327,6 +328,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [generatingPayload, setGeneratingPayload] = useState(false);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [conflictModalData, setConflictModalData] = useState<{ localConfig: any; remoteEndpoint: Endpoint } | null>(null);
 
   const [isMethodPickerOpen, setIsMethodPickerOpen] = useState(false);
   const [methodSearchQuery, setMethodSearchQuery] = useState('');
@@ -633,14 +635,9 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       } catch (err: any) {
         if (err?.message?.includes('version mismatch') || err?.status === 409) {
           const latest = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`);
-          currentVersionRef.current = latest.version;
-          res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
-            method: 'PATCH',
-            body: JSON.stringify({
-              version: latest.version,
-              config: cfg,
-            }),
-          });
+          setConflictModalData({ localConfig: cfg, remoteEndpoint: latest });
+          setStatusMessage('Conflict: Another user saved changes on server');
+          return;
         } else {
           throw err;
         }
@@ -671,6 +668,55 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         saveChanges(options);
       }
     }
+  };
+
+  const handleForceOverwrite = async () => {
+    if (!conflictModalData) return;
+    const { localConfig: cfg, remoteEndpoint: latest } = conflictModalData;
+    try {
+      const res = await apiRequest<Endpoint>(`/endpoints/${endpoint.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          version: latest.version,
+          config: cfg,
+        }),
+      });
+      setCurrentVersion(res.version);
+      currentVersionRef.current = res.version;
+      clearEndpointDraft(endpoint.id);
+      setActiveEndpoint(res);
+      queryClient.setQueryData<Endpoint[]>(
+        ['endpoints', endpoint.collection_id],
+        (prev) => prev?.map((ep) => (ep.id === res.id ? res : ep)) || [res]
+      );
+      setConflictModalData(null);
+      setStatusMessage('Saved successfully (overwritten)');
+      setTimeout(() => setStatusMessage(null), 2000);
+    } catch (err: any) {
+      setStatusMessage(`Error overwriting: ${err.message}`);
+    }
+  };
+
+  const handleDiscardLocalEdits = () => {
+    if (!conflictModalData) return;
+    const { remoteEndpoint: latest } = conflictModalData;
+    setCurrentVersion(latest.version);
+    currentVersionRef.current = latest.version;
+    clearEndpointDraft(endpoint.id);
+    setActiveEndpoint(latest);
+    const cfg = latest.config || {};
+    setServerAddress(cfg.server_address !== undefined ? cfg.server_address : 'localhost:50051');
+    setSelectedService(cfg.service || '');
+    setSelectedMethod(cfg.method || '');
+    if (cfg.payload) {
+      setPayloadStr(typeof cfg.payload === 'string' ? cfg.payload : JSON.stringify(cfg.payload, null, 2));
+    }
+    setAuth(cfg.auth || { auth_type: 'none' });
+    setPreRequestScript(cfg.pre_request_script || '');
+    setPostResponseScript(cfg.post_response_script || cfg.post_request_script || '');
+    setConflictModalData(null);
+    setStatusMessage('Discarded local edits and loaded remote server version');
+    setTimeout(() => setStatusMessage(null), 2000);
   };
 
   // Keep working draft synchronized in store so tab switches retain unsaved edits
@@ -1813,6 +1859,18 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           );
         })()}
       </div>
+
+      {conflictModalData && (
+        <ConflictDiffModal
+          isOpen={true}
+          localEndpoint={endpoint}
+          remoteEndpoint={conflictModalData.remoteEndpoint}
+          localConfig={conflictModalData.localConfig}
+          onOverwrite={handleForceOverwrite}
+          onDiscardLocal={handleDiscardLocalEdits}
+          onClose={() => setConflictModalData(null)}
+        />
+      )}
     </div>
   );
 };
