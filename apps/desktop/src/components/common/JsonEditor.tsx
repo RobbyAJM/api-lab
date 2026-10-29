@@ -2,11 +2,11 @@ import React, { useRef, useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
-import { tokenizeJsonLine, type VariableSource } from '../../utils/variableHighlight';
+import { tokenizeJsonLine, getVariableTokenClassName, type VariableSource } from '../../utils/variableHighlight';
 import { handleEditorKeyDown, findAutocompleteQuery } from '../../utils/editorKeyboard';
 import { EditorHistory } from '../../utils/editorHistory';
 import { parseJsonWithComments } from '../../utils/jsonComments';
-import { findHoveredVariableToken, type BoundingBox } from '../../utils/variableHover';
+import { findHoveredVariableToken, createHoverTimerController, type BoundingBox } from '../../utils/variableHover';
 import {
   findFoldableRanges,
   collapseDocument,
@@ -45,7 +45,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     selected: number;
     hasOpeningQuote: boolean;
   } | null>(null);
-  const clearTimerRef = useRef<any>(null);
+  const hoverTimer = useRef(createHoverTimerController()).current;
 
   // Set of folded original startLine indices
   const [foldedStartLines, setFoldedStartLines] = useState<Set<number>>(new Set());
@@ -80,16 +80,13 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   const effectiveVars = variables !== undefined ? variables : envVars;
 
   function scheduleClear() {
-    clearTimerRef.current = setTimeout(() => {
+    hoverTimer.schedule(() => {
       setHoverState(null);
-    }, 200);
+    }, 300);
   }
 
   function cancelClear() {
-    if (clearTimerRef.current) {
-      clearTimeout(clearTimerRef.current);
-      clearTimerRef.current = null;
-    }
+    hoverTimer.cancel();
   }
 
   function handleMouseMove(e: React.MouseEvent<HTMLTextAreaElement>) {
@@ -110,9 +107,9 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
 
   useEffect(() => {
     return () => {
-      if (clearTimerRef.current) clearTimeout(clearTimerRef.current);
+      hoverTimer.cancel();
     };
-  }, []);
+  }, [hoverTimer]);
 
   if (!historyRef.current) {
     historyRef.current = new EditorHistory(value, 0, 0);
@@ -335,9 +332,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
           {tokens.map((token, tIdx) => {
             let colorClass = 'text-zinc-200';
             if (token.type === 'variable') {
-              colorClass = token.isDefined
-                ? 'text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-800/50 px-0.5 rounded'
-                : 'text-rose-300 font-bold bg-rose-950/60 border border-rose-800/50 px-0.5 rounded';
+              colorClass = getVariableTokenClassName(token.isDefined ?? false, true);
             } else if (token.type === 'comment') {
               colorClass = 'text-zinc-500 italic';
             } else if (token.type === 'key') {

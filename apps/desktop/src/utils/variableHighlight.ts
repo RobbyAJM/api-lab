@@ -191,3 +191,19 @@ export function tokenizeJsonLine(line: string, env?: VariableSource): JsonSyntax
 
   return tokens;
 }
+
+/**
+ * Returns Tailwind classes for variable tokens without adding horizontal padding or borders,
+ * preserving strict character-grid alignment with underlying transparent input/textarea elements.
+ */
+export function getVariableTokenClassName(isDefined: boolean, isEditor: boolean = false): string {
+  if (isEditor) {
+    return isDefined
+      ? 'text-emerald-300 font-bold bg-emerald-950/60 ring-1 ring-inset ring-emerald-800/50 rounded-sm'
+      : 'text-rose-300 font-bold bg-rose-950/60 ring-1 ring-inset ring-rose-800/50 rounded-sm';
+  }
+  return isDefined
+    ? 'text-emerald-300 font-semibold bg-emerald-950/70 ring-1 ring-inset ring-emerald-800/60 rounded-sm'
+    : 'text-rose-300 font-semibold bg-rose-950/70 ring-1 ring-inset ring-rose-800/60 rounded-sm';
+}
+
