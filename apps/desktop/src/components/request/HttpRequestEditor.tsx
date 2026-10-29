@@ -335,7 +335,8 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         swaggerFolderInfo?.swaggerUrl,
         matchedSwaggerEndpoint,
         queryParams,
-        pathVariables
+        pathVariables,
+        endpointSpec
       );
       if (paramRes && (paramRes.queryParams.length > 0 || paramRes.pathVariables.length > 0)) {
         if (paramRes.queryParams.length > 0) {
