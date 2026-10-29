@@ -297,9 +297,17 @@ test('searchUnifiedCommandPalette: finds both commands and endpoints in Ctrl+K',
     assert.equal(res4[0].endpoint.name, 'Manager Login');
   }
 
-  // 5. Empty search returns commands plus endpoints
+  // 5. Search "switch workspace" finds switch workspace command
+  const resSwitch = searchUnifiedCommandPalette(endpoints, collections, 'switch workspace');
+  assert.equal(resSwitch.length, 1);
+  assert.equal(resSwitch[0].type, 'command');
+  if (resSwitch[0].type === 'command') {
+    assert.equal(resSwitch[0].actionId, 'switch_workspace');
+  }
+
+  // 6. Empty search returns commands plus endpoints
   const all = searchUnifiedCommandPalette(endpoints, collections, '');
-  assert.equal(all.length, 4); // 3 commands + 1 endpoint
+  assert.equal(all.length, 5); // 4 commands + 1 endpoint
 });
 
 test('navigateListIndex: wraps correctly for up and down arrow keys', () => {

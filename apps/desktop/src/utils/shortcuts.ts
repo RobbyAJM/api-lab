@@ -31,6 +31,13 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     category: 'Navigation',
   },
   {
+    id: 'switch_workspace',
+    keyLabel: 'Ctrl + Shift + S',
+    macKeyLabel: '⌘ + ⇧ + S',
+    description: 'Switch Workspace (Search and switch active workspace)',
+    category: 'Navigation',
+  },
+  {
     id: 'open_shortcuts',
     keyLabel: 'Ctrl + /',
     macKeyLabel: '⌘ + /',
@@ -147,7 +154,9 @@ export function matchesShortcut(event: KeyboardEventLike, shortcutId: string): b
     case 'send_request':
       return isMod && key === 'Enter';
     case 'save_endpoint':
-      return isMod && (key === 's' || key === 'S');
+      return isMod && !event.shiftKey && (key === 's' || key === 'S');
+    case 'switch_workspace':
+      return isMod && !!event.shiftKey && (key === 's' || key === 'S');
     case 'open_command':
       return isMod && (key === 'k' || key === 'K');
     case 'open_shortcuts':
@@ -255,13 +264,20 @@ export function searchEndpointsForCommandPalette(
 
 export interface PaletteCommandAction {
   id: string;
-  actionId: 'close_tab' | 'close_other_tabs' | 'close_all_tabs';
+  actionId: 'close_tab' | 'close_other_tabs' | 'close_all_tabs' | 'switch_workspace';
   title: string;
   description: string;
   keyLabel: string;
 }
 
 export const COMMAND_PALETTE_ACTIONS: PaletteCommandAction[] = [
+  {
+    id: 'cmd_switch_workspace',
+    actionId: 'switch_workspace',
+    title: 'Switch Workspace',
+    description: 'Open workspace picker and search workspaces',
+    keyLabel: 'Ctrl + Shift + S',
+  },
   {
     id: 'cmd_close_tab',
     actionId: 'close_tab',
@@ -293,7 +309,7 @@ export type UnifiedPaletteItem =
   | {
       type: 'command';
       id: string;
-      actionId: 'close_tab' | 'close_other_tabs' | 'close_all_tabs';
+      actionId: 'close_tab' | 'close_other_tabs' | 'close_all_tabs' | 'switch_workspace';
       title: string;
       description: string;
       keyLabel: string;

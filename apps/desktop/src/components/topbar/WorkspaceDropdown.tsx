@@ -4,8 +4,11 @@ import { useAppStore } from '../../store/useAppStore';
 import { filterWorkspaces, sortWorkspaces } from '../../utils/workspacePicker';
 
 export const WorkspaceDropdown: React.FC = () => {
+  const workspaceDropdownOpen = useAppStore((s) => s.workspaceDropdownOpen);
+  const setWorkspaceDropdownOpen = useAppStore((s) => s.setWorkspaceDropdownOpen);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('api_lab_favorite_workspaces');
@@ -17,6 +20,7 @@ export const WorkspaceDropdown: React.FC = () => {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const workspaces = useAppStore((s) => s.workspaces);
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
@@ -26,9 +30,24 @@ export const WorkspaceDropdown: React.FC = () => {
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
 
   useEffect(() => {
+    setOpen(workspaceDropdownOpen);
+  }, [workspaceDropdownOpen]);
+
+  const handleClose = () => {
+    setOpen(false);
+    setWorkspaceDropdownOpen(false);
+    setSearch('');
+  };
+
+  const handleOpen = () => {
+    setOpen(true);
+    setWorkspaceDropdownOpen(true);
+  };
+
+  useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
+        handleClose();
       }
     }
     if (open) {
@@ -56,11 +75,15 @@ export const WorkspaceDropdown: React.FC = () => {
   const filtered = filterWorkspaces(workspaces, search);
   const sorted = sortWorkspaces(filtered, activeWorkspaceId, favorites);
 
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [search, open]);
+
   return (
     <div ref={containerRef} className="relative flex items-center">
       <button
         type="button"
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => (open ? handleClose() : handleOpen())}
         className="flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium text-zinc-200 hover:bg-zinc-800/70 hover:text-white transition focus:outline-none"
         title="Switch Workspace"
       >
@@ -82,6 +105,24 @@ export const WorkspaceDropdown: React.FC = () => {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setHighlightedIndex((prev) => (sorted.length ? (prev + 1) % sorted.length : 0));
+                  } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setHighlightedIndex((prev) => (sorted.length ? (prev - 1 + sorted.length) % sorted.length : 0));
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (sorted[highlightedIndex]) {
+                      setActiveWorkspaceId(sorted[highlightedIndex].id);
+                      handleClose();
+                    }
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    handleClose();
+                  }
+                }}
                 placeholder="Search workspaces..."
                 className="w-full bg-zinc-950 border border-zinc-800 rounded pl-7 pr-2 py-1 text-xs text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-blue-500"
               />
@@ -90,7 +131,7 @@ export const WorkspaceDropdown: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                setOpen(false);
+                handleClose();
                 setWorkspaceModalOpen(true);
               }}
               className="px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded text-xs font-medium transition flex items-center gap-1 flex-shrink-0"
@@ -102,21 +143,25 @@ export const WorkspaceDropdown: React.FC = () => {
           </div>
 
           {/* Workspaces List */}
-          <div className="max-h-60 overflow-y-auto py-1">
+          <div ref={listRef} className="max-h-60 overflow-y-auto py-1">
             {sorted.length > 0 ? (
-              sorted.map((ws) => {
+              sorted.map((ws, idx) => {
                 const isActive = ws.id === activeWorkspaceId;
                 const isFav = favorites.includes(ws.id);
+                const isHighlighted = idx === highlightedIndex;
                 return (
                   <div
                     key={ws.id}
                     onClick={() => {
                       setActiveWorkspaceId(ws.id);
-                      setOpen(false);
+                      handleClose();
                     }}
+                    onMouseEnter={() => setHighlightedIndex(idx)}
                     className={`px-3 py-1.5 flex items-center justify-between text-xs cursor-pointer transition group ${
-                      isActive
-                        ? 'bg-zinc-800/80 text-white font-medium'
+                      isHighlighted
+                        ? 'bg-zinc-800 text-white font-medium'
+                        : isActive
+                        ? 'bg-zinc-800/50 text-white font-medium'
                         : 'text-zinc-300 hover:bg-zinc-800/50 hover:text-zinc-100'
                     }`}
                   >
@@ -152,7 +197,7 @@ export const WorkspaceDropdown: React.FC = () => {
             <button
               type="button"
               onClick={() => {
-                setOpen(false);
+                handleClose();
                 setWorkspaceModalOpen(true);
               }}
               className="w-full px-2.5 py-1.5 flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 rounded transition"

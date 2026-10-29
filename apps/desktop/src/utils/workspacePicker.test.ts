@@ -13,11 +13,11 @@ test('filterWorkspaces: filters by case-insensitive name match', () => {
   assert.equal(filterWorkspaces([ws1, ws2, ws3], '').length, 3);
 });
 
-test('sortWorkspaces: prioritizes active workspace, then favorites, then alphabetical', () => {
+test('sortWorkspaces: keeps natural location for active workspace and prioritizes favorites then alphabetical', () => {
   const sorted = sortWorkspaces([ws1, ws2, ws3], 'w2', ['w3']);
-  assert.equal(sorted[0].id, 'w2'); // active
-  assert.equal(sorted[1].id, 'w3'); // favorite
-  assert.equal(sorted[2].id, 'w1'); // alphabetical
+  assert.equal(sorted[0].id, 'w3'); // favorite (My Workspace)
+  assert.equal(sorted[1].id, 'w2'); // non-favorite (Personal Workspace)
+  assert.equal(sorted[2].id, 'w1'); // non-favorite (RND)
 });
 
 test('getWorkspaceInitials: extracts max 2 uppercase letters from workspace name', () => {

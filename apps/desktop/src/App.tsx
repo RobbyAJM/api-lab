@@ -55,6 +55,8 @@ export const App: React.FC = () => {
     setMembersModalOpen,
     workspaceModalOpen,
     setWorkspaceModalOpen,
+    workspaceDropdownOpen,
+    setWorkspaceDropdownOpen,
     commandPaletteOpen,
     setCommandPaletteOpen,
     shortcutsHelpOpen,
@@ -195,15 +197,32 @@ export const App: React.FC = () => {
       }
 
       if (backendUnavailable) return;
+      // Switch Workspace shortcut (Ctrl + Shift + S)
+      if (matchesShortcut(e, 'switch_workspace')) {
+        e.preventDefault();
+        setCommandPaletteOpen(false);
+        setWorkspaceDropdownOpen(!workspaceDropdownOpen);
+        return;
+      }
+
       // 1. Open / Toggle Command Palette (Ctrl + K)
       if (matchesShortcut(e, 'open_command')) {
         e.preventDefault();
         setCommandPaletteOpen(!commandPaletteOpen);
       }
-      // 2. Open / Toggle Shortcuts Help (Ctrl + /)
+      // 2. Open / Toggle Shortcuts Help (Ctrl + /) - skip if typing in input or code editor
       else if (matchesShortcut(e, 'open_shortcuts')) {
-        e.preventDefault();
-        setShortcutsHelpOpen(!shortcutsHelpOpen);
+        const target = e.target as HTMLElement | null;
+        const isEditing = target && (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('.monaco-editor')
+        );
+        if (!isEditing) {
+          e.preventDefault();
+          setShortcutsHelpOpen(!shortcutsHelpOpen);
+        }
       }
       // 3. Open / Toggle Environments (Ctrl + E)
       else if (matchesShortcut(e, 'open_environment')) {

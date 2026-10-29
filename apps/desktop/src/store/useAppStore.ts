@@ -104,6 +104,7 @@ interface AppState {
   membersModalOpen: boolean;
   membersModalTab: 'general' | 'members';
   workspaceModalOpen: boolean;
+  workspaceDropdownOpen: boolean;
   commandPaletteOpen: boolean;
   shortcutsHelpOpen: boolean;
   themeModalOpen: boolean;
@@ -160,6 +161,7 @@ interface AppState {
   setMembersModalOpen: (open: boolean, tab?: 'general' | 'members') => void;
   setMembersModalTab: (tab: 'general' | 'members') => void;
   setWorkspaceModalOpen: (open: boolean) => void;
+  setWorkspaceDropdownOpen: (open: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setShortcutsHelpOpen: (open: boolean) => void;
   openEditVariableModal: (params: {
@@ -698,6 +700,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     })),
   setMembersModalTab: (tab) => set({ membersModalTab: tab }),
   setWorkspaceModalOpen: (open) => set({ workspaceModalOpen: open }),
+  workspaceDropdownOpen: false,
+  setWorkspaceDropdownOpen: (open) => set({ workspaceDropdownOpen: open }),
   commandPaletteOpen: false,
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
   shortcutsHelpOpen: false,
