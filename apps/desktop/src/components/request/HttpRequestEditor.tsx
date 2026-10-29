@@ -42,6 +42,7 @@ import {
   parseSwaggerSpec,
   findMatchingSwaggerEndpoint,
   resolveSwaggerSampleResult,
+  resolveSwaggerSampleParams,
 } from '../../utils/swaggerParser';
 import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
 import { EndpointSpecificationView } from '../common/EndpointSpecificationView';
@@ -306,6 +307,40 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   };
 
   const handleGenerateSwaggerSample = () => {
+    // 1. If method is GET or active tab is params: generate example query and path parameters
+    if (activeTab === 'params' || method.toUpperCase() === 'GET') {
+      const paramRes = resolveSwaggerSampleParams(
+        method,
+        url,
+        endpoint.name,
+        swaggerDoc,
+        swaggerFolderInfo?.swaggerUrl,
+        matchedSwaggerEndpoint,
+        queryParams,
+        pathVariables
+      );
+      if (paramRes && (paramRes.queryParams.length > 0 || paramRes.pathVariables.length > 0)) {
+        if (paramRes.queryParams.length > 0) {
+          setQueryParams(paramRes.queryParams);
+          setUrl((prevUrl) => serializeQueryParamsToUrl(prevUrl, paramRes.queryParams));
+        }
+        if (paramRes.pathVariables.length > 0) {
+          setPathVariables(paramRes.pathVariables);
+        }
+        if (activeTab !== 'params') {
+          setActiveTab('params');
+        }
+        setStatusMessage(
+          `Generated ${paramRes.queryParams.length} example ${
+            paramRes.queryParams.length === 1 ? 'parameter' : 'parameters'
+          } from Swagger schema`
+        );
+        setTimeout(() => setStatusMessage(null), 3000);
+        return;
+      }
+    }
+
+    // 2. Otherwise: generate body sample
     const currentTarget = bodyType === 'none' ? undefined : bodyType;
     const result = resolveSwaggerSampleResult(
       method,
@@ -319,7 +354,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     );
 
     if (!result) {
-      setStatusMessage('No request body specification found for this endpoint');
+      setStatusMessage('No request specification found for this endpoint');
       setTimeout(() => setStatusMessage(null), 3000);
       return;
     }
@@ -986,6 +1021,20 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         {/* Params Panel */}
         {activeTab === 'params' && (
           <div className="space-y-4">
+            {isSwaggerEndpoint && (
+              <div className="flex items-center justify-end pb-1 select-none">
+                <button
+                  type="button"
+                  onClick={handleGenerateSwaggerSample}
+                  title="Generate example parameters from Swagger schema"
+                  className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1 shadow-sm"
+                >
+                  <Wand2 size={11} className="text-zinc-400" />
+                  <span>Generate Example</span>
+                </button>
+              </div>
+            )}
+
             {pathVariables.length > 0 && (
               <KeyValueTable
                 title="Path Variables"
@@ -1532,6 +1581,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 : null
             }
             schemas={endpointSpec?.schemas}
+            enums={endpointSpec?.enums}
             emptyMessage="No request or response specification found in the Swagger definition for this operation."
           />
         )}

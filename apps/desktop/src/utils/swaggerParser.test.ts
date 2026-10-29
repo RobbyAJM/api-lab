@@ -8,6 +8,7 @@ import {
   resolveSwaggerSamplePayload,
   resolveSwaggerSampleResult,
   findMatchingSwaggerEndpoint,
+  resolveSwaggerSampleParams,
   generateSmartStringSample,
   generateSmartNumberSample,
   generateSmartBooleanSample,
@@ -743,4 +744,96 @@ test('findMatchingSwaggerEndpoint: avoids prefix collision bug and matches exact
   );
   assert.ok(userMatch);
   assert.equal(userMatch.name, 'CreateUser');
+});
+
+test('resolveSwaggerSampleParams: correctly resolves GET query parameters and enum values', () => {
+  const doc: SwaggerDoc = {
+    swagger: '2.0',
+    paths: {
+      '/manager/api/v1/users/query/cursor': {
+        get: {
+          operationId: 'QueryCursor',
+          parameters: [
+            {
+              in: 'query',
+              name: 'cursor',
+              required: false,
+              type: 'string',
+            },
+            {
+              format: 'uint64',
+              in: 'query',
+              name: 'limit',
+              required: false,
+              type: 'string',
+            },
+            {
+              format: 'uint64',
+              in: 'query',
+              name: 'group_id',
+              required: false,
+              type: 'string',
+            },
+            {
+              default: 'SORT_DIRECTION_UNSPECIFIED',
+              enum: [
+                'SORT_DIRECTION_UNSPECIFIED',
+                'SORT_DIRECTION_ASC',
+                'SORT_DIRECTION_DESC',
+              ],
+              in: 'query',
+              name: 'sort_direction',
+              required: false,
+              type: 'string',
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'A successful response.',
+            },
+          },
+          summary: 'Paginate User with Cursor',
+          tags: ['UserAPI'],
+        },
+      },
+    },
+  };
+
+  const res = resolveSwaggerSampleParams(
+    'GET',
+    'https://api.example.com/manager/api/v1/users/query/cursor',
+    'QueryCursor',
+    doc,
+    'https://api.example.com/swagger.json'
+  );
+
+  assert.ok(res);
+  assert.equal(res.queryParams.length, 4);
+
+  const cursorRow = res.queryParams.find(([k]) => k === 'cursor');
+  assert.ok(cursorRow);
+  assert.equal(cursorRow[1], 'cur_1001');
+
+  const limitRow = res.queryParams.find(([k]) => k === 'limit');
+  assert.ok(limitRow);
+  assert.equal(limitRow[1], '20');
+
+  const groupRow = res.queryParams.find(([k]) => k === 'group_id');
+  assert.ok(groupRow);
+  assert.equal(groupRow[1], '1001');
+
+  const sortRow = res.queryParams.find(([k]) => k === 'sort_direction');
+  assert.ok(sortRow);
+  assert.equal(sortRow[1], 'SORT_DIRECTION_UNSPECIFIED');
+
+  // Verify extractSwaggerSpecification extracts enum metadata
+  const spec = parseSwaggerSpec(doc, 'https://api.example.com/swagger.json').services[0].endpoints[0].specification;
+  assert.ok(spec);
+  const sortField = spec.requestFields.find((f) => f.name === 'sort_direction');
+  assert.ok(sortField);
+  assert.deepEqual(sortField.enum, [
+    'SORT_DIRECTION_UNSPECIFIED',
+    'SORT_DIRECTION_ASC',
+    'SORT_DIRECTION_DESC',
+  ]);
 });

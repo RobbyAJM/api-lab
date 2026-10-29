@@ -10,6 +10,7 @@ export interface SwaggerFieldSummary {
   type: string;
   required?: boolean;
   description?: string;
+  enum?: string[];
 }
 
 export interface SwaggerEndpointSpecification {
@@ -19,6 +20,7 @@ export interface SwaggerEndpointSpecification {
   responseTypeName?: string;
   responseFields: SwaggerFieldSummary[];
   schemas?: Record<string, SwaggerFieldSummary[]>;
+  enums?: Record<string, string[]>;
 }
 
 export interface ParsedHttpEndpoint {
@@ -476,11 +478,17 @@ export function extractSwaggerSpecification(
       if (nonBody.length > 0) {
         requestTypeName = 'Parameters';
         for (const p of nonBody) {
+          const enumVals = Array.isArray(p.enum)
+            ? p.enum.map(String)
+            : Array.isArray(p.schema?.enum)
+            ? p.schema.enum.map(String)
+            : undefined;
           requestFields.push({
             name: p.name,
-            type: p.type || (p.schema ? formatSwaggerPropertyType(p.schema, doc) : 'string'),
+            type: enumVals ? 'enum' : p.type || (p.schema ? formatSwaggerPropertyType(p.schema, doc) : 'string'),
             required: !!p.required,
             description: p.description,
+            ...(enumVals && enumVals.length > 0 ? { enum: enumVals } : {}),
           });
         }
       }
@@ -549,9 +557,19 @@ export function extractSwaggerSpecification(
     }
   }
 
-  // 3. Collect all definition schemas for DTO drilldown
+  // 3. Collect all definition schemas for DTO drilldown and all standalone enums
   const allSchemas: Record<string, SwaggerFieldSummary[]> = {};
+  const allEnums: Record<string, string[]> = {};
   const defs = doc.definitions || doc.components?.schemas || {};
+
+  for (const [defName, defSchema] of Object.entries(defs)) {
+    if (!defSchema || typeof defSchema !== 'object') continue;
+    const resolvedDef = resolveFully(defSchema, doc);
+    if (Array.isArray(resolvedDef?.enum) && resolvedDef.enum.length > 0) {
+      allEnums[defName] = resolvedDef.enum.map(String);
+    }
+  }
+
   for (const [defName, defSchema] of Object.entries(defs)) {
     if (!defSchema || typeof defSchema !== 'object') continue;
     const resolvedDef = resolveFully(defSchema, doc);
@@ -576,14 +594,33 @@ export function extractSwaggerSpecification(
 
     const fields: SwaggerFieldSummary[] = [];
     for (const [propName, propSchema] of Object.entries(props)) {
+      const enumVals = Array.isArray((propSchema as any)?.enum)
+        ? (propSchema as any).enum.map(String)
+        : (propSchema as any)?.$ref
+        ? allEnums[getSchemaTypeName(propSchema) || '']
+        : undefined;
       fields.push({
         name: propName,
-        type: formatSwaggerPropertyType(propSchema, doc),
+        type: enumVals && !propSchema.type ? 'enum' : formatSwaggerPropertyType(propSchema, doc),
         required: reqList.includes(propName),
         description: (propSchema as any)?.description,
+        ...(enumVals && enumVals.length > 0 ? { enum: enumVals } : {}),
       });
     }
     allSchemas[defName] = fields;
+  }
+
+  // Populate enum on requestFields
+  for (const f of requestFields) {
+    if (!f.enum && allEnums[f.type]) {
+      f.enum = allEnums[f.type];
+    }
+  }
+  // Populate enum on responseFields
+  for (const f of responseFields) {
+    if (!f.enum && allEnums[f.type]) {
+      f.enum = allEnums[f.type];
+    }
   }
 
   return {
@@ -593,6 +630,7 @@ export function extractSwaggerSpecification(
     responseTypeName,
     responseFields,
     schemas: allSchemas,
+    enums: allEnums,
   };
 }
 
@@ -1136,4 +1174,163 @@ export function resolveSwaggerSamplePayload(
     specification
   );
   return result ? result.body : null;
+}
+
+export interface SwaggerSampleParamsResult {
+  queryParams: [string, string, string, boolean][];
+  pathVariables: [string, string, string, boolean][];
+}
+
+/**
+ * Resolves example query and path parameters from Swagger/OpenAPI spec.
+ */
+export function resolveSwaggerSampleParams(
+  method: string,
+  url: string,
+  endpointName: string,
+  swaggerDoc?: SwaggerDoc | null,
+  sourceUrl?: string,
+  matchedEndpoint?: ParsedHttpEndpoint | null,
+  currentParams: Array<[string, string, string?, boolean?]> = [],
+  currentPathVars: Array<[string, string, string?, boolean?]> = []
+): SwaggerSampleParamsResult | null {
+  let targetEp = matchedEndpoint;
+  if (!targetEp && swaggerDoc && sourceUrl) {
+    const parsed = parseSwaggerSpec(swaggerDoc, sourceUrl);
+    targetEp = findMatchingSwaggerEndpoint(parsed, method, url, endpointName);
+  }
+
+  let opParams: any[] = [];
+  if (swaggerDoc && sourceUrl) {
+    const ep =
+      targetEp ||
+      findMatchingSwaggerEndpoint(
+        parseSwaggerSpec(swaggerDoc, sourceUrl),
+        method,
+        url,
+        endpointName
+      );
+    if (ep && swaggerDoc.paths) {
+      const lowerMethod = method.toLowerCase();
+      for (const [pathKey, pathObj] of Object.entries(swaggerDoc.paths)) {
+        if (!pathObj || typeof pathObj !== 'object') continue;
+        const norm = convertSwaggerPathToApiPath(pathKey);
+        if (norm === ep.path || pathKey === ep.path || ep.fullUrl.includes(pathKey)) {
+          const common = Array.isArray(pathObj.parameters) ? pathObj.parameters : [];
+          const op = Array.isArray(pathObj[lowerMethod]?.parameters)
+            ? pathObj[lowerMethod].parameters
+            : [];
+          opParams = [...common, ...op];
+          break;
+        }
+      }
+    }
+  }
+
+  const generateParamVal = (p: any): string => {
+    const enumList = Array.isArray(p.enum)
+      ? p.enum
+      : Array.isArray(p.schema?.enum)
+      ? p.schema.enum
+      : null;
+    if (enumList && enumList.length > 0) {
+      if (p.default !== undefined && enumList.includes(p.default)) {
+        return String(p.default);
+      }
+      return String(enumList[0]);
+    }
+
+    if (p.default !== undefined && String(p.default).trim() !== '') {
+      return String(p.default);
+    }
+    if (p.example !== undefined && String(p.example).trim() !== '') {
+      return String(p.example);
+    }
+    if (p.schema?.default !== undefined && String(p.schema.default).trim() !== '') {
+      return String(p.schema.default);
+    }
+
+    const name = (p.name || '').toLowerCase().replace(/[-_]/g, '');
+    const format = String(p.format || p.schema?.format || '').toLowerCase();
+    const type = String(p.type || p.schema?.type || '').toLowerCase();
+
+    if (['uint64', 'int64', 'int32', 'integer'].includes(format) || type === 'integer') {
+      if (name.includes('page')) return '1';
+      if (name.includes('limit') || name.includes('size')) return '20';
+      if (name.endsWith('id') || name === 'id') return '1001';
+      return '100';
+    }
+
+    if (name.includes('cursor')) return 'cur_1001';
+    if (name.includes('email')) return 'user@example.com';
+    if (name.endsWith('id') || name === 'id') return '1001';
+    if (name.includes('limit') || name.includes('size')) return '20';
+    if (name.includes('page')) return '1';
+    if (name.includes('date')) return '2026-10-30';
+    if (name.includes('query') || name.includes('search') || name.includes('keyword')) return 'test';
+    if (name.includes('sort') || name.includes('order')) return 'asc';
+
+    return `${p.name || 'param'}_sample`;
+  };
+
+  const newQueryParams: [string, string, string, boolean][] = [];
+  const newPathVars: [string, string, string, boolean][] = [];
+
+  if (opParams.length > 0) {
+    for (const p of opParams) {
+      if (!p || typeof p !== 'object' || !p.name) continue;
+      const val = generateParamVal(p);
+      const desc = p.description || '';
+      if (p.in === 'query') {
+        const existing = currentParams.find(([k]) => k === p.name);
+        newQueryParams.push([
+          p.name,
+          val,
+          desc || existing?.[2] || '',
+          existing ? existing[3] !== false : true,
+        ]);
+      } else if (p.in === 'path') {
+        const existing = currentPathVars.find(([k]) => k === p.name);
+        newPathVars.push([
+          p.name,
+          val,
+          desc || existing?.[2] || '',
+          existing ? existing[3] !== false : true,
+        ]);
+      }
+    }
+  } else if (targetEp) {
+    for (const [k, defVal, desc] of targetEp.queryParams || []) {
+      const existing = currentParams.find(([curK]) => curK === k);
+      const val = defVal && defVal.trim() !== '' ? defVal : generateParamVal({ name: k });
+      newQueryParams.push([
+        k,
+        val,
+        desc || existing?.[2] || '',
+        existing ? existing[3] !== false : true,
+      ]);
+    }
+    for (const [k, defVal, desc] of targetEp.pathVariables || []) {
+      const existing = currentPathVars.find(([curK]) => curK === k);
+      const val = defVal && defVal.trim() !== '' ? defVal : generateParamVal({ name: k });
+      newPathVars.push([
+        k,
+        val,
+        desc || existing?.[2] || '',
+        existing ? existing[3] !== false : true,
+      ]);
+    }
+  } else if (currentParams.length > 0 || currentPathVars.length > 0) {
+    for (const [k, _v, d, en] of currentParams) {
+      newQueryParams.push([k, generateParamVal({ name: k }), d ?? '', en !== false]);
+    }
+    for (const [k, _v, d, en] of currentPathVars) {
+      newPathVars.push([k, generateParamVal({ name: k }), d ?? '', en !== false]);
+    }
+  }
+
+  return {
+    queryParams: newQueryParams,
+    pathVariables: newPathVars,
+  };
 }
