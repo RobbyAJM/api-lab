@@ -4,7 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection, CollectionFolder } from '@api-lab/api-types';
-import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp } from 'lucide-react';
+import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp, Wand2 } from 'lucide-react';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
@@ -306,6 +306,30 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     } catch (err: any) {
       setStatusMessage(`Error renaming: ${err.message}`);
       setEditNameValue(endpoint.name);
+    }
+  };
+
+  const handleGenerateSwaggerSample = () => {
+    let sampleStr = matchedSwaggerEndpoint?.body;
+    if (!sampleStr && swaggerDoc && swaggerFolderInfo?.swaggerUrl) {
+      const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo.swaggerUrl);
+      for (const svc of parsed.services) {
+        for (const ep of svc.endpoints) {
+          if (
+            ep.method.toUpperCase() === method.toUpperCase() &&
+            (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
+          ) {
+            sampleStr = ep.body;
+            break;
+          }
+        }
+      }
+    }
+    if (sampleStr) {
+      setBodyType('json');
+      setBody(sampleStr);
+      setStatusMessage('Generated example JSON payload from Swagger schema');
+      setTimeout(() => setStatusMessage(null), 2500);
     }
   };
 
@@ -962,51 +986,65 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         {/* Body Panel */}
         {activeTab === 'body' && (
           <div className="space-y-3 h-full flex flex-col">
-            <div className="flex gap-4 items-center">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="bodyType"
-                  checked={bodyType === 'none'}
-                  onChange={() => setBodyType('none')}
-                />
-                <span>None</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="bodyType"
-                  checked={bodyType === 'json'}
-                  onChange={() => setBodyType('json')}
-                />
-                <span>JSON</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="bodyType"
-                  checked={bodyType === 'text'}
-                  onChange={() => setBodyType('text')}
-                />
-                <span>Plain Text</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input
-                  type="radio"
-                  name="bodyType"
-                  checked={bodyType === 'form'}
-                  onChange={() => setBodyType('form')}
-                />
+            <div className="flex items-center justify-between">
+              <div className="flex gap-4 items-center">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bodyType"
+                    checked={bodyType === 'none'}
+                    onChange={() => setBodyType('none')}
+                  />
+                  <span>None</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bodyType"
+                    checked={bodyType === 'json'}
+                    onChange={() => setBodyType('json')}
+                  />
+                  <span>JSON</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bodyType"
+                    checked={bodyType === 'text'}
+                    onChange={() => setBodyType('text')}
+                  />
+                  <span>Plain Text</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bodyType"
+                    checked={bodyType === 'form'}
+                    onChange={() => setBodyType('form')}
+                  />
                   <span>Form URL-Encoded</span>
                 </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="radio" name="bodyType" checked={bodyType === 'multipart'} onChange={() => setBodyType('multipart')} />
-                <span>Multipart</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="radio" name="bodyType" checked={bodyType === 'binary'} onChange={() => setBodyType('binary')} />
-                <span>Binary</span>
-              </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="bodyType" checked={bodyType === 'multipart'} onChange={() => setBodyType('multipart')} />
+                  <span>Multipart</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input type="radio" name="bodyType" checked={bodyType === 'binary'} onChange={() => setBodyType('binary')} />
+                  <span>Binary</span>
+                </label>
+              </div>
+
+              {isSwaggerEndpoint && (
+                <button
+                  type="button"
+                  onClick={handleGenerateSwaggerSample}
+                  title="Generate example JSON payload from Swagger schema"
+                  className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1 shadow-sm"
+                >
+                  <Wand2 size={11} className="text-zinc-400" />
+                  <span>Generate Example</span>
+                </button>
+              )}
             </div>
 
             {bodyType === 'json' ? (
