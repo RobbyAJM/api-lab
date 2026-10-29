@@ -11,6 +11,7 @@ interface VariableInputProps {
   value: string;
   onChange: (val: string) => void;
   variables?: VariableSource;
+  suggestions?: string[];
   placeholder?: string;
   className?: string;
   inputClassName?: string;
@@ -21,6 +22,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
   value,
   onChange,
   variables,
+  suggestions,
   placeholder,
   className = '',
   inputClassName = '',
@@ -36,7 +38,8 @@ export const VariableInput: React.FC<VariableInputProps> = ({
     varName: string;
     rect: BoundingBox;
   } | null>(null);
-  const [variableCompletion, setVariableCompletion] = useState<{
+  const [completionState, setCompletionState] = useState<{
+    isVariable: boolean;
     items: string[];
     start: number;
     selected: number;
@@ -73,37 +76,82 @@ export const VariableInput: React.FC<VariableInputProps> = ({
     return effectiveVars ? Object.keys(effectiveVars) : [];
   }
 
-  function updateVariableCompletion(nextValue: string, cursor: number) {
-    const match = nextValue.slice(0, cursor).match(/\{\{([A-Za-z0-9_]*)$/);
-    if (!match) {
-      setVariableCompletion(null);
+  function updateCompletion(nextValue: string, cursor: number) {
+    const varMatch = nextValue.slice(0, cursor).match(/\{\{([A-Za-z0-9_]*)$/);
+    if (varMatch) {
+      const query = varMatch[1].toLowerCase();
+      const items = getVariableNames()
+        .filter((name) => name.toLowerCase().includes(query))
+        .slice(0, 8);
+      setCompletionState(
+        items.length > 0
+          ? {
+              isVariable: true,
+              items,
+              start: cursor - varMatch[1].length,
+              selected: 0,
+            }
+          : null
+      );
       return;
     }
-    const query = match[1].toLowerCase();
-    const items = getVariableNames()
-      .filter((name) => name.toLowerCase().includes(query))
-      .slice(0, 8);
-    setVariableCompletion(items.length > 0 ? {
-      items,
-      start: cursor - match[1].length,
-      selected: 0,
-    } : null);
+
+    if (suggestions && suggestions.length > 0) {
+      const trimmed = nextValue.trim().toLowerCase();
+      const filtered = trimmed
+        ? suggestions.filter((s) => s.toLowerCase().includes(trimmed))
+        : suggestions;
+      setCompletionState(
+        filtered.length > 0
+          ? {
+              isVariable: false,
+              items: filtered.slice(0, 8),
+              start: 0,
+              selected: 0,
+            }
+          : null
+      );
+      return;
+    }
+
+    setCompletionState(null);
+  }
+
+  function handleSelectCompletion(item: string) {
+    if (!completionState) return;
+    if (completionState.isVariable) {
+      insertVariable(item);
+    } else {
+      insertSuggestion(item);
+    }
   }
 
   function insertVariable(name: string) {
     const input = inputRef.current;
-    if (!input || !variableCompletion) return;
-    const before = value.slice(0, variableCompletion.start);
+    if (!input || !completionState) return;
+    const before = value.slice(0, completionState.start);
     const after = value.slice(input.selectionStart ?? value.length);
     const inserted = `${name}}}`;
     const nextValue = `${before}${inserted}${after}`;
-    const nextCursor = variableCompletion.start + inserted.length;
-    setVariableCompletion(null);
+    const nextCursor = completionState.start + inserted.length;
+    setCompletionState(null);
     onChange(nextValue);
     requestAnimationFrame(() => {
       input.setSelectionRange(nextCursor, nextCursor);
       input.focus();
     });
+  }
+
+  function insertSuggestion(val: string) {
+    setCompletionState(null);
+    onChange(val);
+    const input = inputRef.current;
+    if (input) {
+      requestAnimationFrame(() => {
+        input.setSelectionRange(val.length, val.length);
+        input.focus();
+      });
+    }
   }
 
   function handleScroll(e: React.UIEvent<HTMLInputElement>) {
@@ -205,7 +253,15 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         disabled={disabled}
         onChange={(e) => {
           onChange(e.target.value);
-          updateVariableCompletion(e.target.value, e.target.selectionStart ?? e.target.value.length);
+          updateCompletion(e.target.value, e.target.selectionStart ?? e.target.value.length);
+        }}
+        onFocus={() => {
+          if (suggestions && suggestions.length > 0) {
+            updateCompletion(value, value.length);
+          }
+        }}
+        onBlur={() => {
+          setTimeout(() => setCompletionState(null), 150);
         }}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
@@ -213,18 +269,18 @@ export const VariableInput: React.FC<VariableInputProps> = ({
           if (hoverState && (e.key === 'Escape' || e.key === 'Enter')) {
             setHoverState(null);
           }
-          if (variableCompletion && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+          if (completionState && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
             e.preventDefault();
             const delta = e.key === 'ArrowDown' ? 1 : -1;
-            setVariableCompletion((prev) => prev && {
+            setCompletionState((prev) => prev && {
               ...prev,
               selected: (prev.selected + delta + prev.items.length) % prev.items.length,
             });
-          } else if (variableCompletion && (e.key === 'Enter' || e.key === 'Tab')) {
+          } else if (completionState && (e.key === 'Enter' || e.key === 'Tab')) {
             e.preventDefault();
-            insertVariable(variableCompletion.items[variableCompletion.selected]);
+            handleSelectCompletion(completionState.items[completionState.selected]);
           } else if (e.key === 'Escape') {
-            setVariableCompletion(null);
+            setCompletionState(null);
           }
         }}
         onScroll={handleScroll}
@@ -233,22 +289,31 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         className={`w-full h-full px-3 py-1.5 font-mono text-xs bg-transparent text-transparent caret-zinc-100 focus:outline-none placeholder-transparent selection:bg-primary/40 ${inputClassName}`}
       />
 
-      {variableCompletion && (
-        <div className="absolute z-30 left-0 top-full mt-1 min-w-48 max-w-72 border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden">
-          {variableCompletion.items.map((name, index) => (
+      {completionState && (
+        <div className="absolute z-30 left-0 top-full mt-1 min-w-48 max-w-80 border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden">
+          {completionState.items.map((name, index) => (
             <button
               key={name}
               type="button"
               onMouseDown={(e) => {
                 e.preventDefault();
-                insertVariable(name);
+                handleSelectCompletion(name);
               }}
-              className={`block w-full text-left px-2.5 py-1.5 font-mono text-[11px] ${index === variableCompletion.selected ? 'bg-primary/20 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+              className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 font-mono text-[11px] ${
+                index === completionState.selected ? 'bg-primary/20 text-white' : 'text-zinc-300 hover:bg-zinc-800'
+              }`}
             >
-              {`{{${name}}}`}
+              <span>{completionState.isVariable ? `{{${name}}}` : name}</span>
+              {!completionState.isVariable && (
+                <span className="text-[9px] font-sans px-1 py-0.2 rounded bg-zinc-800 text-emerald-400 border border-zinc-700">
+                  enum
+                </span>
+              )}
             </button>
           ))}
-          <div className="border-t border-zinc-800 px-2 py-1 text-[10px] text-zinc-500">Enter / Tab to insert</div>
+          <div className="border-t border-zinc-800 px-2 py-1 text-[10px] text-zinc-500">
+            Enter / Tab to insert
+          </div>
         </div>
       )}
 

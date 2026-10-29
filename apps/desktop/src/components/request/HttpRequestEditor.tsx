@@ -38,7 +38,12 @@ import {
 } from '../../utils/folderSettings';
 import { findSwaggerFolderForEndpoint, getFolderPath } from '../../utils/folderTree';
 import { fetchSwaggerSpec } from '../../utils/swaggerGenerator';
-import { parseSwaggerSpec, resolveSwaggerSamplePayload } from '../../utils/swaggerParser';
+import {
+  parseSwaggerSpec,
+  findMatchingSwaggerEndpoint,
+  resolveSwaggerSampleResult,
+  resolveSwaggerSampleParams,
+} from '../../utils/swaggerParser';
 import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
 import { EndpointSpecificationView } from '../common/EndpointSpecificationView';
 
@@ -219,24 +224,14 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       if (!swaggerFolderInfo?.swaggerUrl) return null;
       return await fetchSwaggerSpec(swaggerFolderInfo.swaggerUrl);
     },
-    enabled: !!swaggerFolderInfo?.swaggerUrl && (!endpoint.config?.specification || !endpoint.config?.summary),
+    enabled: !!swaggerFolderInfo?.swaggerUrl,
     staleTime: 5 * 60 * 1000,
   });
 
   const matchedSwaggerEndpoint = React.useMemo(() => {
     if (!swaggerDoc || !swaggerFolderInfo?.swaggerUrl) return null;
     const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo.swaggerUrl);
-    for (const svc of parsed.services) {
-      for (const ep of svc.endpoints) {
-        if (
-          ep.method.toUpperCase() === method.toUpperCase() &&
-          (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
-        ) {
-          return ep;
-        }
-      }
-    }
-    return null;
+    return findMatchingSwaggerEndpoint(parsed, method, url, endpoint.name);
   }, [swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
 
   const endpointSpec = React.useMemo(() => {
@@ -249,6 +244,24 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
     return spec;
   }, [endpoint.config?.specification, matchedSwaggerEndpoint]);
+
+  const schemaEnumsMap = React.useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const f of (endpointSpec?.requestFields || []) as Array<{ name: string; type: string; enum?: string[] }>) {
+      if (f.enum && f.enum.length > 0) {
+        map[f.name] = f.enum;
+      } else if (endpointSpec?.enums && endpointSpec.enums[f.type]) {
+        map[f.name] = endpointSpec.enums[f.type];
+      }
+    }
+    return map;
+  }, [endpointSpec]);
+
+  const schemaSuggestions = React.useMemo(() => {
+    const fieldNames = ((endpointSpec?.requestFields || []) as Array<{ name: string }>).map((f) => f.name);
+    const enumVals = Object.values(schemaEnumsMap).flat();
+    return Array.from(new Set([...fieldNames, ...enumVals]));
+  }, [endpointSpec, schemaEnumsMap]);
 
   const folderPath = React.useMemo(() => {
     return getFolderPath(folders, endpoint.folder_id);
@@ -312,20 +325,82 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   };
 
   const handleGenerateSwaggerSample = () => {
-    const sampleStr = resolveSwaggerSamplePayload(
+    // 1. If method is GET or active tab is params: generate example query and path parameters
+    if (activeTab === 'params' || method.toUpperCase() === 'GET') {
+      const paramRes = resolveSwaggerSampleParams(
+        method,
+        url,
+        endpoint.name,
+        swaggerDoc,
+        swaggerFolderInfo?.swaggerUrl,
+        matchedSwaggerEndpoint,
+        queryParams,
+        pathVariables
+      );
+      if (paramRes && (paramRes.queryParams.length > 0 || paramRes.pathVariables.length > 0)) {
+        if (paramRes.queryParams.length > 0) {
+          setQueryParams(paramRes.queryParams);
+          setUrl((prevUrl) => serializeQueryParamsToUrl(prevUrl, paramRes.queryParams));
+        }
+        if (paramRes.pathVariables.length > 0) {
+          setPathVariables(paramRes.pathVariables);
+        }
+        if (activeTab !== 'params') {
+          setActiveTab('params');
+        }
+        setStatusMessage(
+          `Generated ${paramRes.queryParams.length} example ${
+            paramRes.queryParams.length === 1 ? 'parameter' : 'parameters'
+          } from Swagger schema`
+        );
+        setTimeout(() => setStatusMessage(null), 3000);
+        return;
+      }
+    }
+
+    // 2. Otherwise: generate body sample
+    const currentTarget = bodyType === 'none' ? undefined : bodyType;
+    const result = resolveSwaggerSampleResult(
       method,
       url,
       endpoint.name,
       swaggerDoc,
       swaggerFolderInfo?.swaggerUrl,
-      matchedSwaggerEndpoint
+      matchedSwaggerEndpoint,
+      currentTarget,
+      endpointSpec
     );
-    if (sampleStr) {
-      setBodyType('json');
-      setBody(sampleStr);
-      setStatusMessage('Generated example JSON payload from Swagger schema');
-      setTimeout(() => setStatusMessage(null), 2500);
+
+    if (!result) {
+      setStatusMessage('No request specification found for this endpoint');
+      setTimeout(() => setStatusMessage(null), 3000);
+      return;
     }
+
+    const newBodyType =
+      currentTarget === undefined || currentTarget === 'text' || currentTarget === 'binary'
+        ? result.bodyType
+        : currentTarget;
+    setBodyType(newBodyType);
+
+    if (newBodyType === 'multipart' && result.multipartFields) {
+      setMultipartFields(result.multipartFields);
+      setStatusMessage(
+        `Generated ${result.multipartFields.length} example multipart ${
+          result.multipartFields.length === 1 ? 'entry' : 'entries'
+        } from Swagger schema`
+      );
+    } else {
+      setBody(result.body);
+      const label =
+        newBodyType === 'form'
+          ? 'Form URL-Encoded'
+          : newBodyType === 'multipart'
+          ? 'Multipart'
+          : 'JSON';
+      setStatusMessage(`Generated example ${label} payload from Swagger schema`);
+    }
+    setTimeout(() => setStatusMessage(null), 3000);
   };
 
   useEffect(() => {
@@ -970,6 +1045,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 items={pathVariables}
                 onChange={setPathVariables}
                 variables={activeVariables}
+                suggestionsMap={schemaEnumsMap}
                 keyPlaceholder="path-variable"
                 valuePlaceholder="value (or {{VAR}})"
                 descriptionPlaceholder="Description (optional)"
@@ -989,6 +1065,20 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               }}
               showCheckbox={true}
               variables={activeVariables}
+              suggestionsMap={schemaEnumsMap}
+              extraActions={
+                isSwaggerEndpoint && method.toUpperCase() === 'GET' ? (
+                  <button
+                    type="button"
+                    onClick={handleGenerateSwaggerSample}
+                    title="Generate example parameters from Swagger schema"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-zinc-300 hover:text-white bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition"
+                  >
+                    <Wand2 size={11} className="text-zinc-400" />
+                    <span>Generate Example</span>
+                  </button>
+                ) : undefined
+              }
               keyPlaceholder="parameter"
               valuePlaceholder="value (or {{VAR}})"
               descriptionPlaceholder="Description (optional)"
@@ -1075,11 +1165,11 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 </label>
               </div>
 
-              {isSwaggerEndpoint && (
+              {isSwaggerEndpoint && method.toUpperCase() !== 'GET' && (
                 <button
                   type="button"
                   onClick={handleGenerateSwaggerSample}
-                  title="Generate example JSON payload from Swagger schema"
+                  title="Generate example payload from Swagger schema"
                   className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1 shadow-sm"
                 >
                   <Wand2 size={11} className="text-zinc-400" />
@@ -1094,6 +1184,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   value={body}
                   onChange={setBody}
                   variables={activeVariables}
+                  suggestions={schemaSuggestions}
                   placeholder='{\n  "userId": "{{USER_ID}}",\n  "name": "Jane"\n}'
                 />
               </div>
@@ -1228,22 +1319,22 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                                   </button>
                                 </div>
                               ) : (
-                                <input
-                                  value={field.value}
-                                  onChange={(e) =>
-                                    setMultipartFields((fields) =>
-                                      fields.map((item, i) =>
-                                        i === index ? { ...item, value: e.target.value } : item
+                                <div className="w-full bg-zinc-900 border border-zinc-800 rounded focus-within:border-zinc-700 h-7 flex items-center">
+                                  <VariableInput
+                                    value={field.value}
+                                    onChange={(newVal) =>
+                                      setMultipartFields((fields) =>
+                                        fields.map((item, i) =>
+                                          i === index ? { ...item, value: newVal } : item
+                                        )
                                       )
-                                    )
-                                  }
-                                  placeholder="value (or {{VAR}})"
-                                  className={`w-full border rounded px-2.5 py-1 text-xs font-mono h-7 focus:outline-none ${
-                                    isRowEnabled
-                                      ? 'bg-zinc-900 border-zinc-800 text-zinc-200 focus:border-zinc-700'
-                                      : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400 focus:border-zinc-700'
-                                  }`}
-                                />
+                                    }
+                                    variables={activeVariables}
+                                    suggestions={schemaEnumsMap[field.name]}
+                                    placeholder="value (or {{VAR}})"
+                                    className={`w-full h-full text-xs font-mono ${!isRowEnabled ? 'text-zinc-400' : ''}`}
+                                  />
+                                </div>
                               )}
                             </div>
 
@@ -1510,6 +1601,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 : null
             }
             schemas={endpointSpec?.schemas}
+            enums={endpointSpec?.enums}
             emptyMessage="No request or response specification found in the Swagger definition for this operation."
           />
         )}

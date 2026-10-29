@@ -7,6 +7,7 @@ export interface SpecificationField {
   field_type?: string;
   required?: boolean;
   description?: string;
+  enum?: string[];
 }
 
 export interface SpecificationSection {
@@ -30,6 +31,7 @@ export interface EndpointSpecificationViewProps {
   request?: SpecificationSection | null;
   response?: SpecificationSection | null;
   schemas?: Record<string, SpecificationField[]>;
+  enums?: Record<string, string[]>;
   emptyMessage?: string;
 }
 
@@ -55,10 +57,16 @@ export const EndpointSpecificationView: React.FC<EndpointSpecificationViewProps>
   request,
   response,
   schemas,
+  enums,
   emptyMessage = 'Select an endpoint or method to view specification.',
 }) => {
   const [reqStack, setReqStack] = useState<StackLevel[]>([]);
   const [resStack, setResStack] = useState<StackLevel[]>([]);
+  const [expandedEnums, setExpandedEnums] = useState<Record<string, boolean>>({});
+
+  const toggleEnum = (key: string) => {
+    setExpandedEnums((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   useEffect(() => {
     if (request) {
@@ -145,49 +153,102 @@ export const EndpointSpecificationView: React.FC<EndpointSpecificationViewProps>
               const baseType = getBaseTypeName(displayType);
               const targetSchemaFields = resolveSchemaFields(baseType, schemas);
               const isClickable = Boolean(targetSchemaFields && targetSchemaFields.length > 0);
+              const enumVals =
+                field.enum && field.enum.length > 0
+                  ? field.enum
+                  : enums && enums[baseType]
+                  ? enums[baseType]
+                  : null;
+              const isEnum = Boolean(enumVals && enumVals.length > 0);
+              const fieldKey = `${currentLevel.typeName || 'spec'}.${field.name}`;
+              const isEnumExpanded = Boolean(isEnum && expandedEnums[fieldKey]);
 
               return (
-                <tr key={field.name} className="hover:bg-zinc-900/40 transition-colors">
-                  <td className="py-2.5 pr-4 text-zinc-200">
-                    <span>{field.name}</span>
-                    {field.required && (
-                      <span className="ml-1 text-[10px] text-amber-500/90">*</span>
-                    )}
-                    {field.description && (
-                      <span className="ml-2 text-[10px] text-zinc-500 font-sans">
-                        {field.description}
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-2.5 pl-4 text-zinc-400">
-                    {isClickable ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (targetSchemaFields) {
-                            onDrillDown({ typeName: baseType, fields: targetSchemaFields });
+                <React.Fragment key={field.name}>
+                  <tr className="hover:bg-zinc-900/40 transition-colors">
+                    <td className="py-2.5 pr-4 text-zinc-200">
+                      <span>{field.name}</span>
+                      {field.required && (
+                        <span className="ml-1 text-[10px] text-amber-500/90">*</span>
+                      )}
+                      {field.description && (
+                        <span className="ml-2 text-[10px] text-zinc-500 font-sans">
+                          {field.description}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 pl-4 text-zinc-400">
+                      {isEnum ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleEnum(fieldKey)}
+                          className="inline-flex items-center gap-1.5 text-emerald-400 hover:text-emerald-300 font-mono text-left cursor-pointer transition underline underline-offset-2"
+                          title={`Click to ${isEnumExpanded ? 'hide' : 'view'} ${enumVals!.length} enum variants`}
+                        >
+                          <span>{displayType === 'string' || !displayType ? 'enum' : displayType}</span>
+                          <span className="text-[10px] px-1 py-0.2 bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 rounded no-underline">
+                            {enumVals!.length}
+                          </span>
+                        </button>
+                      ) : isClickable ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (targetSchemaFields) {
+                              onDrillDown({ typeName: baseType, fields: targetSchemaFields });
+                            }
+                          }}
+                          className="underline underline-offset-2 cursor-pointer text-zinc-300 hover:text-white transition font-mono text-left"
+                          title={`View ${baseType} specification`}
+                        >
+                          {displayType}
+                        </button>
+                      ) : (
+                        <span
+                          className={
+                            displayType === 'OneOf'
+                              ? 'text-amber-300/90 font-medium'
+                              : displayType.includes('[]')
+                              ? 'text-cyan-300/90'
+                              : 'text-zinc-300'
                           }
-                        }}
-                        className="underline underline-offset-2 cursor-pointer text-zinc-300 hover:text-white transition font-mono text-left"
-                        title={`View ${baseType} specification`}
-                      >
-                        {displayType}
-                      </button>
-                    ) : (
-                      <span
-                        className={
-                          displayType === 'OneOf'
-                            ? 'text-amber-300/90 font-medium'
-                            : displayType.includes('[]')
-                            ? 'text-cyan-300/90'
-                            : 'text-zinc-300'
-                        }
-                      >
-                        {displayType}
-                      </span>
-                    )}
-                  </td>
-                </tr>
+                        >
+                          {displayType}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                  {isEnumExpanded && enumVals && (
+                    <tr className="bg-zinc-950/80 border-b border-zinc-800/60">
+                      <td colSpan={2} className="py-2.5 px-3">
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-[10px] text-zinc-400 select-none">
+                            <span className="font-semibold uppercase tracking-wider text-emerald-400/90">
+                              Enum Variants ({enumVals.length})
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => toggleEnum(fieldKey)}
+                              className="text-zinc-500 hover:text-zinc-300 transition text-[10px]"
+                            >
+                              Hide
+                            </button>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 pt-0.5">
+                            {enumVals.map((variant) => (
+                              <span
+                                key={variant}
+                                className="px-2 py-0.5 rounded text-[11px] font-mono bg-zinc-900 border border-zinc-750 text-zinc-200 select-all"
+                              >
+                                {variant}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
