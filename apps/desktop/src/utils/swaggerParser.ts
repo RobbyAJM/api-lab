@@ -383,10 +383,22 @@ export function deriveBaseUrl(doc: SwaggerDoc, sourceUrl: string): string {
 
 const HTTP_METHODS = new Set(['get', 'post', 'put', 'delete', 'patch', 'options', 'head']);
 
+const swaggerSpecCache = new WeakMap<SwaggerDoc, Map<string, ParsedSwaggerSpec>>();
+
 /**
  * Parses raw Swagger or OpenAPI JSON into structured services and endpoints.
  */
 export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwaggerSpec {
+  if (doc && typeof doc === 'object') {
+    let urlMap = swaggerSpecCache.get(doc);
+    if (!urlMap) {
+      urlMap = new Map();
+      swaggerSpecCache.set(doc, urlMap);
+    }
+    const cached = urlMap.get(sourceUrl);
+    if (cached) return cached;
+  }
+
   const title = doc.info?.title || 'Swagger API';
   const version = doc.info?.version || '1.0';
   const baseUrl = deriveBaseUrl(doc, sourceUrl);
@@ -510,11 +522,17 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
   // Sort services alphabetically
   services.sort((a, b) => a.name.localeCompare(b.name));
 
-  return {
+  const result: ParsedSwaggerSpec = {
     title,
     version,
     baseUrl,
     services,
     totalEndpoints,
   };
+
+  if (doc && typeof doc === 'object') {
+    swaggerSpecCache.get(doc)?.set(sourceUrl, result);
+  }
+
+  return result;
 }

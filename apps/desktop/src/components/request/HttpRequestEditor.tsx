@@ -221,26 +221,32 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     staleTime: 5 * 60 * 1000,
   });
 
-  const endpointSpec = React.useMemo(() => {
-    let spec = endpoint.config?.specification || null;
-    if (!swaggerDoc) return spec;
-    const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo?.swaggerUrl || '');
+  const matchedSwaggerEndpoint = React.useMemo(() => {
+    if (!swaggerDoc || !swaggerFolderInfo?.swaggerUrl) return null;
+    const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo.swaggerUrl);
     for (const svc of parsed.services) {
       for (const ep of svc.endpoints) {
         if (
           ep.method.toUpperCase() === method.toUpperCase() &&
           (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
         ) {
-          if (!spec) return ep.specification || null;
-          if (!spec.summary && ep.summary) {
-            return { ...spec, summary: ep.summary };
-          }
-          return spec;
+          return ep;
         }
       }
     }
+    return null;
+  }, [swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+
+  const endpointSpec = React.useMemo(() => {
+    let spec = endpoint.config?.specification || null;
+    if (matchedSwaggerEndpoint) {
+      if (!spec) return matchedSwaggerEndpoint.specification || null;
+      if (!spec.summary && matchedSwaggerEndpoint.summary) {
+        return { ...spec, summary: matchedSwaggerEndpoint.summary };
+      }
+    }
     return spec;
-  }, [endpoint.config?.specification, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+  }, [endpoint.config?.specification, matchedSwaggerEndpoint]);
 
   const folderPath = React.useMemo(() => {
     return getFolderPath(folders, endpoint.folder_id);
@@ -249,21 +255,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const requestSummary = React.useMemo(() => {
     if (endpoint.config?.summary) return endpoint.config.summary;
     if (endpointSpec?.summary) return endpointSpec.summary;
-    if (swaggerDoc) {
-      const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo?.swaggerUrl || '');
-      for (const svc of parsed.services) {
-        for (const ep of svc.endpoints) {
-          if (
-            ep.method.toUpperCase() === method.toUpperCase() &&
-            (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
-          ) {
-            return ep.summary || null;
-          }
-        }
-      }
-    }
+    if (matchedSwaggerEndpoint?.summary) return matchedSwaggerEndpoint.summary;
     return null;
-  }, [endpoint.config?.summary, endpointSpec?.summary, swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+  }, [endpoint.config?.summary, endpointSpec?.summary, matchedSwaggerEndpoint]);
 
   const displayEndpointName = React.useMemo(() => {
     if (
