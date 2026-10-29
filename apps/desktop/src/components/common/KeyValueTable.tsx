@@ -29,6 +29,8 @@ export interface KeyValueTableProps {
   hideBulkEdit?: boolean;
   showCheckbox?: boolean;
   hideCheckbox?: boolean;
+  extraActions?: React.ReactNode;
+  suggestionsMap?: Record<string, string[]>;
 }
 
 export const KeyValueTable: React.FC<KeyValueTableProps> = ({
@@ -47,6 +49,8 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
   hideBulkEdit = false,
   showCheckbox = true,
   hideCheckbox = false,
+  extraActions,
+  suggestionsMap,
 }) => {
   const [isBulkEdit, setIsBulkEdit] = useState(false);
   const [bulkText, setBulkText] = useState('');
@@ -156,6 +160,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {extraActions}
           {!hideBulkEdit && (
             <button
               type="button"
@@ -364,6 +369,7 @@ export const KeyValueTable: React.FC<KeyValueTableProps> = ({
                             handleUpdateRow(idx, [k, newVal, d ?? ''])
                           }
                           variables={variables}
+                          suggestions={suggestionsMap?.[k]}
                           placeholder={valuePlaceholder}
                           className={`w-full h-full text-xs font-mono ${!isRowEnabled ? 'text-zinc-400' : ''}`}
                         />

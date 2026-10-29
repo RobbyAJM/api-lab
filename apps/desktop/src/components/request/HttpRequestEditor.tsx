@@ -245,6 +245,24 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     return spec;
   }, [endpoint.config?.specification, matchedSwaggerEndpoint]);
 
+  const schemaEnumsMap = React.useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const f of (endpointSpec?.requestFields || []) as Array<{ name: string; type: string; enum?: string[] }>) {
+      if (f.enum && f.enum.length > 0) {
+        map[f.name] = f.enum;
+      } else if (endpointSpec?.enums && endpointSpec.enums[f.type]) {
+        map[f.name] = endpointSpec.enums[f.type];
+      }
+    }
+    return map;
+  }, [endpointSpec]);
+
+  const schemaSuggestions = React.useMemo(() => {
+    const fieldNames = ((endpointSpec?.requestFields || []) as Array<{ name: string }>).map((f) => f.name);
+    const enumVals = Object.values(schemaEnumsMap).flat();
+    return Array.from(new Set([...fieldNames, ...enumVals]));
+  }, [endpointSpec, schemaEnumsMap]);
+
   const folderPath = React.useMemo(() => {
     return getFolderPath(folders, endpoint.folder_id);
   }, [folders, endpoint.folder_id]);
@@ -1021,26 +1039,13 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         {/* Params Panel */}
         {activeTab === 'params' && (
           <div className="space-y-4">
-            {isSwaggerEndpoint && (
-              <div className="flex items-center justify-end pb-1 select-none">
-                <button
-                  type="button"
-                  onClick={handleGenerateSwaggerSample}
-                  title="Generate example parameters from Swagger schema"
-                  className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1 shadow-sm"
-                >
-                  <Wand2 size={11} className="text-zinc-400" />
-                  <span>Generate Example</span>
-                </button>
-              </div>
-            )}
-
             {pathVariables.length > 0 && (
               <KeyValueTable
                 title="Path Variables"
                 items={pathVariables}
                 onChange={setPathVariables}
                 variables={activeVariables}
+                suggestionsMap={schemaEnumsMap}
                 keyPlaceholder="path-variable"
                 valuePlaceholder="value (or {{VAR}})"
                 descriptionPlaceholder="Description (optional)"
@@ -1060,6 +1065,20 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
               }}
               showCheckbox={true}
               variables={activeVariables}
+              suggestionsMap={schemaEnumsMap}
+              extraActions={
+                isSwaggerEndpoint && method.toUpperCase() === 'GET' ? (
+                  <button
+                    type="button"
+                    onClick={handleGenerateSwaggerSample}
+                    title="Generate example parameters from Swagger schema"
+                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-zinc-300 hover:text-white bg-zinc-900 border border-zinc-800 hover:border-zinc-700 transition"
+                  >
+                    <Wand2 size={11} className="text-zinc-400" />
+                    <span>Generate Example</span>
+                  </button>
+                ) : undefined
+              }
               keyPlaceholder="parameter"
               valuePlaceholder="value (or {{VAR}})"
               descriptionPlaceholder="Description (optional)"
@@ -1146,7 +1165,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 </label>
               </div>
 
-              {isSwaggerEndpoint && (
+              {isSwaggerEndpoint && method.toUpperCase() !== 'GET' && (
                 <button
                   type="button"
                   onClick={handleGenerateSwaggerSample}
@@ -1165,6 +1184,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                   value={body}
                   onChange={setBody}
                   variables={activeVariables}
+                  suggestions={schemaSuggestions}
                   placeholder='{\n  "userId": "{{USER_ID}}",\n  "name": "Jane"\n}'
                 />
               </div>
@@ -1299,22 +1319,22 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                                   </button>
                                 </div>
                               ) : (
-                                <input
-                                  value={field.value}
-                                  onChange={(e) =>
-                                    setMultipartFields((fields) =>
-                                      fields.map((item, i) =>
-                                        i === index ? { ...item, value: e.target.value } : item
+                                <div className="w-full bg-zinc-900 border border-zinc-800 rounded focus-within:border-zinc-700 h-7 flex items-center">
+                                  <VariableInput
+                                    value={field.value}
+                                    onChange={(newVal) =>
+                                      setMultipartFields((fields) =>
+                                        fields.map((item, i) =>
+                                          i === index ? { ...item, value: newVal } : item
+                                        )
                                       )
-                                    )
-                                  }
-                                  placeholder="value (or {{VAR}})"
-                                  className={`w-full border rounded px-2.5 py-1 text-xs font-mono h-7 focus:outline-none ${
-                                    isRowEnabled
-                                      ? 'bg-zinc-900 border-zinc-800 text-zinc-200 focus:border-zinc-700'
-                                      : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400 focus:border-zinc-700'
-                                  }`}
-                                />
+                                    }
+                                    variables={activeVariables}
+                                    suggestions={schemaEnumsMap[field.name]}
+                                    placeholder="value (or {{VAR}})"
+                                    className={`w-full h-full text-xs font-mono ${!isRowEnabled ? 'text-zinc-400' : ''}`}
+                                  />
+                                </div>
                               )}
                             </div>
 
