@@ -536,3 +536,36 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
 
   return result;
 }
+
+/**
+ * Resolves example sample body from parsed swagger spec or matched endpoint.
+ * Pure standalone function testable without component mount.
+ */
+export function resolveSwaggerSamplePayload(
+  method: string,
+  url: string,
+  endpointName: string,
+  swaggerDoc?: SwaggerDoc | null,
+  sourceUrl?: string,
+  matchedEndpoint?: ParsedHttpEndpoint | null
+): string | null {
+  if (matchedEndpoint?.body) {
+    return matchedEndpoint.body;
+  }
+  if (!swaggerDoc || !sourceUrl) {
+    return null;
+  }
+  const parsed = parseSwaggerSpec(swaggerDoc, sourceUrl);
+  const upperMethod = method.toUpperCase();
+  for (const svc of parsed.services) {
+    for (const ep of svc.endpoints) {
+      if (
+        ep.method.toUpperCase() === upperMethod &&
+        (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpointName)
+      ) {
+        return ep.body || null;
+      }
+    }
+  }
+  return null;
+}

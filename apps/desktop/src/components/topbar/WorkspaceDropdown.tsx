@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Users, ChevronDown, Plus, Search, Star, Check, LayoutGrid } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { filterWorkspaces, sortWorkspaces } from '../../utils/workspacePicker';
+import { navigateListIndex } from '../../utils/shortcuts';
 
 export const WorkspaceDropdown: React.FC = () => {
   const workspaceDropdownOpen = useAppStore((s) => s.workspaceDropdownOpen);
@@ -108,10 +109,10 @@ export const WorkspaceDropdown: React.FC = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'ArrowDown') {
                     e.preventDefault();
-                    setHighlightedIndex((prev) => (sorted.length ? (prev + 1) % sorted.length : 0));
+                    setHighlightedIndex((prev) => navigateListIndex(prev, sorted.length, 'down'));
                   } else if (e.key === 'ArrowUp') {
                     e.preventDefault();
-                    setHighlightedIndex((prev) => (sorted.length ? (prev - 1 + sorted.length) % sorted.length : 0));
+                    setHighlightedIndex((prev) => navigateListIndex(prev, sorted.length, 'up'));
                   } else if (e.key === 'Enter') {
                     e.preventDefault();
                     if (sorted[highlightedIndex]) {

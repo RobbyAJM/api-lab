@@ -38,7 +38,7 @@ import {
 } from '../../utils/folderSettings';
 import { findSwaggerFolderForEndpoint, getFolderPath } from '../../utils/folderTree';
 import { fetchSwaggerSpec } from '../../utils/swaggerGenerator';
-import { parseSwaggerSpec } from '../../utils/swaggerParser';
+import { parseSwaggerSpec, resolveSwaggerSamplePayload } from '../../utils/swaggerParser';
 import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
 import { EndpointSpecificationView } from '../common/EndpointSpecificationView';
 
@@ -312,21 +312,14 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   };
 
   const handleGenerateSwaggerSample = () => {
-    let sampleStr = matchedSwaggerEndpoint?.body;
-    if (!sampleStr && swaggerDoc && swaggerFolderInfo?.swaggerUrl) {
-      const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo.swaggerUrl);
-      for (const svc of parsed.services) {
-        for (const ep of svc.endpoints) {
-          if (
-            ep.method.toUpperCase() === method.toUpperCase() &&
-            (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
-          ) {
-            sampleStr = ep.body;
-            break;
-          }
-        }
-      }
-    }
+    const sampleStr = resolveSwaggerSamplePayload(
+      method,
+      url,
+      endpoint.name,
+      swaggerDoc,
+      swaggerFolderInfo?.swaggerUrl,
+      matchedSwaggerEndpoint
+    );
     if (sampleStr) {
       setBodyType('json');
       setBody(sampleStr);

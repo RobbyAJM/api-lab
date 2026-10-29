@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Endpoint } from '@api-lab/api-types';
 import { AlertTriangle, X } from 'lucide-react';
+import { computeConflictDiffs } from '../../utils/conflictDetector';
 
 interface ConflictDiffModalProps {
   isOpen: boolean;
@@ -10,12 +11,6 @@ interface ConflictDiffModalProps {
   onOverwrite: () => void;
   onDiscardLocal: () => void;
   onClose: () => void;
-}
-
-interface DiffRow {
-  field: string;
-  localVal: string;
-  remoteVal: string;
 }
 
 export const ConflictDiffModal: React.FC<ConflictDiffModalProps> = ({
@@ -29,85 +24,7 @@ export const ConflictDiffModal: React.FC<ConflictDiffModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
-  const isHttp = localEndpoint.protocol === 'http';
-  const remoteConfig = remoteEndpoint.config || {};
-
-  const diffs: DiffRow[] = [];
-
-  if (isHttp) {
-    if ((localConfig.method || 'GET') !== (remoteConfig.method || 'GET')) {
-      diffs.push({
-        field: 'Method',
-        localVal: String(localConfig.method || 'GET'),
-        remoteVal: String(remoteConfig.method || 'GET'),
-      });
-    }
-    if ((localConfig.url || '') !== (remoteConfig.url || '')) {
-      diffs.push({
-        field: 'URL',
-        localVal: String(localConfig.url || ''),
-        remoteVal: String(remoteConfig.url || ''),
-      });
-    }
-    const localBody = String(localConfig.body || '').trim();
-    const remoteBody = String(remoteConfig.body || '').trim();
-    if (localBody !== remoteBody) {
-      diffs.push({
-        field: 'Body',
-        localVal: localBody.length > 200 ? localBody.slice(0, 200) + '...' : localBody || '(empty)',
-        remoteVal: remoteBody.length > 200 ? remoteBody.slice(0, 200) + '...' : remoteBody || '(empty)',
-      });
-    }
-    const localPre = String(localConfig.pre_request_script || '').trim();
-    const remotePre = String(remoteConfig.pre_request_script || '').trim();
-    if (localPre !== remotePre) {
-      diffs.push({
-        field: 'Pre-request Script',
-        localVal: localPre || '(empty)',
-        remoteVal: remotePre || '(empty)',
-      });
-    }
-    const localPost = String(localConfig.post_response_script || localConfig.post_request_script || '').trim();
-    const remotePost = String(remoteConfig.post_response_script || remoteConfig.post_request_script || '').trim();
-    if (localPost !== remotePost) {
-      diffs.push({
-        field: 'Post-response Script',
-        localVal: localPost || '(empty)',
-        remoteVal: remotePost || '(empty)',
-      });
-    }
-  } else {
-    if ((localConfig.server_address || '') !== (remoteConfig.server_address || '')) {
-      diffs.push({
-        field: 'Server Address',
-        localVal: String(localConfig.server_address || ''),
-        remoteVal: String(remoteConfig.server_address || ''),
-      });
-    }
-    if ((localConfig.service || '') !== (remoteConfig.service || '')) {
-      diffs.push({
-        field: 'Service',
-        localVal: String(localConfig.service || ''),
-        remoteVal: String(remoteConfig.service || ''),
-      });
-    }
-    if ((localConfig.method || '') !== (remoteConfig.method || '')) {
-      diffs.push({
-        field: 'Method',
-        localVal: String(localConfig.method || ''),
-        remoteVal: String(remoteConfig.method || ''),
-      });
-    }
-    const localPayload = JSON.stringify(localConfig.payload || {});
-    const remotePayload = JSON.stringify(remoteConfig.payload || {});
-    if (localPayload !== remotePayload) {
-      diffs.push({
-        field: 'Payload',
-        localVal: localPayload.length > 200 ? localPayload.slice(0, 200) + '...' : localPayload,
-        remoteVal: remotePayload.length > 200 ? remotePayload.slice(0, 200) + '...' : remotePayload,
-      });
-    }
-  }
+  const diffs = computeConflictDiffs(localEndpoint, remoteEndpoint, localConfig);
 
   return (
     <div

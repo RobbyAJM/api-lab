@@ -6,6 +6,7 @@ import type { Endpoint, Environment } from '@api-lab/api-types';
 import { X, Radio, ArrowDownUp, ArrowLeftRight, AlertTriangle, Plus } from 'lucide-react';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 import { getHttpMethodColor } from '../../utils/httpMethodUtils';
+import { isTabConflicted } from '../../utils/conflictDetector';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
 
 export const EndpointTabBar: React.FC = () => {
@@ -141,7 +142,7 @@ export const EndpointTabBar: React.FC = () => {
             const dirty = isEndpointDirty(ep.id);
             const cachedEndpoints = queryClient.getQueryData<Endpoint[]>(['endpoints', ep.collection_id]);
             const serverEp = cachedEndpoints?.find((item) => item.id === ep.id);
-            const isConflict = Boolean(serverEp && serverEp.version > ep.version);
+            const isConflict = isTabConflicted(ep, cachedEndpoints);
 
             // Clean endpoint name for tab display, avoiding full summary strings
             const tabSummary = ep.config?.summary || ep.config?.specification?.summary;
