@@ -33,6 +33,10 @@ test('HTTP Before Hook: modifies url, headers, and sets environment variables', 
   assert.equal(result.variables['API_KEY'], 'secret123');
   assert.equal(result.logs.length, 1);
   assert.match(result.logs[0], /Attached authorization token/);
+  // Ensure headers dictionary contains only string values, no function pollution
+  for (const [k, v] of Object.entries(result.request.headers)) {
+    assert.equal(typeof v, 'string');
+  }
 });
 
 test('HTTP After Hook: inspects response, parses JSON, and sets token variable', async () => {

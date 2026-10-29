@@ -221,23 +221,37 @@ function buildPmContext(
     toObject: () => ({ ...varMap }),
   };
 
-  const pmRequest: any = req;
+  const pmRequest: any = { ...req };
   if ('headers' in req) {
     if (!req.headers) (req as any).headers = {};
-    (req.headers as any).get = (k: string) => req.headers[k];
-    (req.headers as any).set = (k: string, v: string) => {
-      req.headers[k] = v;
-    };
-    (req.headers as any).add = (k: string, v: string) => {
-      req.headers[k] = v;
-    };
+    const rawHeaders = req.headers;
+    pmRequest.headers = new Proxy(rawHeaders, {
+      get(target: any, prop: string | symbol) {
+        if (prop === 'get') return (k: string) => target[k] ?? target[k.toLowerCase()];
+        if (prop === 'set') return (k: string, v: any) => { target[k] = String(v); };
+        if (prop === 'add') return (k: string, v: any) => { target[k] = String(v); };
+        return target[prop as string];
+      },
+      set(target: any, prop: string | symbol, value: any) {
+        target[prop as string] = String(value);
+        return true;
+      },
+    });
   }
   if ('metadata' in req) {
     if (!req.metadata) (req as any).metadata = {};
-    (req.metadata as any).get = (k: string) => req.metadata[k];
-    (req.metadata as any).set = (k: string, v: string) => {
-      req.metadata[k] = v;
-    };
+    const rawMetadata = req.metadata;
+    pmRequest.metadata = new Proxy(rawMetadata, {
+      get(target: any, prop: string | symbol) {
+        if (prop === 'get') return (k: string) => target[k] ?? target[k.toLowerCase()];
+        if (prop === 'set') return (k: string, v: any) => { target[k] = String(v); };
+        return target[prop as string];
+      },
+      set(target: any, prop: string | symbol, value: any) {
+        target[prop as string] = String(value);
+        return true;
+      },
+    });
   }
 
   let pmResponse: any = undefined;

@@ -646,7 +646,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       // Sync variables modified by pm.environment.set to the active environment (Bug 2 Fix)
       const syncRes = await syncEnvironmentVariables(
-        beforeResult.variables,
+        currentVars,
         afterResult.variables,
         activeEnvironmentId,
         {

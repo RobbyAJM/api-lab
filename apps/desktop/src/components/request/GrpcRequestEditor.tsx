@@ -844,7 +844,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       // Sync variables modified by pm.environment.set to the active environment (Bug 2 Fix)
       const syncRes = await syncEnvironmentVariables(
-        beforeResult.variables,
+        currentVars,
         afterResult.variables,
         activeEnvironmentId,
         {
@@ -1002,7 +1002,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       // Sync variables modified by stream hook to the active environment (Bug 2 Fix)
       const syncRes = await syncEnvironmentVariables(
-        beforeResult.variables,
+        currentVars,
         afterResult.variables,
         activeEnvironmentId,
         {
