@@ -21,6 +21,12 @@ import {
   isEndpointDirtyInState,
   switchWorkspaceTabs,
   removeWorkspaceTabs,
+  getStoredActiveWorkspaceId,
+  setStoredActiveWorkspaceId,
+  removeStoredActiveWorkspaceId,
+  getStoredWorkspaceTabs,
+  setStoredWorkspaceTabs,
+  removeStoredWorkspaceTabs,
   type TabResponseData,
   type WorkspaceTabMap,
 } from '../utils/tabManager';
@@ -200,6 +206,9 @@ if (typeof window !== 'undefined') {
   applyTheme(getThemeById(initialTheme));
 }
 
+const initialWorkspaceId = getStoredActiveWorkspaceId();
+const initialTabState = initialWorkspaceId ? getStoredWorkspaceTabs(initialWorkspaceId) : null;
+
 export const useAppStore = create<AppState>((set, get) => ({
   token: getAuthToken(),
   user: null,
@@ -240,16 +249,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
   workspaces: [],
-  activeWorkspaceId: null,
+  activeWorkspaceId: initialWorkspaceId,
   activeWorkspaceRole: null,
-  workspaceTabs: {},
+  workspaceTabs: initialWorkspaceId && initialTabState ? { [initialWorkspaceId]: initialTabState } : {},
 
   activeEnvironmentId: typeof window !== 'undefined' ? localStorage.getItem('api_lab_active_environment_id') : null,
 
-  openEndpoints: [],
-  activeEndpointId: null,
-  activeEndpoint: null,
-  endpointDrafts: {},
+  openEndpoints: initialTabState?.openEndpoints || [],
+  activeEndpointId: initialTabState?.activeEndpointId || null,
+  activeEndpoint: initialTabState?.activeEndpoint || null,
+  endpointDrafts: initialTabState?.endpointDrafts || {},
   endpointResponses: {},
 
   lastHttpResponse: null,
@@ -372,6 +381,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   logout: () => {
     setAuthToken(null);
+    removeStoredActiveWorkspaceId();
     set({
       token: null,
       user: null,
@@ -394,12 +404,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setWorkspaces: (workspaces) => {
     const state = get();
+    const storedWsId = getStoredActiveWorkspaceId();
     const current = state.activeWorkspaceId;
     let nextActive = current;
     let role = state.activeWorkspaceRole;
 
-    if (!current || !workspaces.some((w) => w.id === current)) {
-      if (workspaces.length > 0) {
+    if (!nextActive || !workspaces.some((w) => w.id === nextActive)) {
+      if (storedWsId && workspaces.some((w) => w.id === storedWsId)) {
+        nextActive = storedWsId;
+        const activeObj = workspaces.find((w) => w.id === nextActive);
+        if (activeObj) role = activeObj.role;
+      } else if (workspaces.length > 0) {
         nextActive = workspaces[0].id;
         role = workspaces[0].role;
       } else {
@@ -407,9 +422,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         role = null;
       }
     } else {
-      const activeObj = workspaces.find((w) => w.id === current);
+      const activeObj = workspaces.find((w) => w.id === nextActive);
       if (activeObj) role = activeObj.role;
     }
+
+    setStoredActiveWorkspaceId(nextActive);
 
     if (nextActive === current) {
       set({ workspaces, activeWorkspaceRole: role });
@@ -428,6 +445,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
       nextActive
     );
+
+    if (nextActive) {
+      setStoredWorkspaceTabs(nextActive, activeTabState);
+    }
 
     const activeEpId = activeTabState.activeEndpointId;
     const targetResp = activeEpId ? activeTabState.endpointResponses?.[activeEpId] : null;
@@ -464,6 +485,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     if (state.activeWorkspaceId === id) return;
 
+    setStoredActiveWorkspaceId(id);
+
     const ws = state.workspaces.find((w) => w.id === id);
     const { workspaceTabs, activeTabState } = switchWorkspaceTabs(
       state.workspaceTabs,
@@ -477,6 +500,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       },
       id
     );
+
+    if (id) {
+      setStoredWorkspaceTabs(id, activeTabState);
+    }
 
     const activeEpId = activeTabState.activeEndpointId;
     const targetResp = activeEpId ? activeTabState.endpointResponses?.[activeEpId] : null;
@@ -510,6 +537,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   removeWorkspaceTabState: (workspaceId) => {
     removeStoredWorkspaceEnvironment(workspaceId);
+    removeStoredWorkspaceTabs(workspaceId);
+    if (getStoredActiveWorkspaceId() === workspaceId) {
+      removeStoredActiveWorkspaceId();
+    }
     set((state) => ({
       workspaceTabs: removeWorkspaceTabs(state.workspaceTabs, workspaceId),
     }));
@@ -551,6 +582,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         endpoint
       );
 
+      if (state.activeWorkspaceId) {
+        setStoredWorkspaceTabs(state.activeWorkspaceId, tabState);
+      }
+
       const targetResp = state.endpointResponses?.[endpoint.id];
       return {
         ...tabState,
@@ -573,6 +608,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         endpointId
       );
+
+      if (state.activeWorkspaceId) {
+        setStoredWorkspaceTabs(state.activeWorkspaceId, tabState);
+      }
 
       if (tabState.activeEndpointId) {
         localStorage.setItem('api_lab_active_endpoint_id', tabState.activeEndpointId);
@@ -605,6 +644,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         endpointId
       );
 
+      if (state.activeWorkspaceId) {
+        setStoredWorkspaceTabs(state.activeWorkspaceId, tabState);
+      }
+
       const targetResp = tabState.endpointResponses?.[endpointId];
       return {
         ...tabState,
@@ -617,8 +660,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   closeAllEndpoints: () => {
     localStorage.removeItem('api_lab_active_endpoint_id');
+    const tabState = closeAllEndpointsInTabs();
+    const wsId = get().activeWorkspaceId;
+    if (wsId) {
+      setStoredWorkspaceTabs(wsId, tabState);
+    }
     set({
-      ...closeAllEndpointsInTabs(),
+      ...tabState,
       lastHttpResponse: null,
       lastGrpcResponse: null,
       streamMessages: [],
@@ -626,8 +674,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setEndpointDraft: (endpointId, draft) => {
-    set((state) =>
-      setEndpointDraftInState(
+    set((state) => {
+      const tabState = setEndpointDraftInState(
         {
           openEndpoints: state.openEndpoints,
           activeEndpointId: state.activeEndpointId,
@@ -636,13 +684,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
         endpointId,
         draft
-      )
-    );
+      );
+      if (state.activeWorkspaceId) {
+        setStoredWorkspaceTabs(state.activeWorkspaceId, tabState);
+      }
+      return tabState;
+    });
   },
 
   clearEndpointDraft: (endpointId) => {
-    set((state) =>
-      clearEndpointDraftInState(
+    set((state) => {
+      const tabState = clearEndpointDraftInState(
         {
           openEndpoints: state.openEndpoints,
           activeEndpointId: state.activeEndpointId,
@@ -650,8 +702,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           endpointDrafts: state.endpointDrafts,
         },
         endpointId
-      )
-    );
+      );
+      if (state.activeWorkspaceId) {
+        setStoredWorkspaceTabs(state.activeWorkspaceId, tabState);
+      }
+      return tabState;
+    });
   },
 
   isEndpointDirty: (endpointId) => {
@@ -670,6 +726,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveEndpoint: (endpoint) => {
     if (!endpoint) {
       localStorage.removeItem('api_lab_active_endpoint_id');
+      const wsId = get().activeWorkspaceId;
+      if (wsId) {
+        const state = get();
+        setStoredWorkspaceTabs(wsId, {
+          openEndpoints: state.openEndpoints,
+          activeEndpointId: null,
+          activeEndpoint: null,
+          endpointDrafts: state.endpointDrafts,
+        });
+      }
       set({
         activeEndpoint: null,
         activeEndpointId: null,
@@ -682,8 +748,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const state = get();
     if (state.activeEndpointId === endpoint.id) {
       // Update endpoint metadata/config in place
-      set((s) => ({
-        ...updateEndpointInTabs(
+      set((s) => {
+        const tabState = updateEndpointInTabs(
           {
             openEndpoints: s.openEndpoints,
             activeEndpointId: s.activeEndpointId,
@@ -692,8 +758,12 @@ export const useAppStore = create<AppState>((set, get) => ({
             endpointResponses: s.endpointResponses,
           },
           endpoint
-        ),
-      }));
+        );
+        if (s.activeWorkspaceId) {
+          setStoredWorkspaceTabs(s.activeWorkspaceId, tabState);
+        }
+        return tabState;
+      });
       return;
     }
     state.openEndpoint(endpoint);

@@ -16,6 +16,15 @@ import {
   getEndpointResponseFromState,
   switchWorkspaceTabs,
   removeWorkspaceTabs,
+  ACTIVE_WORKSPACE_STORAGE_KEY,
+  WORKSPACE_TABS_STORAGE_PREFIX,
+  getWorkspaceTabsStorageKey,
+  getStoredActiveWorkspaceId,
+  setStoredActiveWorkspaceId,
+  removeStoredActiveWorkspaceId,
+  getStoredWorkspaceTabs,
+  setStoredWorkspaceTabs,
+  removeStoredWorkspaceTabs,
   WORKBENCH_TAB_BAR_HEIGHT_CLASS,
   WORKBENCH_HEADER_BORDER_CLASS,
   type TabState,
@@ -749,5 +758,200 @@ test('removeWorkspaceTabs: prunes deleted workspace without affecting others', (
 test('workbench layout tokens enforce h-9 and border-zinc-800/80 symmetry', () => {
   assert.equal(WORKBENCH_TAB_BAR_HEIGHT_CLASS, 'h-9');
   assert.equal(WORKBENCH_HEADER_BORDER_CLASS, 'border-zinc-800/80');
+});
+
+test('workspace tab storage: key formatting', () => {
+  assert.equal(ACTIVE_WORKSPACE_STORAGE_KEY, 'api_lab_active_workspace_id');
+  assert.equal(WORKSPACE_TABS_STORAGE_PREFIX, 'api_lab_workspace_tabs_');
+  assert.equal(getWorkspaceTabsStorageKey('ws-123'), 'api_lab_workspace_tabs_ws-123');
+});
+
+test('active workspace persistence: stores, retrieves, and removes active workspace ID', () => {
+  const store: Record<string, string> = {};
+  const mockStorage = {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      for (const k of Object.keys(store)) delete store[k];
+    },
+    length: 0,
+    key: () => null,
+  } as unknown as Storage;
+
+  assert.equal(getStoredActiveWorkspaceId(mockStorage), null);
+
+  setStoredActiveWorkspaceId('ws-alpha', mockStorage);
+  assert.equal(getStoredActiveWorkspaceId(mockStorage), 'ws-alpha');
+  assert.equal(store[ACTIVE_WORKSPACE_STORAGE_KEY], 'ws-alpha');
+
+  setStoredActiveWorkspaceId('ws-beta', mockStorage);
+  assert.equal(getStoredActiveWorkspaceId(mockStorage), 'ws-beta');
+
+  setStoredActiveWorkspaceId(null, mockStorage);
+  assert.equal(getStoredActiveWorkspaceId(mockStorage), null);
+  assert.equal(store[ACTIVE_WORKSPACE_STORAGE_KEY], undefined);
+
+  setStoredActiveWorkspaceId('ws-gamma', mockStorage);
+  removeStoredActiveWorkspaceId(mockStorage);
+  assert.equal(getStoredActiveWorkspaceId(mockStorage), null);
+});
+
+test('workspace tab persistence: preserves open tabs, active request, and unsaved drafts across restarts', () => {
+  const store: Record<string, string> = {};
+  const mockStorage = {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      for (const k of Object.keys(store)) delete store[k];
+    },
+    length: 0,
+    key: () => null,
+  } as unknown as Storage;
+
+  const ep1 = createMockEndpoint('ep1', 'Get Orders');
+  const ep2 = createMockEndpoint('ep2', 'Create Order');
+
+  const tabState: TabState = {
+    openEndpoints: [ep1, ep2],
+    activeEndpointId: 'ep2',
+    activeEndpoint: ep2,
+    endpointDrafts: {
+      ep2: { method: 'POST', url: 'https://api.example.com/orders', body: '{"item":1}' },
+    },
+    endpointResponses: {
+      ep2: { http: { status_code: 201, body: '{"id":"ord-1"}' } },
+    },
+  };
+
+  // 1. Initial read on empty storage returns null
+  assert.equal(getStoredWorkspaceTabs('ws-1', mockStorage), null);
+
+  // 2. Persist tabs for ws-1
+  setStoredWorkspaceTabs('ws-1', tabState, mockStorage);
+
+  // 3. Hydrate back
+  const restored = getStoredWorkspaceTabs('ws-1', mockStorage);
+  assert.ok(restored);
+  assert.equal(restored.openEndpoints.length, 2);
+  assert.equal(restored.openEndpoints[0].id, 'ep1');
+  assert.equal(restored.openEndpoints[1].id, 'ep2');
+  assert.equal(restored.activeEndpointId, 'ep2');
+  assert.equal(restored.activeEndpoint?.id, 'ep2');
+  assert.equal(restored.endpointDrafts?.['ep2']?.body, '{"item":1}');
+  // Responses must be empty in storage to prevent quota exhaustion
+  assert.deepEqual(restored.endpointResponses, {});
+
+  // 4. Isolation between workspaces
+  assert.equal(getStoredWorkspaceTabs('ws-2', mockStorage), null);
+
+  const epB = createMockEndpoint('epB', 'Search Users');
+  setStoredWorkspaceTabs('ws-2', {
+    openEndpoints: [epB],
+    activeEndpointId: 'epB',
+    activeEndpoint: epB,
+    endpointDrafts: {},
+    endpointResponses: {},
+  }, mockStorage);
+
+  assert.equal(getStoredWorkspaceTabs('ws-2', mockStorage)?.openEndpoints.length, 1);
+  assert.equal(getStoredWorkspaceTabs('ws-1', mockStorage)?.openEndpoints.length, 2);
+
+  // 5. Remove workspace tabs
+  removeStoredWorkspaceTabs('ws-1', mockStorage);
+  assert.equal(getStoredWorkspaceTabs('ws-1', mockStorage), null);
+  assert.equal(getStoredWorkspaceTabs('ws-2', mockStorage)?.openEndpoints.length, 1);
+});
+
+test('workspace tab persistence: safely handles corrupt or invalid json payload', () => {
+  const store: Record<string, string> = {};
+  const mockStorage = {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      for (const k of Object.keys(store)) delete store[k];
+    },
+    length: 0,
+    key: () => null,
+  } as unknown as Storage;
+
+  // Invalid JSON
+  store[getWorkspaceTabsStorageKey('ws-bad-1')] = '{ broken-json';
+  assert.equal(getStoredWorkspaceTabs('ws-bad-1', mockStorage), null);
+
+  // Non-array openEndpoints
+  store[getWorkspaceTabsStorageKey('ws-bad-2')] = JSON.stringify({ openEndpoints: 'not-array' });
+  assert.equal(getStoredWorkspaceTabs('ws-bad-2', mockStorage), null);
+
+  // Empty workspaceId
+  assert.equal(getStoredWorkspaceTabs('', mockStorage), null);
+});
+
+test('switchWorkspaceTabs and removeWorkspaceTabs integrate with storage', () => {
+  const store: Record<string, string> = {};
+  const mockStorage = {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      for (const k of Object.keys(store)) delete store[k];
+    },
+    length: 0,
+    key: () => null,
+  } as unknown as Storage;
+
+  const epA = createMockEndpoint('epA', 'Ep A');
+  const epB = createMockEndpoint('epB', 'Ep B');
+
+  // Pre-seed storage for ws-2 (as if saved from previous session)
+  setStoredWorkspaceTabs('ws-2', {
+    openEndpoints: [epB],
+    activeEndpointId: 'epB',
+    activeEndpoint: epB,
+    endpointDrafts: {},
+    endpointResponses: {},
+  }, mockStorage);
+
+  const currentTabState: TabState = {
+    openEndpoints: [epA],
+    activeEndpointId: 'epA',
+    activeEndpoint: epA,
+    endpointDrafts: {},
+    endpointResponses: {},
+  };
+
+  // Switch from ws-1 to ws-2 (ws-2 is not in memory, but in storage)
+  const result = switchWorkspaceTabs({}, 'ws-1', currentTabState, 'ws-2', mockStorage);
+
+  // ws-1 must be saved to storage
+  const storedWs1 = getStoredWorkspaceTabs('ws-1', mockStorage);
+  assert.equal(storedWs1?.openEndpoints[0].id, 'epA');
+
+  // ws-2 must be restored from storage
+  assert.equal(result.activeTabState.openEndpoints[0].id, 'epB');
+  assert.equal(result.activeTabState.activeEndpointId, 'epB');
+
+  // removeWorkspaceTabs cleans both memory and storage
+  const cleaned = removeWorkspaceTabs(result.workspaceTabs, 'ws-2', mockStorage);
+  assert.equal(cleaned['ws-2'], undefined);
+  assert.equal(getStoredWorkspaceTabs('ws-2', mockStorage), null);
 });
 

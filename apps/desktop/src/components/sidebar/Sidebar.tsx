@@ -435,7 +435,7 @@ const CollectionNode: React.FC<{
     queryFn: () => apiRequest(`/collections/${collection.id}/endpoints`),
   });
 
-  const { activeEndpointId, activeEndpoint, setActiveEndpoint, revealedFolderId } = useAppStore();
+  const { activeEndpointId, activeEndpoint, revealedFolderId } = useAppStore();
   const isCollHighlighted = isCollectionHighlighted(collection.id, activeEndpoint);
   const containsRevealedFolder = Boolean(revealedFolderId && folders.some((f) => f.id === revealedFolderId));
   const highlightedFolderIds = React.useMemo(() => {
@@ -456,21 +456,6 @@ const CollectionNode: React.FC<{
       setIsOpen(true);
     }
   }, [isCollHighlighted, containsRevealedFolder, activeEndpointId]);
-
-  // Auto-restore last active endpoint strictly once on initial boot
-  const hasAttemptedRestoreRef = useRef(false);
-  useEffect(() => {
-    if (!hasAttemptedRestoreRef.current && !activeEndpointId && endpoints.length > 0) {
-      const savedId = localStorage.getItem('api_lab_active_endpoint_id');
-      if (savedId) {
-        const found = endpoints.find((ep) => ep.id === savedId);
-        if (found) {
-          hasAttemptedRestoreRef.current = true;
-          setActiveEndpoint(found);
-        }
-      }
-    }
-  }, [endpoints, activeEndpointId, setActiveEndpoint]);
 
   const renameMutation = useMutation({
     mutationFn: (newName: string) =>
