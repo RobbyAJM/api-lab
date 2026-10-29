@@ -323,6 +323,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [activeTab, setActiveTab] = useState<'payload' | 'metadata' | 'authorization' | 'scripts' | 'options' | 'specification'>('payload');
   const [specSamplePayload, setSpecSamplePayload] = useState<any>(null);
   const [schemaSamplePayload, setSchemaSamplePayload] = useState<any>(null);
+  const [schemaEnums, setSchemaEnums] = useState<Record<string, string[]>>({});
   const [generatingPayload, setGeneratingPayload] = useState(false);
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -451,13 +452,18 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     ? selectedService.split('.').pop() || selectedService
     : '';
 
-  const schemaFieldNames = schemaSamplePayload && typeof schemaSamplePayload === 'object'
-    ? Object.keys(schemaSamplePayload)
-    : [];
+  const schemaSuggestions = React.useMemo(() => {
+    const fieldNames = schemaSamplePayload && typeof schemaSamplePayload === 'object'
+      ? Object.keys(schemaSamplePayload)
+      : [];
+    const enumVals = Object.values(schemaEnums).flat();
+    return Array.from(new Set([...fieldNames, ...enumVals]));
+  }, [schemaSamplePayload, schemaEnums]);
 
   useEffect(() => {
     if (!selectedService || !selectedMethod) {
       setSchemaSamplePayload(null);
+      setSchemaEnums({});
       return;
     }
     let cancelled = false;
@@ -473,9 +479,15 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           },
           activeVars
         );
-        if (!cancelled && res.payload) setSchemaSamplePayload(res.payload);
+        if (!cancelled) {
+          if (res.payload) setSchemaSamplePayload(res.payload);
+          if (res.enums) setSchemaEnums(res.enums);
+        }
       } catch {
-        if (!cancelled) setSchemaSamplePayload(null);
+        if (!cancelled) {
+          setSchemaSamplePayload(null);
+          setSchemaEnums({});
+        }
       }
     })();
     return () => {
@@ -1488,7 +1500,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 value={payloadStr}
                 onChange={setPayloadStr}
                 variables={activeVariables}
-                suggestions={schemaFieldNames}
+                suggestions={schemaSuggestions}
                 placeholder="{\n  \n}"
               />
             </div>

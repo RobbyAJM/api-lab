@@ -2,12 +2,45 @@ use prost_reflect::{FieldDescriptor, Kind, MessageDescriptor};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 
 const MAX_DEPTH: usize = 5;
 
 /// Generate random sample JSON payload from a protobuf MessageDescriptor
 pub fn generate_sample_payload(desc: &MessageDescriptor) -> Value {
     generate_sample_message(desc, 0)
+}
+
+/// Recursively extract all enum types and their variant names from a MessageDescriptor
+pub fn extract_enums(desc: &MessageDescriptor) -> HashMap<String, Vec<String>> {
+    let mut map = HashMap::new();
+    extract_enums_recursive(desc, &mut map, 0);
+    map
+}
+
+fn extract_enums_recursive(
+    desc: &MessageDescriptor,
+    map: &mut HashMap<String, Vec<String>>,
+    depth: usize,
+) {
+    if depth >= MAX_DEPTH {
+        return;
+    }
+    for field in desc.fields() {
+        match field.kind() {
+            Kind::Enum(enum_desc) => {
+                let name = enum_desc.name().to_string();
+                if !map.contains_key(&name) {
+                    let vals: Vec<String> = enum_desc.values().map(|v| v.name().to_string()).collect();
+                    map.insert(name, vals);
+                }
+            }
+            Kind::Message(nested) => {
+                extract_enums_recursive(&nested, map, depth + 1);
+            }
+            _ => {}
+        }
+    }
 }
 
 fn generate_sample_message(desc: &MessageDescriptor, depth: usize) -> Value {
@@ -72,7 +105,31 @@ fn generate_single_field_value<R: Rng>(
     rng: &mut R,
 ) -> Value {
     match field.kind() {
-        Kind::Message(nested) => generate_sample_message(&nested, depth + 1),
+        Kind::Message(nested) => {
+            let full_name = nested.full_name();
+            match full_name {
+                "google.protobuf.Timestamp" => json!("2026-10-29T12:00:00Z"),
+                "google.protobuf.Duration" => json!("1.5s"),
+                "google.protobuf.Any" => json!({
+                    "@type": "type.googleapis.com/google.protobuf.Empty",
+                    "value": {}
+                }),
+                "google.protobuf.Struct" => json!({
+                    "sample_key": "sample_value"
+                }),
+                "google.protobuf.Value" => json!("sample_value"),
+                "google.protobuf.ListValue" => json!(["sample_item1", "sample_item2"]),
+                "google.protobuf.FieldMask" => json!("field1,field2"),
+                "google.protobuf.Empty" => json!({}),
+                "google.protobuf.DoubleValue" | "google.protobuf.FloatValue" => json!(42.5),
+                "google.protobuf.Int64Value" | "google.protobuf.UInt64Value" => json!(1000),
+                "google.protobuf.Int32Value" | "google.protobuf.UInt32Value" => json!(100),
+                "google.protobuf.BoolValue" => json!(true),
+                "google.protobuf.StringValue" => json!("sample_string"),
+                "google.protobuf.BytesValue" => json!("aGVsbG8="),
+                _ => generate_sample_message(&nested, depth + 1),
+            }
+        }
         Kind::Enum(enum_desc) => {
             let values: Vec<_> = enum_desc.values().collect();
             if let Some(val) = values.choose(rng) {
@@ -321,12 +378,21 @@ mod tests {
         assert!(tags[0].is_string());
 
         // Verify the generated JSON can be decoded into DynamicMessage without error!
-        let dynamic_msg: Result<DynamicMessage, _> = msg_desc.deserialize(payload.clone());
+        let dynamic_msg: Result<DynamicMessage, _> = msg_desc.clone().deserialize(payload.clone());
         assert!(
             dynamic_msg.is_ok(),
             "Generated payload should deserialize into DynamicMessage: {:?}",
             dynamic_msg.err()
         );
+
+        // Verify enum extraction
+        let enums = extract_enums(&msg_desc);
+        assert!(enums.contains_key("Status"));
+        let status_vals = &enums["Status"];
+        assert_eq!(status_vals.len(), 3);
+        assert!(status_vals.contains(&"STATUS_UNKNOWN".to_string()));
+        assert!(status_vals.contains(&"STATUS_ACTIVE".to_string()));
+        assert!(status_vals.contains(&"STATUS_SUSPENDED".to_string()));
     }
 
     #[test]

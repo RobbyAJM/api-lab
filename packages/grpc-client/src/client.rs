@@ -1393,6 +1393,7 @@ pub async fn generate_sample_for_method(
         Err(e) => {
             return GrpcSamplePayloadResponse {
                 payload: serde_json::Value::Null,
+                enums: HashMap::new(),
                 error: Some(format!("Reflection error: {e}")),
             };
         }
@@ -1403,6 +1404,7 @@ pub async fn generate_sample_for_method(
         None => {
             return GrpcSamplePayloadResponse {
                 payload: serde_json::Value::Null,
+                enums: HashMap::new(),
                 error: Some(format!("Service '{}' not found in server reflection", req.service)),
             };
         }
@@ -1413,6 +1415,7 @@ pub async fn generate_sample_for_method(
         None => {
             return GrpcSamplePayloadResponse {
                 payload: serde_json::Value::Null,
+                enums: HashMap::new(),
                 error: Some(format!("Method '{}' not found on service '{}'", req.method, req.service)),
             };
         }
@@ -1420,9 +1423,11 @@ pub async fn generate_sample_for_method(
 
     let input_desc = method_desc.input();
     let payload = crate::payload_generator::generate_sample_payload(&input_desc);
+    let enums = crate::payload_generator::extract_enums(&input_desc);
 
     GrpcSamplePayloadResponse {
         payload,
+        enums,
         error: None,
     }
 }

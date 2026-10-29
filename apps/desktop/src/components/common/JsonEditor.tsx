@@ -200,15 +200,15 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     if (e.altKey && e.key === 'Enter' && suggestions.length > 0) {
       e.preventDefault();
       const beforeCursor = value.slice(0, textarea.selectionStart);
-      const keyMatch = beforeCursor.match(/(?:\{|,)\s*"([^"\n]*)$/);
-      const query = keyMatch?.[1].toLowerCase() || '';
+      const match = beforeCursor.match(/(?:\{|,|:)\s*"([^"\n]*)$/);
+      const query = match?.[1].toLowerCase() || '';
       const items = suggestions.filter((item) => item.toLowerCase().includes(query)).slice(0, 8);
       if (items.length > 0) {
         setCompletion({
           items,
-          start: keyMatch ? textarea.selectionStart - keyMatch[1].length : textarea.selectionStart,
+          start: match ? textarea.selectionStart - match[1].length : textarea.selectionStart,
           selected: 0,
-          hasOpeningQuote: Boolean(keyMatch),
+          hasOpeningQuote: Boolean(match),
         });
       }
       return;
@@ -308,14 +308,14 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     );
     onChange(fullText);
 
-    const keyMatch = fullText.slice(0, e.target.selectionStart).match(/(?:\{|,)\s*"([^"\n]*)$/);
-    if (suggestions.length > 0 && keyMatch) {
-      const query = keyMatch[1].toLowerCase();
+    const match = fullText.slice(0, e.target.selectionStart).match(/(?:\{|,|:)\s*"([^"\n]*)$/);
+    if (suggestions.length > 0 && match) {
+      const query = match[1].toLowerCase();
       const items = suggestions.filter((item) => item.toLowerCase().includes(query)).slice(0, 8);
       if (items.length > 0) {
         setCompletion({
           items,
-          start: e.target.selectionStart - keyMatch[1].length,
+          start: e.target.selectionStart - match[1].length,
           selected: 0,
           hasOpeningQuote: true,
         });

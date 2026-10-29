@@ -376,6 +376,8 @@ pub struct GrpcSamplePayloadRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrpcSamplePayloadResponse {
     pub payload: serde_json::Value,
+    #[serde(default)]
+    pub enums: HashMap<String, Vec<String>>,
     pub error: Option<String>,
 }
 
