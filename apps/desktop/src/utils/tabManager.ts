@@ -466,7 +466,8 @@ export function switchWorkspaceTabs(
   workspaceTabs: WorkspaceTabMap,
   currentWorkspaceId: string | null,
   currentTabState: TabState,
-  targetWorkspaceId: string | null
+  targetWorkspaceId: string | null,
+  storage?: Storage | null
 ): {
   workspaceTabs: WorkspaceTabMap;
   activeTabState: TabState;
@@ -481,16 +482,25 @@ export function switchWorkspaceTabs(
   const nextWorkspaceTabs: WorkspaceTabMap = { ...workspaceTabs };
 
   if (currentWorkspaceId) {
-    nextWorkspaceTabs[currentWorkspaceId] = {
+    const outgoingState: TabState = {
       openEndpoints: [...currentTabState.openEndpoints],
       activeEndpointId: currentTabState.activeEndpointId,
       activeEndpoint: currentTabState.activeEndpoint,
       endpointDrafts: { ...(currentTabState.endpointDrafts || {}) },
       endpointResponses: { ...(currentTabState.endpointResponses || {}) },
     };
+    nextWorkspaceTabs[currentWorkspaceId] = outgoingState;
+    setStoredWorkspaceTabs(currentWorkspaceId, outgoingState, storage);
   }
 
-  const restored = targetWorkspaceId ? nextWorkspaceTabs[targetWorkspaceId] : undefined;
+  let restored = targetWorkspaceId ? nextWorkspaceTabs[targetWorkspaceId] : undefined;
+  if (!restored && targetWorkspaceId) {
+    const fromStorage = getStoredWorkspaceTabs(targetWorkspaceId, storage);
+    if (fromStorage) {
+      restored = fromStorage;
+      nextWorkspaceTabs[targetWorkspaceId] = fromStorage;
+    }
+  }
 
   const activeTabState: TabState = restored
     ? {
@@ -519,10 +529,114 @@ export function switchWorkspaceTabs(
  */
 export function removeWorkspaceTabs(
   workspaceTabs: WorkspaceTabMap,
-  workspaceId: string
+  workspaceId: string,
+  storage?: Storage | null
 ): WorkspaceTabMap {
+  removeStoredWorkspaceTabs(workspaceId, storage);
   if (!workspaceTabs[workspaceId]) return workspaceTabs;
   const next = { ...workspaceTabs };
   delete next[workspaceId];
   return next;
+}
+
+export const ACTIVE_WORKSPACE_STORAGE_KEY = 'api_lab_active_workspace_id';
+export const WORKSPACE_TABS_STORAGE_PREFIX = 'api_lab_workspace_tabs_';
+
+export function getWorkspaceTabsStorageKey(workspaceId: string): string {
+  return `${WORKSPACE_TABS_STORAGE_PREFIX}${workspaceId}`;
+}
+
+export function getStoredActiveWorkspaceId(storage?: Storage | null): string | null {
+  const store = storage !== undefined ? storage : (typeof window !== 'undefined' ? window.localStorage : null);
+  if (!store) return null;
+  return store.getItem(ACTIVE_WORKSPACE_STORAGE_KEY);
+}
+
+export function setStoredActiveWorkspaceId(
+  workspaceId: string | null,
+  storage?: Storage | null
+): void {
+  const store = storage !== undefined ? storage : (typeof window !== 'undefined' ? window.localStorage : null);
+  if (!store) return;
+  if (workspaceId) {
+    store.setItem(ACTIVE_WORKSPACE_STORAGE_KEY, workspaceId);
+  } else {
+    store.removeItem(ACTIVE_WORKSPACE_STORAGE_KEY);
+  }
+}
+
+export function removeStoredActiveWorkspaceId(storage?: Storage | null): void {
+  const store = storage !== undefined ? storage : (typeof window !== 'undefined' ? window.localStorage : null);
+  if (!store) return;
+  store.removeItem(ACTIVE_WORKSPACE_STORAGE_KEY);
+}
+
+export interface StoredWorkspaceTabsPayload {
+  openEndpoints: Endpoint[];
+  activeEndpointId: string | null;
+  endpointDrafts?: Record<string, Record<string, any>>;
+}
+
+export function getStoredWorkspaceTabs(
+  workspaceId: string,
+  storage?: Storage | null
+): TabState | null {
+  if (!workspaceId) return null;
+  const store = storage !== undefined ? storage : (typeof window !== 'undefined' ? window.localStorage : null);
+  if (!store) return null;
+
+  try {
+    const raw = store.getItem(getWorkspaceTabsStorageKey(workspaceId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || !Array.isArray(parsed.openEndpoints)) return null;
+
+    const activeEndpointId = typeof parsed.activeEndpointId === 'string' ? parsed.activeEndpointId : null;
+    const activeEndpoint = activeEndpointId
+      ? parsed.openEndpoints.find((e: Endpoint) => e.id === activeEndpointId) || null
+      : null;
+
+    return {
+      openEndpoints: parsed.openEndpoints,
+      activeEndpointId,
+      activeEndpoint,
+      endpointDrafts: parsed.endpointDrafts && typeof parsed.endpointDrafts === 'object' ? parsed.endpointDrafts : {},
+      endpointResponses: {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredWorkspaceTabs(
+  workspaceId: string,
+  tabState: TabState,
+  storage?: Storage | null
+): void {
+  if (!workspaceId) return;
+  const store = storage !== undefined ? storage : (typeof window !== 'undefined' ? window.localStorage : null);
+  if (!store) return;
+
+  // ponytail: omit responses to stay well clear of 5MB localStorage quota limit
+  const payload: StoredWorkspaceTabsPayload = {
+    openEndpoints: tabState.openEndpoints,
+    activeEndpointId: tabState.activeEndpointId,
+    endpointDrafts: tabState.endpointDrafts || {},
+  };
+
+  try {
+    store.setItem(getWorkspaceTabsStorageKey(workspaceId), JSON.stringify(payload));
+  } catch {
+    // ignore quota / storage errors
+  }
+}
+
+export function removeStoredWorkspaceTabs(
+  workspaceId: string,
+  storage?: Storage | null
+): void {
+  if (!workspaceId) return;
+  const store = storage !== undefined ? storage : (typeof window !== 'undefined' ? window.localStorage : null);
+  if (!store) return;
+  store.removeItem(getWorkspaceTabsStorageKey(workspaceId));
 }
