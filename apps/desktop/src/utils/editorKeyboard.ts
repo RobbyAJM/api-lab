@@ -411,6 +411,59 @@ export function handleDeleteLine(
 }
 
 /**
+ * Moves currently selected line or block of lines up or down (Alt+Up / Alt+Down).
+ */
+export function handleMoveLine(
+  text: string,
+  start: number,
+  end: number,
+  direction: 'up' | 'down'
+): EditorChangeResult {
+  const firstLineStart = text.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+  let lastLineEnd = text.indexOf('\n', end);
+  if (lastLineEnd === -1) lastLineEnd = text.length;
+
+  if (end > start && text[end - 1] === '\n') {
+    lastLineEnd = end - 1;
+  }
+
+  const selectedBlock = text.substring(firstLineStart, lastLineEnd);
+
+  if (direction === 'up') {
+    if (firstLineStart === 0) {
+      return { text, selectionStart: start, selectionEnd: end };
+    }
+    const prevLineStart = text.lastIndexOf('\n', firstLineStart - 2) + 1;
+    const prevLineText = text.substring(prevLineStart, firstLineStart - 1);
+    const before = text.substring(0, prevLineStart);
+    const after = text.substring(lastLineEnd);
+    const newText = before + selectedBlock + '\n' + prevLineText + after;
+    const offset = prevLineText.length + 1;
+    return {
+      text: newText,
+      selectionStart: start - offset,
+      selectionEnd: end - offset,
+    };
+  } else {
+    if (lastLineEnd >= text.length) {
+      return { text, selectionStart: start, selectionEnd: end };
+    }
+    let nextLineEnd = text.indexOf('\n', lastLineEnd + 1);
+    if (nextLineEnd === -1) nextLineEnd = text.length;
+    const nextLineText = text.substring(lastLineEnd + 1, nextLineEnd);
+    const before = text.substring(0, firstLineStart);
+    const after = text.substring(nextLineEnd);
+    const newText = before + nextLineText + '\n' + selectedBlock + after;
+    const offset = nextLineText.length + 1;
+    return {
+      text: newText,
+      selectionStart: start + offset,
+      selectionEnd: end + offset,
+    };
+  }
+}
+
+/**
  * Master dispatcher for code editor keyboard events.
  * Returns null if default browser behavior should proceed.
  */
@@ -460,6 +513,11 @@ export function handleEditorKeyDown(
   // Toggle line comment (Ctrl+/ or Cmd+/)
   if (isMod && (action.key === '/' || action.key === '?')) {
     return handleToggleComment(text, start, end);
+  }
+
+  // Move line up / down (Alt+ArrowUp / Alt+ArrowDown)
+  if (action.altKey && !isMod && (action.key === 'ArrowUp' || action.key === 'ArrowDown')) {
+    return handleMoveLine(text, start, end, action.key === 'ArrowUp' ? 'up' : 'down');
   }
 
   // Adjust indentation (Ctrl+[ to unindent, Ctrl+] to indent)

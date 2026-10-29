@@ -26,6 +26,11 @@ export const HTTP_PRE_SNIPPETS: ScriptSnippet[] = [
     code: `pm.environment.set("TIMESTAMP", Date.now());\n`,
   },
   {
+    title: 'Generate UUID',
+    description: 'Generate UUID v4 and save to environment',
+    code: `pm.environment.set("UUID", crypto.randomUUID());\n`,
+  },
+  {
     title: 'Log message',
     description: 'Print message to script console',
     code: `console.log("Sending request to:", pm.request.url);\n`,
@@ -70,6 +75,11 @@ export const GRPC_PRE_SNIPPETS: ScriptSnippet[] = [
     title: 'Set environment variable',
     description: 'Save key-value pair to environment',
     code: `pm.environment.set("REQ_ID", "req_" + Date.now());\n`,
+  },
+  {
+    title: 'Generate UUID',
+    description: 'Generate UUID v4 and save to environment',
+    code: `pm.environment.set("UUID", crypto.randomUUID());\n`,
   },
   {
     title: 'Log method call',

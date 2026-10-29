@@ -876,6 +876,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             }`}
           >
             <span>Scripts</span>
+            {Boolean(preRequestScript.trim() || postResponseScript.trim()) && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+            )}
             {hookTests.length > 0 && (
               <span className="text-[10px] font-mono px-1.5 py-0.2 bg-zinc-900 text-zinc-400 rounded border border-zinc-800">
                 {hookTests.filter((t) => t.passed).length}/{hookTests.length}

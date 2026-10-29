@@ -257,5 +257,31 @@ test('handleEditorKeyDown: dispatches Ctrl+X to remove current line when no sele
   assert.equal(withSelection, null);
 });
 
+test('handleMoveLine: moves line up and down with Alt+ArrowUp / Alt+ArrowDown', () => {
+  const doc = 'line1\nline2\nline3';
+
+  // Move line2 up -> line2\nline1\nline3
+  const moveUp = handleEditorKeyDown(doc, 7, 7, { key: 'ArrowUp', altKey: true });
+  assert.ok(moveUp);
+  assert.equal(moveUp.text, 'line2\nline1\nline3');
+  assert.equal(moveUp.selectionStart, 1);
+
+  // Move line1 down from start -> line2\nline1\nline3
+  const moveDown = handleEditorKeyDown(doc, 2, 2, { key: 'ArrowDown', altKey: true });
+  assert.ok(moveDown);
+  assert.equal(moveDown.text, 'line2\nline1\nline3');
+  assert.equal(moveDown.selectionStart, 8);
+
+  // Top line cannot move up
+  const topUp = handleEditorKeyDown(doc, 0, 0, { key: 'ArrowUp', altKey: true });
+  assert.ok(topUp);
+  assert.equal(topUp.text, doc);
+
+  // Bottom line cannot move down
+  const bottomDown = handleEditorKeyDown(doc, 15, 15, { key: 'ArrowDown', altKey: true });
+  assert.ok(bottomDown);
+  assert.equal(bottomDown.text, doc);
+});
+
 
 
