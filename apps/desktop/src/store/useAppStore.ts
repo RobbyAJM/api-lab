@@ -29,6 +29,12 @@ import {
   loadPaletteRecency,
   savePaletteRecency,
 } from '../utils/shortcuts';
+import {
+  getStoredWorkspaceEnvironment,
+  setStoredWorkspaceEnvironment,
+  removeStoredWorkspaceEnvironment,
+  NO_ENVIRONMENT_VALUE,
+} from '../utils/environmentDropdown';
 import type { ExecutedRequestMeta } from '../utils/responseViewerUtils';
 
 export interface StreamMessageItem {
@@ -432,10 +438,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.removeItem('api_lab_active_endpoint_id');
     }
 
+    const storedEnv = nextActive ? getStoredWorkspaceEnvironment(nextActive) : null;
+    const initialEnvId = storedEnv === NO_ENVIRONMENT_VALUE ? null : (storedEnv || null);
+
     set({
       workspaces,
       activeWorkspaceId: nextActive,
       activeWorkspaceRole: role,
+      activeEnvironmentId: initialEnvId,
       workspaceTabs,
       openEndpoints: activeTabState.openEndpoints,
       activeEndpointId: activeTabState.activeEndpointId,
@@ -477,9 +487,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.removeItem('api_lab_active_endpoint_id');
     }
 
+    const storedEnv = id ? getStoredWorkspaceEnvironment(id) : null;
+    const nextEnvId = storedEnv === NO_ENVIRONMENT_VALUE ? null : (storedEnv || null);
+
     set({
       activeWorkspaceId: id,
       activeWorkspaceRole: ws ? ws.role : null,
+      activeEnvironmentId: nextEnvId,
       workspaceTabs,
       openEndpoints: activeTabState.openEndpoints,
       activeEndpointId: activeTabState.activeEndpointId,
@@ -494,12 +508,18 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  removeWorkspaceTabState: (workspaceId) =>
+  removeWorkspaceTabState: (workspaceId) => {
+    removeStoredWorkspaceEnvironment(workspaceId);
     set((state) => ({
       workspaceTabs: removeWorkspaceTabs(state.workspaceTabs, workspaceId),
-    })),
+    }));
+  },
 
   setActiveEnvironmentId: (id) => {
+    const wsId = get().activeWorkspaceId;
+    if (wsId) {
+      setStoredWorkspaceEnvironment(wsId, id);
+    }
     if (typeof window !== 'undefined') {
       if (id) {
         localStorage.setItem('api_lab_active_environment_id', id);
