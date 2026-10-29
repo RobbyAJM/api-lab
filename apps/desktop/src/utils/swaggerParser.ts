@@ -34,9 +34,24 @@ export interface ParsedHttpEndpoint {
   pathVariables?: [string, string, string?][];
   headers: Record<string, string>;
   headerDescriptions?: Record<string, string>;
-  bodyType: 'none' | 'json';
-  body: string; // JSON string payload
+  bodyType: 'none' | 'json' | 'form' | 'multipart' | 'text' | 'binary';
+  body: string; // JSON string, urlencoded string, or multipart JSON payload
   specification?: SwaggerEndpointSpecification;
+}
+
+export interface SwaggerMultipartField {
+  name: string;
+  value: string;
+  enabled?: boolean;
+  filename?: string;
+  data?: string;
+  content_type?: string;
+}
+
+export interface SwaggerSamplePayloadResult {
+  bodyType: 'json' | 'form' | 'multipart' | 'text';
+  body: string;
+  multipartFields?: SwaggerMultipartField[];
 }
 
 export interface ParsedSwaggerService {
@@ -63,6 +78,8 @@ export interface SwaggerDoc {
   host?: string;
   basePath?: string;
   schemes?: string[];
+  consumes?: string[];
+  produces?: string[];
   servers?: Array<{ url: string; description?: string }>;
   tags?: Array<{ name: string; description?: string }>;
   paths?: Record<string, Record<string, any>>;
@@ -73,11 +90,128 @@ export interface SwaggerDoc {
 }
 
 /**
+ * Smart sample generator heuristics matching gRPC Request message sample payload generator.
+ */
+export function generateSmartStringSample(
+  propertyName?: string,
+  format?: string,
+  enumVals?: string[]
+): string {
+  if (Array.isArray(enumVals) && enumVals.length > 0) {
+    return String(enumVals[0]);
+  }
+  const prop = (propertyName || '').toLowerCase().replace(/[-_]/g, '');
+
+  if (format === 'date-time') return '2026-10-30T12:00:00Z';
+  if (format === 'date') return '2026-10-30';
+  if (format === 'email' || prop.includes('email')) return 'user@example.com';
+  if (
+    format === 'uri' ||
+    format === 'url' ||
+    prop.includes('url') ||
+    prop.includes('uri') ||
+    prop.includes('link') ||
+    prop.includes('avatar') ||
+    prop.includes('website')
+  ) {
+    return 'https://example.com/api';
+  }
+  if (format === 'uuid' || prop.includes('uuid')) return '123e4567-e89b-12d3-a456-426614174000';
+  if (prop.includes('phone') || prop.includes('mobile')) return '+15550199';
+  if (
+    prop.includes('password') ||
+    prop.includes('secret') ||
+    prop.includes('token') ||
+    prop.includes('apikey')
+  ) {
+    return 'secret_token_123';
+  }
+  if (prop.includes('firstname')) return 'Jane';
+  if (prop.includes('lastname')) return 'Doe';
+  if (prop.includes('username')) return 'janedoe';
+  if (prop === 'name' || prop.endsWith('name')) return 'Sample Name';
+  if (prop.includes('title')) return 'Sample Title';
+  if (
+    prop.includes('description') ||
+    prop.includes('summary') ||
+    prop.includes('content') ||
+    prop.includes('text')
+  ) {
+    return 'Sample description text';
+  }
+  if (prop === 'id' || prop.endsWith('id')) return 'id_1001';
+  if (prop.includes('city')) return 'San Francisco';
+  if (prop.includes('country')) return 'United States';
+  if (prop.includes('zip') || prop.includes('postal')) return '94103';
+  if (prop.includes('address')) return '123 Market Street';
+  if (format === 'byte' || format === 'binary') return 'sample.txt';
+
+  if (propertyName) {
+    return `${propertyName}_sample`;
+  }
+  return 'sample_value';
+}
+
+export function generateSmartNumberSample(
+  propertyName?: string,
+  type?: string,
+  format?: string,
+  enumVals?: any[]
+): number {
+  if (Array.isArray(enumVals) && enumVals.length > 0 && typeof enumVals[0] === 'number') {
+    return enumVals[0];
+  }
+  const prop = (propertyName || '').toLowerCase().replace(/[-_]/g, '');
+  if (prop.includes('page')) return 1;
+  if (prop.includes('limit') || prop.includes('pagesize') || prop.includes('size')) return 20;
+  if (prop.includes('status') || prop.includes('code')) return 200;
+  if (prop.includes('port')) return 8080;
+  if (prop.includes('year')) return 2026;
+  if (prop.includes('month')) return 10;
+  if (prop.includes('day')) return 30;
+  if (
+    prop.includes('count') ||
+    prop.includes('quantity') ||
+    prop.includes('total') ||
+    prop.includes('qty')
+  ) {
+    return 5;
+  }
+  if (
+    prop.includes('price') ||
+    prop.includes('amount') ||
+    prop.includes('cost') ||
+    prop.includes('fee') ||
+    prop.includes('balance') ||
+    prop.includes('rate')
+  ) {
+    return 49.99;
+  }
+  if (prop.includes('lat') || prop.includes('latitude')) return 37.7749;
+  if (prop.includes('lng') || prop.includes('lon') || prop.includes('longitude')) return -122.4194;
+  if (prop === 'id' || prop.endsWith('id')) return 1001;
+
+  if (type === 'integer' || format === 'int32' || format === 'int64') return 100;
+  return 42.5;
+}
+
+export function generateSmartBooleanSample(propertyName?: string): boolean {
+  const prop = (propertyName || '').toLowerCase();
+  if (prop.includes('delete') || prop.includes('disable') || prop.includes('archived')) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Resolves a $ref pointer like '#/definitions/Pet' or '#/components/schemas/Pet'
  */
 export function resolveRef(ref: string, rootDoc: SwaggerDoc): any {
   if (!ref || typeof ref !== 'string') return null;
-  const parts = ref.replace(/^#\//, '').split('/');
+  const parts = ref
+    .replace(/^#\//, '')
+    .split('/')
+    .map((p) => p.replace(/~1/g, '/').replace(/~0/g, '~'));
   let current: any = rootDoc;
   for (const part of parts) {
     if (current && typeof current === 'object' && part in current) {
@@ -90,6 +224,20 @@ export function resolveRef(ref: string, rootDoc: SwaggerDoc): any {
 }
 
 /**
+ * Resolves chained references until reaching the target schema object.
+ */
+export function resolveFully(schema: any, rootDoc: SwaggerDoc, depth: number = 0): any {
+  if (!schema || typeof schema !== 'object' || depth > 8) return schema;
+  if (schema.$ref && typeof schema.$ref === 'string') {
+    const resolved = resolveRef(schema.$ref, rootDoc);
+    if (resolved && resolved !== schema) {
+      return resolveFully(resolved, rootDoc, depth + 1);
+    }
+  }
+  return schema;
+}
+
+/**
  * Recursively generates a sample JSON value from a schema.
  * Employs visited set to prevent infinite loops on recursive schemas.
  */
@@ -97,7 +245,8 @@ export function generateSampleFromSchema(
   schema: any,
   rootDoc: SwaggerDoc,
   visitedRefs: Set<string> = new Set(),
-  depth: number = 0
+  depth: number = 0,
+  propertyName?: string
 ): any {
   if (!schema || depth > 8) return null;
 
@@ -109,16 +258,21 @@ export function generateSampleFromSchema(
     if (!resolved) return {};
     const nextVisited = new Set(visitedRefs);
     nextVisited.add(schema.$ref);
-    return generateSampleFromSchema(resolved, rootDoc, nextVisited, depth + 1);
+    return generateSampleFromSchema(resolved, rootDoc, nextVisited, depth + 1, propertyName);
   }
 
-  // Handle allOf (merge properties)
+  // Handle allOf (merge properties and base schema)
   if (Array.isArray(schema.allOf)) {
     const merged: Record<string, any> = {};
     for (const sub of schema.allOf) {
-      const sample = generateSampleFromSchema(sub, rootDoc, visitedRefs, depth + 1);
+      const sample = generateSampleFromSchema(sub, rootDoc, visitedRefs, depth + 1, propertyName);
       if (sample && typeof sample === 'object' && !Array.isArray(sample)) {
         Object.assign(merged, sample);
+      }
+    }
+    if (schema.properties && typeof schema.properties === 'object') {
+      for (const [propName, propSchema] of Object.entries(schema.properties)) {
+        merged[propName] = generateSampleFromSchema(propSchema, rootDoc, visitedRefs, depth + 1, propName);
       }
     }
     return merged;
@@ -126,20 +280,41 @@ export function generateSampleFromSchema(
 
   // Handle oneOf / anyOf: pick first branch
   if (Array.isArray(schema.oneOf) && schema.oneOf.length > 0) {
-    return generateSampleFromSchema(schema.oneOf[0], rootDoc, visitedRefs, depth + 1);
+    return generateSampleFromSchema(schema.oneOf[0], rootDoc, visitedRefs, depth + 1, propertyName);
   }
   if (Array.isArray(schema.anyOf) && schema.anyOf.length > 0) {
-    return generateSampleFromSchema(schema.anyOf[0], rootDoc, visitedRefs, depth + 1);
+    return generateSampleFromSchema(schema.anyOf[0], rootDoc, visitedRefs, depth + 1, propertyName);
   }
 
-  const type = schema.type;
+  // Handle multi-types (OpenAPI 3.1)
+  let type = schema.type;
+  if (Array.isArray(type)) {
+    type = type.find((t) => t !== 'null') || type[0];
+  }
+
+  // Primitives with defaults/examples
+  if (schema.example !== undefined) return schema.example;
+  if (schema.default !== undefined) return schema.default;
 
   // Object
-  if (type === 'object' || schema.properties) {
+  if (type === 'object' || schema.properties || schema.additionalProperties) {
     const obj: Record<string, any> = {};
     const props = schema.properties || {};
     for (const [propName, propSchema] of Object.entries(props)) {
-      obj[propName] = generateSampleFromSchema(propSchema, rootDoc, visitedRefs, depth + 1);
+      obj[propName] = generateSampleFromSchema(propSchema, rootDoc, visitedRefs, depth + 1, propName);
+    }
+    if (Object.keys(obj).length === 0 && schema.additionalProperties) {
+      const val =
+        typeof schema.additionalProperties === 'object'
+          ? generateSampleFromSchema(
+              schema.additionalProperties,
+              rootDoc,
+              visitedRefs,
+              depth + 1,
+              'sample_key'
+            )
+          : 'sample_value';
+      obj['sample_key'] = val;
     }
     return obj;
   }
@@ -147,38 +322,29 @@ export function generateSampleFromSchema(
   // Array
   if (type === 'array' || schema.items) {
     if (schema.items) {
-      const itemSample = generateSampleFromSchema(schema.items, rootDoc, visitedRefs, depth + 1);
+      const itemSample = generateSampleFromSchema(schema.items, rootDoc, visitedRefs, depth + 1, propertyName);
       return itemSample !== null && itemSample !== undefined ? [itemSample] : [];
     }
     return [];
   }
 
-  // Primitives with defaults/examples
-  if (schema.example !== undefined) return schema.example;
-  if (schema.default !== undefined) return schema.default;
-
   if (type === 'string') {
-    if (Array.isArray(schema.enum) && schema.enum.length > 0) {
-      return schema.enum[0];
-    }
-    if (schema.format === 'date-time') return '2026-01-01T00:00:00Z';
-    if (schema.format === 'date') return '2026-01-01';
-    if (schema.format === 'byte' || schema.format === 'binary') return '';
-    return '';
+    return generateSmartStringSample(propertyName, schema.format, schema.enum);
   }
 
   if (type === 'integer' || type === 'number') {
-    if (Array.isArray(schema.enum) && schema.enum.length > 0) {
-      return schema.enum[0];
-    }
-    return 0;
+    return generateSmartNumberSample(propertyName, type, schema.format, schema.enum);
   }
 
   if (type === 'boolean') {
-    return false;
+    return generateSmartBooleanSample(propertyName);
   }
 
-  return {};
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    return schema.enum[0];
+  }
+
+  return generateSmartStringSample(propertyName);
 }
 
 export function getSchemaTypeName(schema: any): string | undefined {
@@ -236,23 +402,51 @@ export function extractSwaggerSpecification(
       break;
     }
   }
+
   // OpenAPI 3.x requestBody
-  if (!reqSchema && operation?.requestBody?.content) {
-    const content = operation.requestBody.content;
-    const jsonContent =
-      content['application/json'] ||
-      content['*/*'] ||
-      Object.values(content)[0];
-    if (jsonContent?.schema) {
-      reqSchema = jsonContent.schema;
+  if (!reqSchema && operation?.requestBody) {
+    const reqBody = resolveFully(operation.requestBody, doc);
+    if (reqBody?.content && typeof reqBody.content === 'object') {
+      const content = reqBody.content;
+      const jsonContent =
+        content['application/json'] ||
+        content['multipart/form-data'] ||
+        content['application/x-www-form-urlencoded'] ||
+        content['*/*'] ||
+        Object.values(content)[0];
+      if (jsonContent?.schema) {
+        reqSchema = jsonContent.schema;
+      }
     }
   }
 
   if (reqSchema) {
-    requestTypeName = getSchemaTypeName(reqSchema) || 'RequestBody';
-    const resolvedReq = reqSchema.$ref ? resolveRef(reqSchema.$ref, doc) : reqSchema;
-    const props = resolvedReq?.properties || {};
-    const requiredList = Array.isArray(resolvedReq?.required) ? resolvedReq.required : [];
+    const resolvedReq = resolveFully(reqSchema, doc);
+    requestTypeName =
+      getSchemaTypeName(reqSchema) || getSchemaTypeName(resolvedReq) || 'RequestBody';
+
+    const props: Record<string, any> = {};
+    const requiredList: string[] = [];
+
+    const collectProperties = (schemaObj: any, seen: Set<any> = new Set()) => {
+      if (!schemaObj || typeof schemaObj !== 'object' || seen.has(schemaObj)) return;
+      seen.add(schemaObj);
+      const fully = resolveFully(schemaObj, doc);
+      if (Array.isArray(fully.allOf)) {
+        for (const sub of fully.allOf) collectProperties(sub, seen);
+      }
+      if (fully.properties && typeof fully.properties === 'object') {
+        Object.assign(props, fully.properties);
+      }
+      if (Array.isArray(fully.required)) {
+        requiredList.push(...fully.required);
+      }
+      if (fully.items && (!fully.properties || Object.keys(fully.properties).length === 0)) {
+        collectProperties(fully.items, seen);
+      }
+    };
+
+    collectProperties(resolvedReq);
 
     for (const [propName, propSchema] of Object.entries(props)) {
       requestFields.push({
@@ -262,17 +456,33 @@ export function extractSwaggerSpecification(
         description: (propSchema as any)?.description,
       });
     }
-  } else if (allParams.length > 0) {
-    const nonBody = allParams.filter((p) => p && p.name && p.in !== 'body');
-    if (nonBody.length > 0) {
-      requestTypeName = 'Parameters';
-      for (const p of nonBody) {
+  } else {
+    // Check formData params
+    const formDataParams = allParams.filter((p) => p && p.in === 'formData' && p.name);
+    if (formDataParams.length > 0) {
+      requestTypeName = 'FormData';
+      for (const p of formDataParams) {
         requestFields.push({
           name: p.name,
-          type: p.type || (p.schema ? formatSwaggerPropertyType(p.schema, doc) : 'string'),
+          type: p.type || 'string',
           required: !!p.required,
           description: p.description,
         });
+      }
+    } else if (allParams.length > 0) {
+      const nonBody = allParams.filter(
+        (p) => p && p.name && p.in !== 'body' && p.in !== 'formData'
+      );
+      if (nonBody.length > 0) {
+        requestTypeName = 'Parameters';
+        for (const p of nonBody) {
+          requestFields.push({
+            name: p.name,
+            type: p.type || (p.schema ? formatSwaggerPropertyType(p.schema, doc) : 'string'),
+            required: !!p.required,
+            description: p.description,
+          });
+        }
       }
     }
   }
@@ -301,10 +511,32 @@ export function extractSwaggerSpecification(
     }
 
     if (resSchema) {
-      responseTypeName = getSchemaTypeName(resSchema) || 'ResponseBody';
-      const resolvedRes = resSchema.$ref ? resolveRef(resSchema.$ref, doc) : resSchema;
-      const props = resolvedRes?.properties || {};
-      const requiredList = Array.isArray(resolvedRes?.required) ? resolvedRes.required : [];
+      const resolvedRes = resolveFully(resSchema, doc);
+      responseTypeName =
+        getSchemaTypeName(resSchema) || getSchemaTypeName(resolvedRes) || 'ResponseBody';
+
+      const props: Record<string, any> = {};
+      const requiredList: string[] = [];
+
+      const collectProperties = (schemaObj: any, seen: Set<any> = new Set()) => {
+        if (!schemaObj || typeof schemaObj !== 'object' || seen.has(schemaObj)) return;
+        seen.add(schemaObj);
+        const fully = resolveFully(schemaObj, doc);
+        if (Array.isArray(fully.allOf)) {
+          for (const sub of fully.allOf) collectProperties(sub, seen);
+        }
+        if (fully.properties && typeof fully.properties === 'object') {
+          Object.assign(props, fully.properties);
+        }
+        if (Array.isArray(fully.required)) {
+          requiredList.push(...fully.required);
+        }
+        if (fully.items && (!fully.properties || Object.keys(fully.properties).length === 0)) {
+          collectProperties(fully.items, seen);
+        }
+      };
+
+      collectProperties(resolvedRes);
 
       for (const [propName, propSchema] of Object.entries(props)) {
         responseFields.push({
@@ -322,8 +554,26 @@ export function extractSwaggerSpecification(
   const defs = doc.definitions || doc.components?.schemas || {};
   for (const [defName, defSchema] of Object.entries(defs)) {
     if (!defSchema || typeof defSchema !== 'object') continue;
-    const props = (defSchema as any).properties || {};
-    const reqList = Array.isArray((defSchema as any).required) ? (defSchema as any).required : [];
+    const resolvedDef = resolveFully(defSchema, doc);
+    const props: Record<string, any> = {};
+    const reqList: string[] = [];
+
+    const collectProps = (s: any, seen: Set<any> = new Set()) => {
+      if (!s || typeof s !== 'object' || seen.has(s)) return;
+      seen.add(s);
+      const f = resolveFully(s, doc);
+      if (Array.isArray(f.allOf)) {
+        for (const sub of f.allOf) collectProps(sub, seen);
+      }
+      if (f.properties && typeof f.properties === 'object') {
+        Object.assign(props, f.properties);
+      }
+      if (Array.isArray(f.required)) {
+        reqList.push(...f.required);
+      }
+    };
+    collectProps(resolvedDef);
+
     const fields: SwaggerFieldSummary[] = [];
     for (const [propName, propSchema] of Object.entries(props)) {
       fields.push({
@@ -437,6 +687,8 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
       const headerDescriptions: Record<string, string> = {};
       let bodySample: any = null;
       let hasBody = false;
+      let detectedBodyType: 'none' | 'json' | 'form' | 'multipart' | 'text' | 'binary' = 'none';
+      const formDataParams: any[] = [];
 
       for (const p of allParams) {
         if (!p || typeof p !== 'object') continue;
@@ -459,21 +711,67 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
           if (p.description) headerDescriptions[pName] = p.description;
         } else if (pIn === 'body' && p.schema) {
           hasBody = true;
-          bodySample = generateSampleFromSchema(p.schema, doc);
+          detectedBodyType = 'json';
+          bodySample = generateSampleFromSchema(p.schema, doc, new Set(), 0, pName);
+        } else if (pIn === 'formData' && pName) {
+          formDataParams.push(p);
         }
+      }
+
+      if (formDataParams.length > 0) {
+        hasBody = true;
+        const isMultipart =
+          formDataParams.some((p) => p.type === 'file') ||
+          (Array.isArray(operation.consumes) &&
+            operation.consumes.some((c: string) => c.includes('multipart'))) ||
+          (Array.isArray(doc.consumes) &&
+            doc.consumes.some((c: string) => c.includes('multipart')));
+        detectedBodyType = isMultipart ? 'multipart' : 'form';
+
+        const formObj: Record<string, any> = {};
+        for (const p of formDataParams) {
+          formObj[p.name] =
+            p.example !== undefined
+              ? p.example
+              : p.default !== undefined
+              ? p.default
+              : generateSampleFromSchema(p, doc, new Set(), 0, p.name) ||
+                (p.type === 'file' ? 'sample.txt' : generateSmartStringSample(p.name));
+        }
+        bodySample = formObj;
       }
 
       // OpenAPI 3.x requestBody
       if (!hasBody && operation.requestBody && typeof operation.requestBody === 'object') {
-        const content = operation.requestBody.content;
+        const reqBody = resolveFully(operation.requestBody, doc);
+        const content = reqBody?.content;
         if (content && typeof content === 'object') {
-          const jsonContent =
-            content['application/json'] ||
-            content['*/*'] ||
-            Object.values(content)[0];
-          if (jsonContent?.schema) {
+          if (content['application/json']?.schema) {
             hasBody = true;
-            bodySample = generateSampleFromSchema(jsonContent.schema, doc);
+            detectedBodyType = 'json';
+            bodySample = generateSampleFromSchema(content['application/json'].schema, doc);
+          } else if (content['multipart/form-data']?.schema) {
+            hasBody = true;
+            detectedBodyType = 'multipart';
+            bodySample = generateSampleFromSchema(content['multipart/form-data'].schema, doc);
+          } else if (content['application/x-www-form-urlencoded']?.schema) {
+            hasBody = true;
+            detectedBodyType = 'form';
+            bodySample = generateSampleFromSchema(content['application/x-www-form-urlencoded'].schema, doc);
+          } else {
+            const firstKey = Object.keys(content)[0];
+            const firstContent = content[firstKey];
+            if (firstContent?.schema) {
+              hasBody = true;
+              if (firstKey.includes('form') || firstKey.includes('urlencoded')) {
+                detectedBodyType = 'form';
+              } else if (firstKey.includes('multipart')) {
+                detectedBodyType = 'multipart';
+              } else {
+                detectedBodyType = 'json';
+              }
+              bodySample = generateSampleFromSchema(firstContent.schema, doc);
+            }
           }
         }
       }
@@ -501,8 +799,15 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
         pathVariables,
         headers,
         headerDescriptions,
-        bodyType: hasBody ? 'json' : 'none',
-        body: hasBody && bodySample !== null ? JSON.stringify(bodySample, null, 2) : '',
+        bodyType: detectedBodyType,
+        body:
+          !hasBody || bodySample === null
+            ? ''
+            : detectedBodyType === 'multipart'
+            ? JSON.stringify(serializeMultipartSample(bodySample), null, 2)
+            : detectedBodyType === 'form'
+            ? serializeFormSample(bodySample)
+            : JSON.stringify(bodySample, null, 2),
         specification,
       };
 
@@ -537,6 +842,275 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
   return result;
 }
 
+export function extractUrlPathname(u: string): string {
+  if (!u) return '/';
+  try {
+    const parsed = new URL(u);
+    return parsed.pathname.replace(/\/+$/, '') || '/';
+  } catch {
+    const withoutQuery = u.split('?')[0];
+    const withoutHost = withoutQuery.replace(/^[a-zA-Z]+:\/\/[^\/]+/, '');
+    const clean = (withoutHost.startsWith('/') ? withoutHost : `/${withoutHost}`).replace(/\/+$/, '');
+    return clean || '/';
+  }
+}
+
+export function matchPathSegments(pattern: string, actual: string): boolean {
+  const normPattern = convertSwaggerPathToApiPath(pattern).replace(/\/+$/, '') || '/';
+  const normActual = actual.replace(/\/+$/, '') || '/';
+  if (normPattern === normActual) return true;
+
+  const pSegs = normPattern.split('/').filter(Boolean);
+  const aSegs = normActual.split('/').filter(Boolean);
+  if (pSegs.length !== aSegs.length) return false;
+
+  for (let i = 0; i < pSegs.length; i++) {
+    const p = pSegs[i];
+    const a = aSegs[i];
+    if (p.startsWith(':') || (p.startsWith('{') && p.endsWith('}'))) {
+      continue;
+    }
+    if (p.toLowerCase() !== a.toLowerCase()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function findMatchingSwaggerEndpoint(
+  parsed: ParsedSwaggerSpec,
+  method: string,
+  url: string,
+  endpointName: string
+): ParsedHttpEndpoint | null {
+  const upperMethod = method.toUpperCase();
+  const allEndpoints: ParsedHttpEndpoint[] = [];
+  for (const svc of parsed.services) {
+    allEndpoints.push(...svc.endpoints);
+  }
+
+  // 1. Direct name/operationId match with same method
+  const directName = allEndpoints.find(
+    (ep) =>
+      ep.method.toUpperCase() === upperMethod &&
+      (ep.operationId === endpointName || ep.name === endpointName)
+  );
+  if (directName) return directName;
+
+  // 2. Full URL match
+  const cleanUrl = url.split('?')[0].replace(/\/+$/, '');
+  const urlMatch = allEndpoints.find((ep) => {
+    if (ep.method.toUpperCase() !== upperMethod) return false;
+    const epCleanUrl = ep.fullUrl.split('?')[0].replace(/\/+$/, '');
+    return epCleanUrl === cleanUrl;
+  });
+  if (urlMatch) return urlMatch;
+
+  // 3. Exact pathname match
+  const pathname = extractUrlPathname(url);
+  const pathMatch = allEndpoints.find((ep) => {
+    if (ep.method.toUpperCase() !== upperMethod) return false;
+    const epPath = ep.path.replace(/\/+$/, '') || '/';
+    return epPath === pathname;
+  });
+  if (pathMatch) return pathMatch;
+
+  // 4. Parameterized path template match
+  const templateMatch = allEndpoints.find((ep) => {
+    if (ep.method.toUpperCase() !== upperMethod) return false;
+    return matchPathSegments(ep.path, pathname);
+  });
+  if (templateMatch) return templateMatch;
+
+  // 5. Fallback name-only match
+  const nameOnly = allEndpoints.find(
+    (ep) => ep.operationId === endpointName || ep.name === endpointName
+  );
+  if (nameOnly) return nameOnly;
+
+  return null;
+}
+
+export function serializeFormSample(sample: any): string {
+  if (!sample || typeof sample !== 'object') return '';
+  const entries: string[] = [];
+  for (const [k, v] of Object.entries(sample)) {
+    if (v === null || v === undefined) continue;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        entries.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(item ?? ''))}`);
+      }
+    } else if (typeof v === 'object') {
+      entries.push(`${encodeURIComponent(k)}=${encodeURIComponent(JSON.stringify(v))}`);
+    } else {
+      entries.push(`${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`);
+    }
+  }
+  return entries.join('&');
+}
+
+export function serializeMultipartSample(sample: any): SwaggerMultipartField[] {
+  if (!sample || typeof sample !== 'object') return [];
+  const fields: SwaggerMultipartField[] = [];
+  for (const [name, val] of Object.entries(sample)) {
+    const strVal = String(val ?? '');
+    const isFile =
+      strVal.endsWith('.txt') ||
+      strVal.endsWith('.png') ||
+      strVal.endsWith('.jpg') ||
+      strVal.endsWith('.pdf') ||
+      name.toLowerCase().includes('file') ||
+      name.toLowerCase().includes('upload');
+    fields.push({
+      name,
+      value: isFile ? '' : strVal,
+      enabled: true,
+      ...(isFile ? { filename: strVal || 'sample.txt', content_type: 'text/plain' } : {}),
+    });
+  }
+  return fields;
+}
+
+export function generateSampleFromSpecification(
+  spec: SwaggerEndpointSpecification
+): any {
+  if (!spec.requestFields || spec.requestFields.length === 0) return {};
+  const obj: Record<string, any> = {};
+
+  for (const f of spec.requestFields) {
+    const rawType = (f.type || 'string').trim();
+    const isArray = rawType.endsWith('[]');
+    const baseType = rawType.replace(/\[\]$/, '').trim();
+
+    const generateSingle = (): any => {
+      if (['int32', 'int64', 'uint32', 'uint64', 'integer'].includes(baseType)) {
+        return generateSmartNumberSample(f.name, 'integer');
+      }
+      if (['double', 'float', 'number'].includes(baseType)) {
+        return generateSmartNumberSample(f.name, 'number');
+      }
+      if (baseType === 'boolean') {
+        return generateSmartBooleanSample(f.name);
+      }
+      if (spec.schemas && spec.schemas[baseType]) {
+        const subObj: Record<string, any> = {};
+        for (const subF of spec.schemas[baseType]) {
+          subObj[subF.name] = generateSmartStringSample(subF.name);
+        }
+        return subObj;
+      }
+      return generateSmartStringSample(f.name);
+    };
+
+    obj[f.name] = isArray ? [generateSingle()] : generateSingle();
+  }
+  return obj;
+}
+
+/**
+ * Resolves example sample payload with detailed format results (JSON, Form, Multipart).
+ */
+export function resolveSwaggerSampleResult(
+  method: string,
+  url: string,
+  endpointName: string,
+  swaggerDoc?: SwaggerDoc | null,
+  sourceUrl?: string,
+  matchedEndpoint?: ParsedHttpEndpoint | null,
+  targetBodyType?: 'json' | 'form' | 'multipart' | 'text' | 'binary' | 'none',
+  specification?: SwaggerEndpointSpecification | null
+): SwaggerSamplePayloadResult | null {
+  let targetEp = matchedEndpoint;
+
+  if (!targetEp && swaggerDoc && sourceUrl) {
+    const parsed = parseSwaggerSpec(swaggerDoc, sourceUrl);
+    targetEp = findMatchingSwaggerEndpoint(parsed, method, url, endpointName);
+  }
+
+  let sampleData: any = null;
+  let detectedType: 'json' | 'form' | 'multipart' | 'text' = 'json';
+
+  if (targetEp) {
+    detectedType = (targetEp.bodyType === 'none' ? 'json' : targetEp.bodyType) as any;
+    if (!targetBodyType && targetEp.body && !targetEp.specification) {
+      return {
+        bodyType: detectedType,
+        body: targetEp.body,
+        multipartFields:
+          targetEp.bodyType === 'multipart'
+            ? (() => {
+                try {
+                  return JSON.parse(targetEp.body);
+                } catch {
+                  return undefined;
+                }
+              })()
+            : undefined,
+      };
+    }
+    if (targetEp.body) {
+      if (targetEp.bodyType === 'form') {
+        try {
+          const params = new URLSearchParams(targetEp.body);
+          const parsedForm: Record<string, any> = {};
+          params.forEach((v, k) => {
+            parsedForm[k] = v;
+          });
+          sampleData = parsedForm;
+        } catch {
+          sampleData = targetEp.body;
+        }
+      } else {
+        try {
+          sampleData = JSON.parse(targetEp.body);
+        } catch {
+          sampleData = targetEp.body;
+        }
+      }
+    }
+  }
+
+  // Fallback to specification if no sample data yet
+  if (!sampleData && (targetEp?.specification || specification)) {
+    const spec = targetEp?.specification || specification!;
+    sampleData = generateSampleFromSpecification(spec);
+  }
+
+  if (!sampleData || typeof sampleData !== 'object') {
+    return null;
+  }
+
+  const finalType = (
+    targetBodyType && targetBodyType !== 'none' ? targetBodyType : detectedType
+  ) as 'json' | 'form' | 'multipart' | 'text';
+
+  if (finalType === 'form') {
+    return {
+      bodyType: 'form',
+      body: typeof sampleData === 'string' ? sampleData : serializeFormSample(sampleData),
+    };
+  }
+
+  if (finalType === 'multipart') {
+    const fields =
+      Array.isArray(sampleData) &&
+      sampleData.every((item) => item && typeof item === 'object' && 'name' in item)
+        ? (sampleData as SwaggerMultipartField[])
+        : serializeMultipartSample(sampleData);
+    return {
+      bodyType: 'multipart',
+      body: JSON.stringify(fields, null, 2),
+      multipartFields: fields,
+    };
+  }
+
+  // Default: JSON
+  return {
+    bodyType: 'json',
+    body: typeof sampleData === 'string' ? sampleData : JSON.stringify(sampleData, null, 2),
+  };
+}
+
 /**
  * Resolves example sample body from parsed swagger spec or matched endpoint.
  * Pure standalone function testable without component mount.
@@ -547,25 +1121,19 @@ export function resolveSwaggerSamplePayload(
   endpointName: string,
   swaggerDoc?: SwaggerDoc | null,
   sourceUrl?: string,
-  matchedEndpoint?: ParsedHttpEndpoint | null
+  matchedEndpoint?: ParsedHttpEndpoint | null,
+  targetBodyType?: 'json' | 'form' | 'multipart' | 'text' | 'binary' | 'none',
+  specification?: SwaggerEndpointSpecification | null
 ): string | null {
-  if (matchedEndpoint?.body) {
-    return matchedEndpoint.body;
-  }
-  if (!swaggerDoc || !sourceUrl) {
-    return null;
-  }
-  const parsed = parseSwaggerSpec(swaggerDoc, sourceUrl);
-  const upperMethod = method.toUpperCase();
-  for (const svc of parsed.services) {
-    for (const ep of svc.endpoints) {
-      if (
-        ep.method.toUpperCase() === upperMethod &&
-        (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpointName)
-      ) {
-        return ep.body || null;
-      }
-    }
-  }
-  return null;
+  const result = resolveSwaggerSampleResult(
+    method,
+    url,
+    endpointName,
+    swaggerDoc,
+    sourceUrl,
+    matchedEndpoint,
+    targetBodyType,
+    specification
+  );
+  return result ? result.body : null;
 }

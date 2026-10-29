@@ -6,6 +6,11 @@ import {
   deriveBaseUrl,
   resolveRef,
   resolveSwaggerSamplePayload,
+  resolveSwaggerSampleResult,
+  findMatchingSwaggerEndpoint,
+  generateSmartStringSample,
+  generateSmartNumberSample,
+  generateSmartBooleanSample,
   type SwaggerDoc,
 } from './swaggerParser.ts';
 
@@ -34,17 +39,17 @@ test('resolveRef: correctly resolves internal #/definitions and #/components/sch
 
 test('generateSampleFromSchema: primitives and enums', () => {
   const doc: SwaggerDoc = {};
-  assert.equal(generateSampleFromSchema({ type: 'string' }, doc), '');
+  assert.equal(generateSampleFromSchema({ type: 'string' }, doc), 'sample_value');
   assert.equal(
     generateSampleFromSchema({ type: 'string', format: 'date-time' }, doc),
-    '2026-01-01T00:00:00Z'
+    '2026-10-30T12:00:00Z'
   );
   assert.equal(
     generateSampleFromSchema({ type: 'string', enum: ['PENDING', 'ACTIVE'] }, doc),
     'PENDING'
   );
-  assert.equal(generateSampleFromSchema({ type: 'integer' }, doc), 0);
-  assert.equal(generateSampleFromSchema({ type: 'boolean' }, doc), false);
+  assert.equal(generateSampleFromSchema({ type: 'integer' }, doc), 100);
+  assert.equal(generateSampleFromSchema({ type: 'boolean' }, doc), true);
 });
 
 test('generateSampleFromSchema: objects, arrays, and nested schemas', () => {
@@ -495,4 +500,247 @@ test('resolveSwaggerSamplePayload: resolves sample payload from matched endpoint
     body: '{"direct":true}',
   } as any);
   assert.equal(direct, '{"direct":true}');
+});
+
+test('generateSmartSample: realistic values matching field name heuristics', () => {
+  assert.equal(generateSmartStringSample('email'), 'user@example.com');
+  assert.equal(generateSmartStringSample('user_email'), 'user@example.com');
+  assert.equal(generateSmartStringSample('id'), 'id_1001');
+  assert.equal(generateSmartStringSample('user_id'), 'id_1001');
+  assert.equal(generateSmartStringSample('name'), 'Sample Name');
+  assert.equal(generateSmartStringSample('first_name'), 'Jane');
+  assert.equal(generateSmartStringSample('avatar_url'), 'https://example.com/api');
+  assert.equal(generateSmartStringSample('phone_number'), '+15550199');
+  assert.equal(generateSmartStringSample('unknown_custom_field'), 'unknown_custom_field_sample');
+
+  assert.equal(generateSmartNumberSample('page'), 1);
+  assert.equal(generateSmartNumberSample('limit'), 20);
+  assert.equal(generateSmartNumberSample('price'), 49.99);
+  assert.equal(generateSmartNumberSample('user_id'), 1001);
+  assert.equal(generateSmartNumberSample('count'), 5);
+
+  assert.equal(generateSmartBooleanSample('is_active'), true);
+  assert.equal(generateSmartBooleanSample('is_deleted'), false);
+});
+
+test('resolveSwaggerSampleResult: supports Form URL-Encoded and Multipart body types', () => {
+  const doc: SwaggerDoc = {
+    openapi: '3.0.0',
+    info: { title: 'Upload API' },
+    servers: [{ url: 'https://api.example.com' }],
+    paths: {
+      '/login': {
+        post: {
+          operationId: 'loginUser',
+          requestBody: {
+            content: {
+              'application/x-www-form-urlencoded': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    username: { type: 'string' },
+                    password: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/upload': {
+        post: {
+          operationId: 'uploadFile',
+          requestBody: {
+            content: {
+              'multipart/form-data': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    title: { type: 'string' },
+                    file: { type: 'string', format: 'binary' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  const parsed = parseSwaggerSpec(doc, 'https://api.example.com/openapi.json');
+  const loginEp = parsed.services[0].endpoints.find((e) => e.name === 'loginUser');
+  assert.ok(loginEp);
+  assert.equal(loginEp.bodyType, 'form');
+  assert.ok(loginEp.body.includes('username=janedoe'));
+  assert.ok(loginEp.body.includes('password=secret_token_123'));
+
+  const uploadEp = parsed.services[0].endpoints.find((e) => e.name === 'uploadFile');
+  assert.ok(uploadEp);
+  assert.equal(uploadEp.bodyType, 'multipart');
+  const fields = JSON.parse(uploadEp.body);
+  assert.equal(fields.length, 2);
+  const fileField = fields.find((f: any) => f.name === 'file');
+  assert.ok(fileField);
+  assert.equal(fileField.filename, 'sample.txt');
+
+  // Generate as Form
+  const formRes = resolveSwaggerSampleResult(
+    'POST',
+    'https://api.example.com/login',
+    'loginUser',
+    doc,
+    'https://api.example.com/openapi.json',
+    null,
+    'form'
+  );
+  assert.ok(formRes);
+  assert.equal(formRes.bodyType, 'form');
+  assert.ok(formRes.body.includes('username=janedoe'));
+
+  // Generate as Multipart
+  const multiRes = resolveSwaggerSampleResult(
+    'POST',
+    'https://api.example.com/upload',
+    'uploadFile',
+    doc,
+    'https://api.example.com/openapi.json',
+    null,
+    'multipart'
+  );
+  assert.ok(multiRes);
+  assert.equal(multiRes.bodyType, 'multipart');
+  assert.ok(multiRes.multipartFields && multiRes.multipartFields.length > 0);
+});
+
+test('resolveSwaggerSampleResult: fallback from SwaggerEndpointSpecification when doc is offline', () => {
+  const spec = {
+    summary: 'Offline Endpoint',
+    requestTypeName: 'CreateUserDto',
+    requestFields: [
+      { name: 'name', type: 'string', required: true },
+      { name: 'email', type: 'string', required: true },
+      { name: 'age', type: 'int32', required: false },
+      { name: 'is_active', type: 'boolean', required: false },
+    ],
+    responseFields: [],
+  };
+
+  const jsonRes = resolveSwaggerSampleResult(
+    'POST',
+    'http://localhost/users',
+    'createUser',
+    null,
+    undefined,
+    null,
+    'json',
+    spec
+  );
+  assert.ok(jsonRes);
+  assert.equal(jsonRes.bodyType, 'json');
+  const parsedJson = JSON.parse(jsonRes.body);
+  assert.equal(parsedJson.name, 'Sample Name');
+  assert.equal(parsedJson.email, 'user@example.com');
+  assert.equal(parsedJson.age, 100);
+  assert.equal(parsedJson.is_active, true);
+
+  // Fallback to Form URL-Encoded
+  const formRes = resolveSwaggerSampleResult(
+    'POST',
+    'http://localhost/users',
+    'createUser',
+    null,
+    undefined,
+    null,
+    'form',
+    spec
+  );
+  assert.ok(formRes);
+  assert.equal(formRes.bodyType, 'form');
+  assert.ok(formRes.body.includes('email=user%40example.com'));
+
+  // Fallback to Multipart
+  const multiRes = resolveSwaggerSampleResult(
+    'POST',
+    'http://localhost/users',
+    'createUser',
+    null,
+    undefined,
+    null,
+    'multipart',
+    spec
+  );
+  assert.ok(multiRes);
+  assert.equal(multiRes.bodyType, 'multipart');
+  assert.equal(multiRes.multipartFields?.length, 4);
+});
+
+test('findMatchingSwaggerEndpoint: avoids prefix collision bug and matches exact routes', () => {
+  const parsed = {
+    title: 'Test',
+    version: '1.0',
+    baseUrl: 'https://api.example.com',
+    services: [
+      {
+        name: 'Service',
+        endpoints: [
+          {
+            name: 'RootEndpoint',
+            method: 'POST',
+            path: '/',
+            fullUrl: 'https://api.example.com/',
+            serviceTag: 'Service',
+            queryParams: [],
+            headers: {},
+            bodyType: 'json' as const,
+            body: '{"root":true}',
+          },
+          {
+            name: 'CreateUser',
+            method: 'POST',
+            path: '/users',
+            fullUrl: 'https://api.example.com/users',
+            serviceTag: 'Service',
+            queryParams: [],
+            headers: {},
+            bodyType: 'json' as const,
+            body: '{"user":true}',
+          },
+          {
+            name: 'SearchUsers',
+            method: 'POST',
+            path: '/users/search',
+            fullUrl: 'https://api.example.com/users/search',
+            serviceTag: 'Service',
+            queryParams: [],
+            headers: {},
+            bodyType: 'json' as const,
+            body: '{"search":true}',
+          },
+        ],
+      },
+    ],
+    totalEndpoints: 3,
+  };
+
+  // Searching for /users/search should NOT match / or /users
+  const match = findMatchingSwaggerEndpoint(
+    parsed,
+    'POST',
+    'https://api.example.com/users/search',
+    'SearchUsers'
+  );
+  assert.ok(match);
+  assert.equal(match.name, 'SearchUsers');
+  assert.equal(match.body, '{"search":true}');
+
+  // Searching for /users should NOT match /
+  const userMatch = findMatchingSwaggerEndpoint(
+    parsed,
+    'POST',
+    'https://api.example.com/users',
+    'CreateUser'
+  );
+  assert.ok(userMatch);
+  assert.equal(userMatch.name, 'CreateUser');
 });

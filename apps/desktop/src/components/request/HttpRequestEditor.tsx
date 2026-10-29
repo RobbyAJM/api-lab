@@ -38,7 +38,11 @@ import {
 } from '../../utils/folderSettings';
 import { findSwaggerFolderForEndpoint, getFolderPath } from '../../utils/folderTree';
 import { fetchSwaggerSpec } from '../../utils/swaggerGenerator';
-import { parseSwaggerSpec, resolveSwaggerSamplePayload } from '../../utils/swaggerParser';
+import {
+  parseSwaggerSpec,
+  findMatchingSwaggerEndpoint,
+  resolveSwaggerSampleResult,
+} from '../../utils/swaggerParser';
 import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
 import { EndpointSpecificationView } from '../common/EndpointSpecificationView';
 
@@ -219,24 +223,14 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       if (!swaggerFolderInfo?.swaggerUrl) return null;
       return await fetchSwaggerSpec(swaggerFolderInfo.swaggerUrl);
     },
-    enabled: !!swaggerFolderInfo?.swaggerUrl && (!endpoint.config?.specification || !endpoint.config?.summary),
+    enabled: !!swaggerFolderInfo?.swaggerUrl,
     staleTime: 5 * 60 * 1000,
   });
 
   const matchedSwaggerEndpoint = React.useMemo(() => {
     if (!swaggerDoc || !swaggerFolderInfo?.swaggerUrl) return null;
     const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo.swaggerUrl);
-    for (const svc of parsed.services) {
-      for (const ep of svc.endpoints) {
-        if (
-          ep.method.toUpperCase() === method.toUpperCase() &&
-          (url.includes(ep.path) || ep.fullUrl === url || ep.name === endpoint.name)
-        ) {
-          return ep;
-        }
-      }
-    }
-    return null;
+    return findMatchingSwaggerEndpoint(parsed, method, url, endpoint.name);
   }, [swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
 
   const endpointSpec = React.useMemo(() => {
@@ -312,20 +306,48 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   };
 
   const handleGenerateSwaggerSample = () => {
-    const sampleStr = resolveSwaggerSamplePayload(
+    const currentTarget = bodyType === 'none' ? undefined : bodyType;
+    const result = resolveSwaggerSampleResult(
       method,
       url,
       endpoint.name,
       swaggerDoc,
       swaggerFolderInfo?.swaggerUrl,
-      matchedSwaggerEndpoint
+      matchedSwaggerEndpoint,
+      currentTarget,
+      endpointSpec
     );
-    if (sampleStr) {
-      setBodyType('json');
-      setBody(sampleStr);
-      setStatusMessage('Generated example JSON payload from Swagger schema');
-      setTimeout(() => setStatusMessage(null), 2500);
+
+    if (!result) {
+      setStatusMessage('No request body specification found for this endpoint');
+      setTimeout(() => setStatusMessage(null), 3000);
+      return;
     }
+
+    const newBodyType =
+      currentTarget === undefined || currentTarget === 'text' || currentTarget === 'binary'
+        ? result.bodyType
+        : currentTarget;
+    setBodyType(newBodyType);
+
+    if (newBodyType === 'multipart' && result.multipartFields) {
+      setMultipartFields(result.multipartFields);
+      setStatusMessage(
+        `Generated ${result.multipartFields.length} example multipart ${
+          result.multipartFields.length === 1 ? 'entry' : 'entries'
+        } from Swagger schema`
+      );
+    } else {
+      setBody(result.body);
+      const label =
+        newBodyType === 'form'
+          ? 'Form URL-Encoded'
+          : newBodyType === 'multipart'
+          ? 'Multipart'
+          : 'JSON';
+      setStatusMessage(`Generated example ${label} payload from Swagger schema`);
+    }
+    setTimeout(() => setStatusMessage(null), 3000);
   };
 
   useEffect(() => {
@@ -1079,7 +1101,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                 <button
                   type="button"
                   onClick={handleGenerateSwaggerSample}
-                  title="Generate example JSON payload from Swagger schema"
+                  title="Generate example payload from Swagger schema"
                   className="px-2 py-1 text-[11px] text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded transition flex items-center gap-1 shadow-sm"
                 >
                   <Wand2 size={11} className="text-zinc-400" />

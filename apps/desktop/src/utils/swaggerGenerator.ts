@@ -22,7 +22,7 @@ export interface PlannedSwaggerEndpoint {
     path_variables?: [string, string, string?][];
     headers: Record<string, string>;
     header_descriptions?: Record<string, string>;
-    body_type: 'none' | 'json';
+    body_type: 'none' | 'json' | 'text' | 'form' | 'multipart' | 'binary';
     body: string;
     specification?: any;
   };
