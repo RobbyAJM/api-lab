@@ -11,6 +11,8 @@ export interface SwaggerFieldSummary {
   required?: boolean;
   description?: string;
   enum?: string[];
+  example?: any;
+  default?: any;
 }
 
 export interface SwaggerEndpointSpecification {
@@ -456,6 +458,8 @@ export function extractSwaggerSpecification(
         type: formatSwaggerPropertyType(propSchema, doc),
         required: requiredList.includes(propName),
         description: (propSchema as any)?.description,
+        ...((propSchema as any)?.example !== undefined ? { example: (propSchema as any).example } : {}),
+        ...((propSchema as any)?.default !== undefined ? { default: (propSchema as any).default } : {}),
       });
     }
   } else {
@@ -604,6 +608,8 @@ export function extractSwaggerSpecification(
         type: enumVals && !propSchema.type ? 'enum' : formatSwaggerPropertyType(propSchema, doc),
         required: reqList.includes(propName),
         description: (propSchema as any)?.description,
+        ...((propSchema as any)?.example !== undefined ? { example: (propSchema as any).example } : {}),
+        ...((propSchema as any)?.default !== undefined ? { default: (propSchema as any).default } : {}),
         ...(enumVals && enumVals.length > 0 ? { enum: enumVals } : {}),
       });
     }
@@ -1009,6 +1015,92 @@ export function serializeMultipartSample(sample: any): SwaggerMultipartField[] {
   return fields;
 }
 
+function resolveSpecSchema(
+  baseType: string,
+  schemas?: Record<string, SwaggerFieldSummary[]>
+): SwaggerFieldSummary[] | null {
+  if (!schemas || !baseType) return null;
+  if (schemas[baseType]) return schemas[baseType];
+  const short = baseType.split('.').pop() || baseType;
+  if (schemas[short]) return schemas[short];
+  return null;
+}
+
+function resolveSpecEnum(
+  fieldName: string,
+  baseType: string,
+  fieldEnum?: string[],
+  enums?: Record<string, string[]>
+): string[] | null {
+  if (Array.isArray(fieldEnum) && fieldEnum.length > 0) return fieldEnum;
+  if (!enums) return null;
+  if (enums[baseType] && enums[baseType].length > 0) return enums[baseType];
+  const short = baseType.split('.').pop() || baseType;
+  if (enums[short] && enums[short].length > 0) return enums[short];
+  if (enums[fieldName] && enums[fieldName].length > 0) return enums[fieldName];
+  return null;
+}
+
+function generateFieldValue(
+  f: SwaggerFieldSummary,
+  spec: SwaggerEndpointSpecification,
+  visited: Set<string> = new Set(),
+  depth: number = 0
+): any {
+  if (depth > 6) return null;
+
+  const rawType = (f.type || 'string').trim();
+  const isArray = rawType.endsWith('[]');
+  const baseType = rawType.replace(/\[\]$/, '').trim();
+
+  const generateSingle = (): any => {
+    // 0. Field-level example or default
+    if (f.example !== undefined) return f.example;
+    if (f.default !== undefined) return f.default;
+
+    // 1. Enums (field-level or schema-level)
+    const enumVals = resolveSpecEnum(f.name, baseType, f.enum, spec.enums);
+    if (enumVals && enumVals.length > 0) {
+      return enumVals[0];
+    }
+
+    // 2. Integers
+    if (['int32', 'int64', 'uint32', 'uint64', 'integer'].includes(baseType.toLowerCase())) {
+      return generateSmartNumberSample(f.name, 'integer');
+    }
+
+    // 3. Floats / Numbers
+    if (['double', 'float', 'number'].includes(baseType.toLowerCase())) {
+      return generateSmartNumberSample(f.name, 'number');
+    }
+
+    // 4. Booleans
+    if (baseType.toLowerCase() === 'boolean') {
+      return generateSmartBooleanSample(f.name);
+    }
+
+    // 5. Nested DTO / Object Schemas
+    const schemaFields = resolveSpecSchema(baseType, spec.schemas);
+    if (schemaFields) {
+      if (visited.has(baseType)) {
+        return {}; // Break circular reference
+      }
+      const nextVisited = new Set(visited);
+      nextVisited.add(baseType);
+      const subObj: Record<string, any> = {};
+      for (const subF of schemaFields) {
+        subObj[subF.name] = generateFieldValue(subF, spec, nextVisited, depth + 1);
+      }
+      return subObj;
+    }
+
+    // 6. Generic Strings or unknown primitives
+    return generateSmartStringSample(f.name);
+  };
+
+  return isArray ? [generateSingle()] : generateSingle();
+}
+
 export function generateSampleFromSpecification(
   spec: SwaggerEndpointSpecification
 ): any {
@@ -1016,31 +1108,7 @@ export function generateSampleFromSpecification(
   const obj: Record<string, any> = {};
 
   for (const f of spec.requestFields) {
-    const rawType = (f.type || 'string').trim();
-    const isArray = rawType.endsWith('[]');
-    const baseType = rawType.replace(/\[\]$/, '').trim();
-
-    const generateSingle = (): any => {
-      if (['int32', 'int64', 'uint32', 'uint64', 'integer'].includes(baseType)) {
-        return generateSmartNumberSample(f.name, 'integer');
-      }
-      if (['double', 'float', 'number'].includes(baseType)) {
-        return generateSmartNumberSample(f.name, 'number');
-      }
-      if (baseType === 'boolean') {
-        return generateSmartBooleanSample(f.name);
-      }
-      if (spec.schemas && spec.schemas[baseType]) {
-        const subObj: Record<string, any> = {};
-        for (const subF of spec.schemas[baseType]) {
-          subObj[subF.name] = generateSmartStringSample(subF.name);
-        }
-        return subObj;
-      }
-      return generateSmartStringSample(f.name);
-    };
-
-    obj[f.name] = isArray ? [generateSingle()] : generateSingle();
+    obj[f.name] = generateFieldValue(f, spec, new Set(), 0);
   }
   return obj;
 }
@@ -1070,6 +1138,16 @@ export function resolveSwaggerSampleResult(
 
   if (targetEp) {
     detectedType = (targetEp.bodyType === 'none' ? 'json' : targetEp.bodyType) as any;
+  }
+
+  // 1. Primary: Generate from specification if requestFields exist (matches Specification tab struct)
+  const effectiveSpec = specification || targetEp?.specification;
+  if (effectiveSpec && Array.isArray(effectiveSpec.requestFields) && effectiveSpec.requestFields.length > 0) {
+    sampleData = generateSampleFromSpecification(effectiveSpec);
+  }
+
+  // 2. Fallback: targetEp.body if specification was not available or produced empty
+  if (!sampleData && targetEp) {
     if (!targetBodyType && targetEp.body && !targetEp.specification) {
       return {
         bodyType: detectedType,
@@ -1108,10 +1186,9 @@ export function resolveSwaggerSampleResult(
     }
   }
 
-  // Fallback to specification if no sample data yet
-  if (!sampleData && (targetEp?.specification || specification)) {
-    const spec = targetEp?.specification || specification!;
-    sampleData = generateSampleFromSpecification(spec);
+  // 3. Last fallback: specification if targetEp.body empty
+  if (!sampleData && effectiveSpec) {
+    sampleData = generateSampleFromSpecification(effectiveSpec);
   }
 
   if (!sampleData || typeof sampleData !== 'object') {
@@ -1192,7 +1269,8 @@ export function resolveSwaggerSampleParams(
   sourceUrl?: string,
   matchedEndpoint?: ParsedHttpEndpoint | null,
   currentParams: Array<[string, string, string?, boolean?]> = [],
-  currentPathVars: Array<[string, string, string?, boolean?]> = []
+  currentPathVars: Array<[string, string, string?, boolean?]> = [],
+  specification?: SwaggerEndpointSpecification | null
 ): SwaggerSampleParamsResult | null {
   let targetEp = matchedEndpoint;
   if (!targetEp && swaggerDoc && sourceUrl) {
@@ -1319,6 +1397,34 @@ export function resolveSwaggerSampleParams(
         desc || existing?.[2] || '',
         existing ? existing[3] !== false : true,
       ]);
+    }
+  } else if (specification?.requestFields && specification.requestFields.length > 0) {
+    for (const f of specification.requestFields) {
+      const isPath = url.includes(`:${f.name}`) || url.includes(`{${f.name}}`);
+      const val = generateParamVal({
+        name: f.name,
+        type: f.type,
+        enum: f.enum || (specification.enums && specification.enums[f.type]),
+        description: f.description,
+      });
+      const desc = f.description || '';
+      if (isPath) {
+        const existing = currentPathVars.find(([k]) => k === f.name);
+        newPathVars.push([
+          f.name,
+          val,
+          desc || existing?.[2] || '',
+          existing ? existing[3] !== false : true,
+        ]);
+      } else {
+        const existing = currentParams.find(([k]) => k === f.name);
+        newQueryParams.push([
+          f.name,
+          val,
+          desc || existing?.[2] || '',
+          existing ? existing[3] !== false : true,
+        ]);
+      }
     }
   } else if (currentParams.length > 0 || currentPathVars.length > 0) {
     for (const [k, _v, d, en] of currentParams) {

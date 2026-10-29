@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseSwaggerSpec,
   generateSampleFromSchema,
+  generateSampleFromSpecification,
   deriveBaseUrl,
   resolveRef,
   resolveSwaggerSamplePayload,
@@ -674,6 +675,146 @@ test('resolveSwaggerSampleResult: fallback from SwaggerEndpointSpecification whe
   assert.ok(multiRes);
   assert.equal(multiRes.bodyType, 'multipart');
   assert.equal(multiRes.multipartFields?.length, 4);
+});
+
+test('generateSampleFromSpecification: recursively generates nested structs, enums, arrays, and handles cycles', () => {
+  const spec = {
+    requestTypeName: 'CreateOrderRequest',
+    requestFields: [
+      { name: 'order_id', type: 'string' },
+      { name: 'status', type: 'OrderStatus' },
+      { name: 'total_amount', type: 'double' },
+      { name: 'is_gift', type: 'boolean' },
+      { name: 'tags', type: 'string[]' },
+      { name: 'customer', type: 'CustomerDto' },
+      { name: 'items', type: 'OrderItemDto[]' },
+    ],
+    responseFields: [],
+    schemas: {
+      CustomerDto: [
+        { name: 'customer_id', type: 'int64' },
+        { name: 'name', type: 'string' },
+        { name: 'address', type: 'AddressDto' },
+        { name: 'parent_customer', type: 'CustomerDto' }, // circular reference
+      ],
+      AddressDto: [
+        { name: 'street', type: 'string' },
+        { name: 'zip_code', type: 'int32' },
+      ],
+      OrderItemDto: [
+        { name: 'item_id', type: 'string' },
+        { name: 'quantity', type: 'int32' },
+        { name: 'unit_price', type: 'double' },
+      ],
+    },
+    enums: {
+      OrderStatus: ['PENDING', 'PROCESSING', 'DELIVERED'],
+    },
+  };
+
+  const sample = generateSampleFromSpecification(spec);
+  assert.equal(typeof sample, 'object');
+  assert.equal(sample.order_id, 'id_1001');
+  assert.equal(sample.status, 'PENDING');
+  assert.equal(typeof sample.total_amount, 'number');
+  assert.equal(sample.is_gift, true);
+  assert.ok(Array.isArray(sample.tags));
+  assert.equal(sample.tags[0], 'tags_sample');
+
+  // Nested customer struct
+  assert.equal(typeof sample.customer, 'object');
+  assert.equal(sample.customer.customer_id, 1001);
+  assert.equal(sample.customer.name, 'Sample Name');
+
+  // Deeper nested address struct
+  assert.equal(typeof sample.customer.address, 'object');
+  assert.equal(sample.customer.address.street, 'street_sample');
+  assert.equal(sample.customer.address.zip_code, 200);
+
+  // Circular reference stopped safely
+  assert.deepEqual(sample.customer.parent_customer, {});
+
+  // Array of nested structs
+  assert.ok(Array.isArray(sample.items));
+  assert.equal(sample.items.length, 1);
+  assert.equal(sample.items[0].item_id, 'id_1001');
+  assert.equal(sample.items[0].quantity, 5);
+  assert.equal(typeof sample.items[0].unit_price, 'number');
+});
+
+test('resolveSwaggerSampleResult: prioritizes specification over stale or generic targetEp.body', () => {
+  const staleEp = {
+    name: 'CreateOrder',
+    method: 'POST',
+    path: '/orders',
+    fullUrl: 'http://localhost/orders',
+    bodyType: 'json',
+    body: '{"stale_field":"wrong_struct"}',
+    specification: {
+      requestTypeName: 'CreateOrderDto',
+      requestFields: [
+        { name: 'order_number', type: 'string' },
+        { name: 'item_count', type: 'int32' },
+      ],
+      responseFields: [],
+    },
+  };
+
+  const res = resolveSwaggerSampleResult(
+    'POST',
+    'http://localhost/orders',
+    'CreateOrder',
+    null,
+    undefined,
+    staleEp as any
+  );
+
+  assert.ok(res);
+  assert.equal(res.bodyType, 'json');
+  const parsed = JSON.parse(res.body);
+  // Must use specification, not stale_field!
+  assert.equal(parsed.stale_field, undefined);
+  assert.equal(parsed.order_number, 'order_number_sample');
+  assert.equal(parsed.item_count, 5);
+});
+
+test('resolveSwaggerSampleParams: extracts query and path params from specification when doc is offline', () => {
+  const spec = {
+    requestTypeName: 'Parameters',
+    requestFields: [
+      { name: 'id', type: 'string' },
+      { name: 'page', type: 'int32' },
+      { name: 'role', type: 'enum', enum: ['admin', 'viewer'] },
+    ],
+    responseFields: [],
+  };
+
+  const res = resolveSwaggerSampleParams(
+    'GET',
+    'http://localhost/users/:id',
+    'getUser',
+    null,
+    undefined,
+    null,
+    [],
+    [],
+    spec
+  );
+
+  assert.ok(res);
+  // Path variable
+  const idVar = res.pathVariables.find(([k]) => k === 'id');
+  assert.ok(idVar);
+  assert.equal(idVar[1], '1001');
+
+  // Query variables
+  const pageParam = res.queryParams.find(([k]) => k === 'page');
+  assert.ok(pageParam);
+  assert.equal(pageParam[1], '1');
+
+  const roleParam = res.queryParams.find(([k]) => k === 'role');
+  assert.ok(roleParam);
+  assert.equal(roleParam[1], 'admin');
 });
 
 test('findMatchingSwaggerEndpoint: avoids prefix collision bug and matches exact routes', () => {
