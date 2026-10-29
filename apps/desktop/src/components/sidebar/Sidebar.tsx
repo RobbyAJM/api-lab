@@ -54,6 +54,11 @@ import {
   validateCollectionName,
   buildCreateCollectionPayload,
 } from '../../utils/collectionCreation';
+import {
+  getStoredWorkspaceEnvironment,
+  resolveWorkspaceEnvironment,
+  NO_ENVIRONMENT_VALUE,
+} from '../../utils/environmentDropdown';
 
 export const Sidebar: React.FC = () => {
   const queryClient = useQueryClient();
@@ -122,13 +127,21 @@ export const Sidebar: React.FC = () => {
     enabled: !!activeWorkspaceId,
   });
 
-  // Auto-select default environment if none selected
+  // Auto-select and reconcile environment for active workspace
   useEffect(() => {
-    if (environments.length > 0 && !activeEnvironmentId) {
-      const def = environments.find((e) => e.is_default) || environments[0];
-      setActiveEnvironmentId(def.id);
+    if (!activeWorkspaceId || environments.length === 0) return;
+    const stored = getStoredWorkspaceEnvironment(activeWorkspaceId);
+    if (stored === NO_ENVIRONMENT_VALUE) {
+      if (activeEnvironmentId !== null) {
+        setActiveEnvironmentId(null);
+      }
+      return;
     }
-  }, [environments, activeEnvironmentId, setActiveEnvironmentId]);
+    const resolved = resolveWorkspaceEnvironment(environments, stored);
+    if (resolved && resolved !== activeEnvironmentId) {
+      setActiveEnvironmentId(resolved);
+    }
+  }, [environments, activeWorkspaceId, activeEnvironmentId, setActiveEnvironmentId]);
 
   // 2. Fetch collections for active workspace
   const { data: collections = [] } = useQuery<Collection[]>({
