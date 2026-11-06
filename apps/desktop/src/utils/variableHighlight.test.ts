@@ -195,4 +195,16 @@ test('getVariableTokenClassName: avoids horizontal padding, borders, or inline-b
   assert.ok(definedEditor.includes('font-bold'));
 });
 
+test('tokenizeVariables: variable positions align with original text substring indices', () => {
+  const text = 'Bearer {{TOKEN}} to {{API_URL}}/v1';
+  const tokens = tokenizeVariables(text);
+
+  let reconstructed = '';
+  for (const token of tokens) {
+    reconstructed += token.text;
+  }
+  assert.equal(reconstructed, text);
+});
+
+
 
