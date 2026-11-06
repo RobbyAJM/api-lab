@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import {
@@ -12,6 +12,7 @@ import {
   planSwaggerSync,
   executeSwaggerSync,
   type SwaggerSyncPlan,
+  type SwaggerSyncProgressInfo,
 } from '../../utils/swaggerSync';
 import { resolveRootFolderId, getFolderSwaggerUrl } from '../../utils/folderTree';
 import { VariableInput } from '../common/VariableInput';
@@ -28,6 +29,7 @@ import {
   MinusCircle,
   FileEdit,
   ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface SyncSwaggerModalProps {
@@ -98,14 +100,20 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
 
   const [scanning, setScanning] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const abortRef = useRef({ aborted: false });
   const [plan, setPlan] = useState<SwaggerSyncPlan | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [progressInfo, setProgressInfo] = useState<SwaggerSyncProgressInfo | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
 
   // Auto-detect or sync selected root folder
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setShowCancelConfirm(false);
+      return;
+    }
+    abortRef.current = { aborted: false };
     if (initialFolderId) {
       const rootId = resolveRootFolderId(folders, initialFolderId);
       if (rootId) {
@@ -129,6 +137,14 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
 
   if (!isOpen) return null;
 
+  function handleRequestClose() {
+    if (scanning || syncing) {
+      setShowCancelConfirm(true);
+    } else {
+      onClose();
+    }
+  }
+
   async function handleScanAndCompare() {
     if (!swaggerUrl.trim() || !selectedRootFolderId) {
       setErrorMessage('Please specify Swagger URL and select a root folder');
@@ -137,7 +153,8 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
 
     setScanning(true);
     setErrorMessage(null);
-    setStatusMessage('Fetching fresh Swagger specification...');
+    abortRef.current = { aborted: false };
+    setProgressInfo({ message: 'Fetching fresh Swagger specification...', percent: 10 });
     setPlan(null);
 
     try {
@@ -145,21 +162,27 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
         variables: effectiveVariables,
       });
 
-      setStatusMessage('Parsing endpoints and schemas...');
+      if (abortRef.current.aborted) return;
+
+      setProgressInfo({ message: 'Parsing endpoints and schemas...', percent: 25 });
       const spec = parseSwaggerSpec(doc, swaggerUrl.trim());
 
       if (spec.services.length === 0 || spec.totalEndpoints === 0) {
         throw new Error('No endpoints discovered in Swagger specification.');
       }
 
-      setStatusMessage('Calculating reconciliation diff...');
+      if (abortRef.current.aborted) return;
+
+      setProgressInfo({ message: 'Calculating reconciliation diff...', percent: 40 });
       const p = planSwaggerSync(selectedRootFolderId, folders, endpoints, spec);
       setPlan(p);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to scan and compare Swagger specification');
+      if (!abortRef.current.aborted) {
+        setErrorMessage(err.message || 'Failed to scan and compare Swagger specification');
+      }
     } finally {
       setScanning(false);
-      setStatusMessage(null);
+      setProgressInfo(null);
     }
   }
 
@@ -168,7 +191,8 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
 
     setSyncing(true);
     setErrorMessage(null);
-    setStatusMessage('Applying synchronization changes...');
+    abortRef.current = { aborted: false };
+    setProgressInfo({ message: 'Applying synchronization changes...', percent: 40 });
 
     try {
       const apiCaller = {
@@ -183,8 +207,18 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
         collection.id,
         selectedRootFolderId,
         plan,
-        apiCaller
+        apiCaller,
+        (info) => {
+          if (typeof info === 'string') {
+            setProgressInfo({ message: info, percent: 60 });
+          } else {
+            setProgressInfo(info);
+          }
+        },
+        abortRef.current
       );
+
+      if (abortRef.current.aborted) return;
 
       // Also persist swagger_url on root folder
       try {
@@ -210,10 +244,12 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
         onClose();
       }, 1800);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to apply synchronization changes');
+      if (!abortRef.current.aborted) {
+        setErrorMessage(err.message || 'Failed to apply synchronization changes');
+      }
     } finally {
       setSyncing(false);
-      setStatusMessage(null);
+      setProgressInfo(null);
     }
   }
 
@@ -228,10 +264,10 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-100"
-      onClick={() => !scanning && !syncing && onClose()}
+      onClick={handleRequestClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-lg w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-100 flex flex-col max-h-[90vh]"
+        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-lg w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-100 flex flex-col max-h-[90vh] relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -254,7 +290,8 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
               />
             )}
             <button
-              onClick={onClose}
+              type="button"
+              onClick={handleRequestClose}
               disabled={scanning || syncing}
               className="text-zinc-400 hover:text-zinc-200 p-1"
             >
@@ -333,12 +370,6 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
               </button>
             </div>
           </div>
-
-          {statusMessage && (
-            <div className="text-center py-2 text-xs text-emerald-400 font-mono animate-pulse">
-              {statusMessage}
-            </div>
-          )}
 
           {/* Diff Plan Display */}
           {plan && (
@@ -428,12 +459,34 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
           )}
         </div>
 
+        {/* Sticky Progress Bar */}
+        {(scanning || syncing) && (
+          <div className="px-4 py-2 border-t border-zinc-800 bg-zinc-950/70 space-y-1.5 flex-shrink-0">
+            <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+              <span className="truncate pr-2">
+                {progressInfo?.message || (scanning ? 'Scanning Swagger...' : 'Applying sync changes...')}
+              </span>
+              <span className="text-emerald-400 font-medium flex-shrink-0">
+                {progressInfo?.percent ?? (scanning ? 10 : 40)}%
+              </span>
+            </div>
+            <div className="w-full bg-zinc-950 border border-zinc-800 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-emerald-500 h-full rounded-full transition-all duration-200"
+                style={{
+                  width: `${Math.max(5, Math.min(100, progressInfo?.percent ?? (scanning ? 10 : 40)))}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div className="px-4 py-3 border-t border-zinc-800 bg-zinc-950/40 flex justify-end gap-2">
           <button
             type="button"
             disabled={scanning || syncing}
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
           >
             Cancel
@@ -449,6 +502,57 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Stop Sync Confirmation Dialog */}
+      {showCancelConfirm && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 font-sans animate-in fade-in duration-100"
+          onClick={() => setShowCancelConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-4 space-y-3.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded bg-amber-950/60 border border-amber-800/60 text-amber-400 flex-shrink-0">
+                <AlertTriangle size={16} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xs font-semibold text-zinc-100">Stop Syncing Swagger?</h3>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  By stopping this operation, some changes that already applied will not be reverted.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(false)}
+                className="px-3 py-1.5 rounded text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition"
+              >
+                Continue Syncing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  abortRef.current.aborted = true;
+                  setShowCancelConfirm(false);
+                  setScanning(false);
+                  setSyncing(false);
+                  queryClient.invalidateQueries({ queryKey: ['folders', collection.id] });
+                  queryClient.invalidateQueries({ queryKey: ['endpoints', collection.id] });
+                  queryClient.invalidateQueries({ queryKey: ['collections'] });
+                  onClose();
+                }}
+                className="px-3 py-1.5 rounded text-xs bg-red-600 hover:bg-red-500 text-white font-medium transition"
+              >
+                Stop & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

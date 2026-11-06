@@ -253,6 +253,7 @@ test('executeSwaggerSync: executes deletes, creations, and patches', async () =>
   assert.ok(deletes.includes('/endpoints/ep-del'));
   assert.ok(deletes.includes('/folders/folder-del'));
   assert.ok(patches.some((p) => p.path === '/endpoints/ep-up'));
+  assert.ok(posts.some((p) => p.path === '/collections/coll-1/endpoints/batch'));
 });
 
 test('planSwaggerSync & executeSwaggerSync: updates endpoint name when name was legacy summary', async () => {
@@ -414,4 +415,103 @@ test('planSwaggerSync: matches endpoints when existing URL has query parameters 
     'https://api.example.com/users/123?detailed=true&view=full'
   );
   assert.equal(plan.endpointsToUpdate[0].newConfig.query_params.length, 2);
+});
+
+test('executeSwaggerSync: batches endpoints in chunks of 50 and reports progress', async () => {
+  const batchCalls: any[] = [];
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      if (path.includes('/endpoints/batch')) {
+        batchCalls.push(body.endpoints);
+      }
+      return { id: 'mock-id' };
+    },
+    patch: async () => ({}),
+    delete: async () => ({}),
+  };
+
+  const endpointsToCreate: any[] = [];
+  for (let i = 0; i < 115; i++) {
+    endpointsToCreate.push({
+      folderId: 'f-exist',
+      serviceName: 'BigService',
+      endpoint: {
+        name: `Endpoint${i}`,
+        method: 'GET',
+        path: `/path/${i}`,
+        fullUrl: `http://localhost/path/${i}`,
+        serviceTag: 'BigService',
+        queryParams: [],
+        headers: {},
+        bodyType: 'none',
+        body: '',
+      },
+    });
+  }
+
+  const plan = {
+    servicesToDelete: [],
+    servicesToCreate: [],
+    endpointsToCreate,
+    endpointsToDelete: [],
+    endpointsToUpdate: [],
+  };
+
+  const progressUpdates: any[] = [];
+  const result = await executeSwaggerSync(
+    'col-1',
+    'root-1',
+    plan,
+    mockApi,
+    (info) => progressUpdates.push(info)
+  );
+
+  assert.equal(result.createdEndpointsCount, 115);
+  // 115 endpoints in chunks of 50 = 3 chunks (50, 50, 15)
+  assert.equal(batchCalls.length, 3);
+  assert.equal(batchCalls[0].length, 50);
+  assert.equal(batchCalls[1].length, 50);
+  assert.equal(batchCalls[2].length, 15);
+  assert.ok(progressUpdates.length >= 3);
+  assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 100));
+});
+
+test('executeSwaggerSync: respects abort signal and halts execution cleanly', async () => {
+  const calls: string[] = [];
+  const mockApi = {
+    post: async (path: string) => {
+      calls.push(path);
+      return { id: 'mock' };
+    },
+    patch: async (path: string) => {
+      calls.push(path);
+      return {};
+    },
+    delete: async (path: string) => {
+      calls.push(path);
+      return {};
+    },
+  };
+
+  const plan = {
+    servicesToDelete: [{ folderId: 'f-1', serviceName: 'Svc1' }],
+    servicesToCreate: [],
+    endpointsToCreate: [{ folderId: 'f-1', serviceName: 'Svc1', endpoint: { name: 'E1', method: 'GET', path: '/e1', fullUrl: 'http://localhost/e1', serviceTag: 'Svc1', queryParams: [], headers: {}, bodyType: 'none' as const, body: '' } }],
+    endpointsToDelete: [],
+    endpointsToUpdate: [],
+  };
+
+  const abortSignal = { aborted: true };
+  const result = await executeSwaggerSync(
+    'col-1',
+    'root-1',
+    plan,
+    mockApi,
+    undefined,
+    abortSignal
+  );
+
+  assert.equal(result.deletedServicesCount, 0);
+  assert.equal(result.createdEndpointsCount, 0);
+  assert.equal(calls.length, 0);
 });

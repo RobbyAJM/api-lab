@@ -261,6 +261,17 @@ export function planSwaggerSync(
   };
 }
 
+export interface SwaggerSyncProgressInfo {
+  message: string;
+  percent: number;
+  current?: number;
+  total?: number;
+}
+
+export interface SwaggerSyncAbortSignal {
+  aborted: boolean;
+}
+
 export interface SyncApiCaller {
   post: (path: string, body: any) => Promise<any>;
   patch: (path: string, body: any) => Promise<any>;
@@ -274,7 +285,9 @@ export async function executeSwaggerSync(
   collectionId: string,
   rootFolderId: string,
   plan: SwaggerSyncPlan,
-  api: SyncApiCaller
+  api: SyncApiCaller,
+  onProgress?: (info: SwaggerSyncProgressInfo | string) => void,
+  signal?: SwaggerSyncAbortSignal
 ): Promise<{
   deletedEndpointsCount: number;
   deletedServicesCount: number;
@@ -282,6 +295,16 @@ export async function executeSwaggerSync(
   createdEndpointsCount: number;
   updatedEndpointsCount: number;
 }> {
+  if (signal?.aborted) {
+    return {
+      deletedEndpointsCount: 0,
+      deletedServicesCount: 0,
+      createdServicesCount: 0,
+      createdEndpointsCount: 0,
+      updatedEndpointsCount: 0,
+    };
+  }
+
   let deletedEndpointsCount = 0;
   let deletedServicesCount = 0;
   let createdServicesCount = 0;
@@ -290,6 +313,7 @@ export async function executeSwaggerSync(
 
   // 1. Delete endpoints
   for (const d of plan.endpointsToDelete) {
+    if (signal?.aborted) break;
     try {
       await api.delete(`/endpoints/${d.endpointId}`);
       deletedEndpointsCount++;
@@ -300,6 +324,7 @@ export async function executeSwaggerSync(
 
   // 2. Delete service folders
   for (const s of plan.servicesToDelete) {
+    if (signal?.aborted) break;
     try {
       await api.delete(`/folders/${s.folderId}`);
       deletedServicesCount++;
@@ -308,8 +333,16 @@ export async function executeSwaggerSync(
     }
   }
 
-  // 3. Create new service folders and their endpoints
+  const endpointsToCreate: Array<{
+    name: string;
+    protocol: 'http';
+    folder_id: string;
+    config: any;
+  }> = [];
+
+  // 3. Create new service folders and collect their endpoints
   for (const s of plan.servicesToCreate) {
+    if (signal?.aborted) break;
     try {
       const createdFolder = await api.post(`/collections/${collectionId}/folders`, {
         name: s.name,
@@ -318,7 +351,7 @@ export async function executeSwaggerSync(
       createdServicesCount++;
 
       for (const ep of s.endpoints) {
-        await api.post(`/collections/${collectionId}/endpoints`, {
+        endpointsToCreate.push({
           name: ep.name,
           protocol: 'http',
           folder_id: createdFolder.id,
@@ -334,40 +367,83 @@ export async function executeSwaggerSync(
             body: ep.body,
           },
         });
-        createdEndpointsCount++;
       }
     } catch {
       // ignore
     }
   }
 
-  // 4. Create new endpoints in existing folders
+  // 4. Collect new endpoints in existing folders
   for (const c of plan.endpointsToCreate) {
-    try {
-      await api.post(`/collections/${collectionId}/endpoints`, {
-        name: c.endpoint.name,
-        protocol: 'http',
-        folder_id: c.folderId,
-        config: {
-          method: c.endpoint.method,
-          url: c.endpoint.fullUrl,
-          summary: c.endpoint.summary,
-          query_params: c.endpoint.queryParams,
-          path_variables: c.endpoint.pathVariables,
-          headers: c.endpoint.headers,
-          header_descriptions: c.endpoint.headerDescriptions,
-          body_type: c.endpoint.bodyType,
-          body: c.endpoint.body,
-        },
-      });
-      createdEndpointsCount++;
-    } catch {
-      // ignore
-    }
+    if (signal?.aborted) break;
+    endpointsToCreate.push({
+      name: c.endpoint.name,
+      protocol: 'http',
+      folder_id: c.folderId,
+      config: {
+        method: c.endpoint.method,
+        url: c.endpoint.fullUrl,
+        summary: c.endpoint.summary,
+        query_params: c.endpoint.queryParams,
+        path_variables: c.endpoint.pathVariables,
+        headers: c.endpoint.headers,
+        header_descriptions: c.endpoint.headerDescriptions,
+        body_type: c.endpoint.bodyType,
+        body: c.endpoint.body,
+      },
+    });
   }
 
-  // 5. Update existing endpoints
+  const total =
+    plan.servicesToDelete.length +
+    plan.endpointsToDelete.length +
+    endpointsToCreate.length +
+    plan.endpointsToUpdate.length;
+  let done = deletedEndpointsCount + deletedServicesCount;
+
+  // 5. Batch create endpoints in chunks of 50
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < endpointsToCreate.length; i += CHUNK_SIZE) {
+    if (signal?.aborted) break;
+    const chunk = endpointsToCreate.slice(i, i + CHUNK_SIZE);
+
+    let batchSuccess = false;
+    try {
+      await api.post(`/collections/${collectionId}/endpoints/batch`, {
+        endpoints: chunk,
+      });
+      batchSuccess = true;
+      createdEndpointsCount += chunk.length;
+      done += chunk.length;
+    } catch {
+      batchSuccess = false;
+    }
+
+    if (!batchSuccess) {
+      for (const ep of chunk) {
+        if (signal?.aborted) break;
+        try {
+          await api.post(`/collections/${collectionId}/endpoints`, ep);
+          createdEndpointsCount++;
+          done++;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const percent = 40 + Math.round((done / Math.max(total, 1)) * 55);
+    onProgress?.({
+      message: `Creating endpoints: ${createdEndpointsCount}/${endpointsToCreate.length}...`,
+      percent: Math.min(percent, 95),
+      current: done,
+      total,
+    });
+  }
+
+  // 6. Update existing endpoints
   for (const u of plan.endpointsToUpdate) {
+    if (signal?.aborted) break;
     try {
       const patchBody: Record<string, any> = {
         config: u.newConfig,
@@ -377,9 +453,22 @@ export async function executeSwaggerSync(
       }
       await api.patch(`/endpoints/${u.endpoint.id}`, patchBody);
       updatedEndpointsCount++;
+      done++;
+
+      const percent = 40 + Math.round((done / Math.max(total, 1)) * 55);
+      onProgress?.({
+        message: `Updating endpoints: ${updatedEndpointsCount}/${plan.endpointsToUpdate.length}...`,
+        percent: Math.min(percent, 95),
+        current: done,
+        total,
+      });
     } catch {
       // ignore
     }
+  }
+
+  if (!signal?.aborted) {
+    onProgress?.({ message: 'Finalizing collection settings...', percent: 100 });
   }
 
   return {
