@@ -102,12 +102,15 @@ function findMatchingEndpoint(
   const byName = freshEndpoints.find((f) => f.name === existingEp.name);
   if (byName) return byName;
 
-  // 2. Method + URL match
+  // 2. Method + URL match (matching hostname + path ignoring query params)
   const curMethod = existingEp.config?.method?.toUpperCase();
   const curUrl = existingEp.config?.url;
   if (curMethod && curUrl) {
+    const curBaseAndPath = curUrl.split('?')[0];
     return freshEndpoints.find(
-      (f) => f.method.toUpperCase() === curMethod && f.fullUrl === curUrl
+      (f) =>
+        f.method.toUpperCase() === curMethod &&
+        (f.fullUrl === curUrl || f.fullUrl.split('?')[0] === curBaseAndPath)
     );
   }
 
@@ -176,7 +179,11 @@ export function planSwaggerSync(
         if (ep.name === fep.name) return true;
         const curMethod = ep.config?.method?.toUpperCase();
         const curUrl = ep.config?.url;
-        return curMethod === fep.method.toUpperCase() && curUrl === fep.fullUrl;
+        if (!curMethod || !curUrl) return false;
+        return (
+          curMethod === fep.method.toUpperCase() &&
+          (curUrl === fep.fullUrl || curUrl.split('?')[0] === fep.fullUrl.split('?')[0])
+        );
       });
 
       if (!match) {
@@ -207,22 +214,29 @@ export function planSwaggerSync(
 
         const { updatedPayload, changed } = reconcileHttpPayload(curPayload, freshPayload);
 
+        const curBaseAndPath = (match.config?.url || '').split('?')[0];
+        const freshBaseAndPath = fep.fullUrl.split('?')[0];
         const nameChanged = match.name !== fep.name;
-        const urlChanged = match.config?.url !== fep.fullUrl;
+        const urlChanged = curBaseAndPath !== freshBaseAndPath;
         const methodChanged = match.config?.method?.toUpperCase() !== fep.method.toUpperCase();
         const summaryChanged = fep.summary !== undefined && match.config?.summary !== fep.summary;
 
         if (changed || urlChanged || methodChanged || summaryChanged || nameChanged) {
+          const curQueryString = (match.config?.url || '').includes('?')
+            ? '?' + (match.config?.url || '').split('?')[1]
+            : '';
+          const targetUrl = `${freshBaseAndPath}${curQueryString}`;
+
           endpointsToUpdate.push({
             endpoint: match,
             newName: nameChanged ? fep.name : undefined,
             newConfig: {
               ...match.config,
-              url: fep.fullUrl,
+              url: targetUrl,
               method: fep.method,
               summary: fep.summary ?? match.config?.summary,
               specification: fep.specification ?? match.config?.specification,
-              query_params: fep.queryParams,
+              query_params: match.config?.query_params?.length ? match.config.query_params : fep.queryParams,
               path_variables: fep.pathVariables,
               headers: fep.headers,
               header_descriptions: fep.headerDescriptions,

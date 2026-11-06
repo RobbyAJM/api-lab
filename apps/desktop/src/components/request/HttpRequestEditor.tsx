@@ -4,7 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { executeNativeHttp } from '../../api/native';
 import type { Endpoint, HttpAuth, HttpExecutionRequest, VariableResponse, Collection, CollectionFolder } from '@api-lab/api-types';
-import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp, Wand2 } from 'lucide-react';
+import { Save, Shield, Globe, Settings, Plus, Trash2, FileUp, Wand2, Lock } from 'lucide-react';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { ConflictDiffModal } from './ConflictDiffModal';
 import { JsonEditor } from '../common/JsonEditor';
@@ -216,7 +216,16 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     return findSwaggerFolderForEndpoint(endpoint.folder_id, folders, collection?.settings);
   }, [endpoint.folder_id, folders, collection?.settings]);
 
+  const isSwaggerFolderEndpoint = Boolean(swaggerFolderInfo);
   const isSwaggerEndpoint = Boolean(swaggerFolderInfo || endpoint.config?.specification);
+
+  const [swaggerBaseAndPath, swaggerQueryString] = React.useMemo(() => {
+    const qIdx = url.indexOf('?');
+    if (qIdx === -1) {
+      return [url, ''];
+    }
+    return [url.slice(0, qIdx), url.slice(qIdx)];
+  }, [url]);
 
   const { data: swaggerDoc } = useQuery({
     queryKey: ['swaggerSpec', swaggerFolderInfo?.swaggerUrl],
@@ -908,27 +917,57 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
       {/* URL & Action Bar */}
       <div className="px-4 pb-2.5 flex items-center gap-2 flex-shrink-0">
-        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded h-9 focus-within:border-primary transition">
+        <div className="flex-1 flex items-center bg-zinc-900 border border-zinc-800 rounded h-9 focus-within:border-primary transition overflow-hidden">
           <HttpMethodDropdown
             method={method}
             onChange={setMethod}
+            disabled={isSwaggerFolderEndpoint}
           />
 
           <div className="h-4 w-px bg-zinc-800 mx-1 flex-shrink-0" />
 
-          <div className="flex-1 h-full flex items-center px-1 min-w-0">
-            <VariableInput
-              value={url}
-              onChange={(next) => {
-                const normalized = convertSwaggerPathToApiPath(next);
-                setUrl(normalized);
-                setQueryParams((prev) => parseUrlQueryParams(normalized, prev));
-              }}
-              variables={activeVariables}
-              placeholder="https://api.example.com/v1/users/{{USER_ID}}"
-              className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
-            />
-          </div>
+          {isSwaggerFolderEndpoint ? (
+            <div className="flex-1 h-full flex items-center px-1 min-w-0 gap-1.5 overflow-hidden">
+              <div
+                className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-950/80 border border-zinc-800 rounded text-xs font-mono text-zinc-300 max-w-[60%] flex-shrink-0 select-all cursor-default"
+                title="Hostname and path are locked by Swagger specification"
+              >
+                <Lock size={11} className="text-emerald-400 flex-shrink-0" />
+                <span className="truncate">{swaggerBaseAndPath}</span>
+              </div>
+              <div className="flex-1 h-full min-w-0 flex items-center">
+                <VariableInput
+                  value={swaggerQueryString}
+                  onChange={(nextQuery) => {
+                    let clean = nextQuery.trim();
+                    if (clean && !clean.startsWith('?')) {
+                      clean = `?${clean}`;
+                    }
+                    const newUrl = `${swaggerBaseAndPath}${clean}`;
+                    setUrl(newUrl);
+                    setQueryParams((prev) => parseUrlQueryParams(newUrl, prev));
+                  }}
+                  variables={activeVariables}
+                  placeholder="?query=value"
+                  className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 h-full flex items-center px-1 min-w-0">
+              <VariableInput
+                value={url}
+                onChange={(next) => {
+                  const normalized = convertSwaggerPathToApiPath(next);
+                  setUrl(normalized);
+                  setQueryParams((prev) => parseUrlQueryParams(normalized, prev));
+                }}
+                variables={activeVariables}
+                placeholder="https://api.example.com/v1/users/{{USER_ID}}"
+                className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
+              />
+            </div>
+          )}
         </div>
 
         <button

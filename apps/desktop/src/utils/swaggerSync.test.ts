@@ -332,3 +332,86 @@ test('planSwaggerSync & executeSwaggerSync: updates endpoint name when name was 
   assert.equal(patches[0].path, '/endpoints/ep-login');
   assert.equal(patches[0].body.name, 'loginUser');
 });
+
+test('planSwaggerSync: matches endpoints when existing URL has query parameters and preserves them', () => {
+  const rootFolderId = 'folder-root';
+  const existingFolders: CollectionFolder[] = [
+    {
+      id: rootFolderId,
+      collection_id: 'coll-1',
+      name: 'Swagger APIs',
+      parent_folder_id: null,
+      created_at: '',
+      updated_at: '',
+      swagger_url: 'https://api.example.com/openapi.json',
+    },
+    {
+      id: 'folder-user',
+      collection_id: 'coll-1',
+      name: 'UserAPI',
+      parent_folder_id: rootFolderId,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const existingEndpoints: Endpoint[] = [
+    {
+      id: 'ep-get-user',
+      collection_id: 'coll-1',
+      folder_id: 'folder-user',
+      name: 'getUser',
+      protocol: 'http',
+      config: {
+        method: 'GET',
+        // User edited URL to append query params
+        url: 'https://api.example.com/users/123?detailed=true&view=full',
+        query_params: [
+          ['detailed', 'true'],
+          ['view', 'full'],
+        ],
+        body: '',
+      },
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const freshSpec: ParsedSwaggerSpec = {
+    title: 'API Spec',
+    version: '1.0',
+    baseUrl: 'https://api.example.com',
+    totalEndpoints: 1,
+    services: [
+      {
+        name: 'UserAPI',
+        endpoints: [
+          {
+            name: 'getUser',
+            method: 'GET',
+            path: '/users/123',
+            fullUrl: 'https://api.example.com/users/123',
+            serviceTag: 'UserAPI',
+            summary: 'Updated summary from spec',
+            queryParams: [],
+            headers: {},
+            bodyType: 'none',
+            body: '',
+          },
+        ],
+      },
+    ],
+  };
+
+  const plan = planSwaggerSync(rootFolderId, existingFolders, existingEndpoints, freshSpec);
+  // Must NOT treat as delete + create!
+  assert.equal(plan.endpointsToDelete.length, 0);
+  assert.equal(plan.endpointsToCreate.length, 0);
+  assert.equal(plan.endpointsToUpdate.length, 1);
+  // Preserves existing query params in target url
+  assert.equal(
+    plan.endpointsToUpdate[0].newConfig.url,
+    'https://api.example.com/users/123?detailed=true&view=full'
+  );
+  assert.equal(plan.endpointsToUpdate[0].newConfig.query_params.length, 2);
+});

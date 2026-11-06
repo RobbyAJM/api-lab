@@ -643,7 +643,20 @@ export function extractSwaggerSpecification(
 /**
  * Derives the base URL from swagger doc + source URL.
  */
-export function deriveBaseUrl(doc: SwaggerDoc, sourceUrl: string): string {
+export function deriveBaseUrl(doc: SwaggerDoc, sourceUrl: string, customBaseUrl?: string): string {
+  if (customBaseUrl && customBaseUrl.trim()) {
+    let clean = customBaseUrl.trim();
+    if (!clean.startsWith('http://') && !clean.startsWith('https://') && !clean.startsWith('{{')) {
+      clean = `http://${clean}`;
+    }
+    clean = clean.replace(/\/+$/, '');
+    const bp = (doc.basePath || '').replace(/\/+$/, '');
+    if (bp && !clean.endsWith(bp)) {
+      return `${clean}${bp.startsWith('/') ? '' : '/'}${bp}`;
+    }
+    return clean;
+  }
+
   let origin = 'http://localhost';
   try {
     const parsed = new URL(sourceUrl);
@@ -682,20 +695,25 @@ const swaggerSpecCache = new WeakMap<SwaggerDoc, Map<string, ParsedSwaggerSpec>>
 /**
  * Parses raw Swagger or OpenAPI JSON into structured services and endpoints.
  */
-export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwaggerSpec {
+export function parseSwaggerSpec(
+  doc: SwaggerDoc,
+  sourceUrl: string,
+  customBaseUrl?: string
+): ParsedSwaggerSpec {
+  const cacheKey = customBaseUrl ? `${sourceUrl}#${customBaseUrl}` : sourceUrl;
   if (doc && typeof doc === 'object') {
     let urlMap = swaggerSpecCache.get(doc);
     if (!urlMap) {
       urlMap = new Map();
       swaggerSpecCache.set(doc, urlMap);
     }
-    const cached = urlMap.get(sourceUrl);
+    const cached = urlMap.get(cacheKey);
     if (cached) return cached;
   }
 
   const title = doc.info?.title || 'Swagger API';
   const version = doc.info?.version || '1.0';
-  const baseUrl = deriveBaseUrl(doc, sourceUrl);
+  const baseUrl = deriveBaseUrl(doc, sourceUrl, customBaseUrl);
 
   const servicesMap = new Map<string, ParsedHttpEndpoint[]>();
   let totalEndpoints = 0;
@@ -880,7 +898,7 @@ export function parseSwaggerSpec(doc: SwaggerDoc, sourceUrl: string): ParsedSwag
   };
 
   if (doc && typeof doc === 'object') {
-    swaggerSpecCache.get(doc)?.set(sourceUrl, result);
+    swaggerSpecCache.get(doc)?.set(cacheKey, result);
   }
 
   return result;

@@ -3,8 +3,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import {
   generateSwaggerCollection,
-  DEFAULT_SWAGGER_URL,
+  combineSwaggerUrl,
+  DEFAULT_SWAGGER_BASE_URL,
+  DEFAULT_SWAGGER_PATH,
   DEFAULT_SWAGGER_FOLDER_NAME,
+  type SwaggerProgressInfo,
 } from '../../utils/swaggerGenerator';
 import { VariableInput } from '../common/VariableInput';
 import { X, RefreshCw, FolderPlus, Globe, CheckCircle2 } from 'lucide-react';
@@ -24,10 +27,11 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
   activeEnvironmentId,
 }) => {
   const queryClient = useQueryClient();
-  const [swaggerUrl, setSwaggerUrl] = useState(DEFAULT_SWAGGER_URL);
   const [folderName, setFolderName] = useState(DEFAULT_SWAGGER_FOLDER_NAME);
+  const [baseUrl, setBaseUrl] = useState(DEFAULT_SWAGGER_BASE_URL);
+  const [swaggerPath, setSwaggerPath] = useState(DEFAULT_SWAGGER_PATH);
   const [loading, setLoading] = useState(false);
-  const [statusText, setStatusText] = useState<string | null>(null);
+  const [progressInfo, setProgressInfo] = useState<SwaggerProgressInfo | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
@@ -66,16 +70,18 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
     return vars;
   }
 
+  const fullSwaggerUrl = combineSwaggerUrl(baseUrl, swaggerPath);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!swaggerUrl.trim() || !folderName.trim()) {
-      setErrorText('Please specify both Swagger URL and folder name');
+    if (!baseUrl.trim() || !swaggerPath.trim() || !folderName.trim()) {
+      setErrorText('Please specify folder name, base URL / hostname, and Swagger path');
       return;
     }
 
     setLoading(true);
     setErrorText(null);
-    setStatusText('Fetching Swagger specification...');
+    setProgressInfo({ message: 'Fetching Swagger specification...', percent: 10 });
 
     try {
       const activeVars = await resolveVariables();
@@ -90,10 +96,17 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
       const result = await generateSwaggerCollection({
         collectionId,
         folderName: folderName.trim(),
-        swaggerUrl: swaggerUrl.trim(),
+        swaggerUrl: fullSwaggerUrl,
+        baseUrl: baseUrl.trim(),
         variables: activeVars,
         timeoutMs: 60_000,
-        onProgress: (status) => setStatusText(status),
+        onProgress: (info) => {
+          if (typeof info === 'string') {
+            setProgressInfo({ message: info, percent: 30 });
+          } else {
+            setProgressInfo(info);
+          }
+        },
         apiCaller,
       });
 
@@ -102,7 +115,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
         const coll = await apiRequest<any>(`/collections/${collectionId}`);
         const currentSources = coll.settings?.swagger_sources || {};
         currentSources[result.rootFolderId] = {
-          swagger_url: swaggerUrl.trim(),
+          swagger_url: fullSwaggerUrl,
         };
         await apiRequest(`/collections/${collectionId}`, {
           method: 'PATCH',
@@ -132,7 +145,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
       setErrorText(err.message || 'Failed to generate Swagger collection');
     } finally {
       setLoading(false);
-      setStatusText(null);
+      setProgressInfo(null);
     }
   }
 
@@ -193,26 +206,52 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
 
           <div>
             <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-              Swagger / OpenAPI URL
+              Base URL / Hostname
             </label>
             <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-600 transition h-8 flex items-center">
               <VariableInput
-                value={swaggerUrl}
-                onChange={setSwaggerUrl}
+                value={baseUrl}
+                onChange={setBaseUrl}
                 variables={activeVariables}
                 disabled={loading}
-                placeholder={DEFAULT_SWAGGER_URL}
+                placeholder="https://httpbin.dmuth.org or localhost:9091"
                 className="w-full h-full"
               />
             </div>
             <p className="mt-1 text-[10px] text-zinc-500">
-              Direct JSON URL for Swagger 2.0 or OpenAPI 3.x specifications.
+              Supports ports (e.g. localhost:9091) and variables like {'{{API_HOST}}'}.
             </p>
           </div>
 
-          {statusText && (
-            <div className="text-center py-2 text-xs text-emerald-400 font-mono animate-pulse">
-              {statusText}
+          <div>
+            <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+              Swagger / OpenAPI Path
+            </label>
+            <input
+              type="text"
+              value={swaggerPath}
+              onChange={(e) => setSwaggerPath(e.target.value)}
+              disabled={loading}
+              placeholder="openapi.json"
+              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 font-medium"
+            />
+            <p className="mt-1 text-[10px] text-zinc-500 truncate">
+              Resolved: <span className="font-mono text-zinc-400">{fullSwaggerUrl || '—'}</span>
+            </p>
+          </div>
+
+          {loading && progressInfo && (
+            <div className="py-1 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                <span className="truncate pr-2">{progressInfo.message}</span>
+                <span className="text-emerald-400 font-medium flex-shrink-0">{progressInfo.percent}%</span>
+              </div>
+              <div className="w-full bg-zinc-950 border border-zinc-800 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-200"
+                  style={{ width: `${Math.max(5, Math.min(100, progressInfo.percent))}%` }}
+                />
+              </div>
             </div>
           )}
 
@@ -228,7 +267,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={loading || !swaggerUrl.trim() || !folderName.trim()}
+              disabled={loading || !baseUrl.trim() || !swaggerPath.trim() || !folderName.trim()}
               className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5"
             >
               {loading ? (

@@ -5,7 +5,10 @@ import {
   executeSwaggerHierarchyCreation,
   generateSwaggerCollection,
   substituteUrlVariables,
+  combineSwaggerUrl,
   DEFAULT_SWAGGER_URL,
+  DEFAULT_SWAGGER_BASE_URL,
+  DEFAULT_SWAGGER_PATH,
   DEFAULT_SWAGGER_FOLDER_NAME,
   getDefaultSwaggerConfig,
 } from './swaggerGenerator.ts';
@@ -167,9 +170,83 @@ test('generateSwaggerCollection: complete flow with mock fetch and api', async (
 
 test('getDefaultSwaggerConfig: returns public httpbin test url default', () => {
   const cfg = getDefaultSwaggerConfig();
+  assert.equal(cfg.baseUrl, 'https://httpbin.dmuth.org');
+  assert.equal(cfg.path, 'openapi.json');
   assert.equal(cfg.swaggerUrl, 'https://httpbin.dmuth.org/openapi.json');
   assert.equal(cfg.folderName, 'Swagger APIs');
+  assert.equal(DEFAULT_SWAGGER_BASE_URL, 'https://httpbin.dmuth.org');
+  assert.equal(DEFAULT_SWAGGER_PATH, 'openapi.json');
   assert.equal(DEFAULT_SWAGGER_URL, 'https://httpbin.dmuth.org/openapi.json');
   assert.equal(DEFAULT_SWAGGER_FOLDER_NAME, 'Swagger APIs');
+});
+
+test('combineSwaggerUrl: combines base url and path with port and variable support', () => {
+  // Bare host with port defaults to http://
+  assert.equal(
+    combineSwaggerUrl('localhost:9091', 'openapi.json'),
+    'http://localhost:9091/openapi.json'
+  );
+  // Preserves https scheme and cleans slashes
+  assert.equal(
+    combineSwaggerUrl('https://httpbin.dmuth.org/', '/openapi.json'),
+    'https://httpbin.dmuth.org/openapi.json'
+  );
+  // Preserves variable template
+  assert.equal(
+    combineSwaggerUrl('{{API_HOST}}', 'v2/swagger.json'),
+    '{{API_HOST}}/v2/swagger.json'
+  );
+  // Empty path returns clean base
+  assert.equal(
+    combineSwaggerUrl('localhost:9091/', ''),
+    'http://localhost:9091'
+  );
+});
+
+test('generateSwaggerCollection: uses custom baseUrl for endpoint routes and reports granular progress', async () => {
+  const mockDoc = {
+    swagger: '2.0',
+    info: { title: 'Custom Host API', version: '1.0' },
+    paths: {
+      '/status': {
+        get: {
+          operationId: 'GetStatus',
+          tags: ['StatusService'],
+        },
+      },
+    },
+  };
+
+  const mockFetch: any = async () => ({
+    ok: true,
+    json: async () => mockDoc,
+  });
+
+  const createdEndpoints: any[] = [];
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      if (path.includes('/endpoints')) {
+        createdEndpoints.push(body);
+      }
+      return { id: 'created-id', ...body };
+    },
+  };
+
+  const progressUpdates: any[] = [];
+  const result = await generateSwaggerCollection({
+    collectionId: 'coll-xyz',
+    folderName: 'Status Folder',
+    swaggerUrl: 'http://localhost:9091/openapi.json',
+    baseUrl: 'localhost:9091',
+    onProgress: (info) => progressUpdates.push(info),
+    apiCaller: mockApi,
+    fetchFn: mockFetch,
+  });
+
+  assert.equal(result.totalEndpoints, 1);
+  assert.equal(createdEndpoints.length, 1);
+  assert.equal(createdEndpoints[0].config.url, 'http://localhost:9091/status');
+  assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 10));
+  assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 100));
 });
 
