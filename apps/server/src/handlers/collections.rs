@@ -526,16 +526,18 @@ pub async fn create_endpoints_batch(
             created_at: row.created_at,
             updated_at: row.updated_at,
         });
+    }
 
+    tx.commit().await.map_err(ApiError::Database)?;
+
+    if let Some(first) = created_endpoints.first() {
         let _ = state.tx_ws.send(WsSyncEvent {
             workspace_id: ws_id,
             entity: "endpoint".into(),
             action: "create".into(),
-            entity_id: endpoint_id,
+            entity_id: first.id,
         });
     }
-
-    tx.commit().await.map_err(ApiError::Database)?;
 
     Ok(Json(created_endpoints))
 }

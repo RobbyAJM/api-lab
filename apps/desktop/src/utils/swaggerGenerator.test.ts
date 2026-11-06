@@ -258,7 +258,7 @@ test('generateSwaggerCollection: uses custom baseUrl for endpoint routes and rep
   assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 100));
 });
 
-test('executeSwaggerHierarchyCreation: batches endpoints in chunks of 10', async () => {
+test('executeSwaggerHierarchyCreation: batches endpoints in chunks of 50', async () => {
   const batchCalls: any[] = [];
   const mockApi = {
     post: async (path: string, body: any) => {
@@ -270,7 +270,7 @@ test('executeSwaggerHierarchyCreation: batches endpoints in chunks of 10', async
   };
 
   const endpoints: any[] = [];
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 125; i++) {
     endpoints.push({
       name: `Endpoint ${i}`,
       method: 'GET',
@@ -288,7 +288,7 @@ test('executeSwaggerHierarchyCreation: batches endpoints in chunks of 10', async
     title: 'Big API',
     version: '1.0',
     baseUrl: 'http://localhost:9090',
-    totalEndpoints: 25,
+    totalEndpoints: 125,
     services: [{ name: 'BigService', endpoints }],
   };
 
@@ -299,12 +299,12 @@ test('executeSwaggerHierarchyCreation: batches endpoints in chunks of 10', async
   });
 
   const result = await executeSwaggerHierarchyCreation('coll-big', planned, mockApi);
-  assert.equal(result.createdEndpointsCount, 25);
-  // 25 endpoints chunked into chunks of 10 -> 3 batches: 10, 10, 5
+  assert.equal(result.createdEndpointsCount, 125);
+  // 125 endpoints chunked into chunks of 50 -> 3 batches: 50, 50, 25
   assert.equal(batchCalls.length, 3);
-  assert.equal(batchCalls[0].length, 10);
-  assert.equal(batchCalls[1].length, 10);
-  assert.equal(batchCalls[2].length, 5);
+  assert.equal(batchCalls[0].length, 50);
+  assert.equal(batchCalls[1].length, 50);
+  assert.equal(batchCalls[2].length, 25);
 });
 
 test('executeSwaggerHierarchyCreation: respects abort signal and halts endpoint creation', async () => {

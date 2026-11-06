@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
 import { getWsBaseUrl } from '../api/client';
@@ -23,6 +23,30 @@ export function useWorkspaceSync() {
   const folderSettingsModal = useAppStore((s) => s.folderSettingsModal);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const debounceTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  const debouncedInvalidate = useCallback(
+    (queryKey: any[], delayMs = 300) => {
+      const key = JSON.stringify(queryKey);
+      const existing = debounceTimersRef.current.get(key);
+      if (existing) {
+        clearTimeout(existing);
+      }
+      const timer = setTimeout(() => {
+        debounceTimersRef.current.delete(key);
+        queryClient.invalidateQueries({ queryKey });
+      }, delayMs);
+      debounceTimersRef.current.set(key, timer);
+    },
+    [queryClient]
+  );
+
+  useEffect(() => {
+    return () => {
+      debounceTimersRef.current.forEach((t) => clearTimeout(t));
+      debounceTimersRef.current.clear();
+    };
+  }, []);
 
   const currentLocation = useMemo(() => {
     return computeCurrentLocation({
@@ -140,20 +164,20 @@ export function useWorkspaceSync() {
 
           const syncEvent: WsSyncEvent = data;
           if (syncEvent.workspace_id === workspaceId) {
-            // Invalidate relevant TanStack queries
+            // Invalidate relevant TanStack queries (debounced to prevent render storms during batch imports)
             if (syncEvent.entity === 'workspace') {
-              queryClient.invalidateQueries({ queryKey: ['workspaces'] });
-              queryClient.invalidateQueries({ queryKey: ['auth_me'] });
+              debouncedInvalidate(['workspaces'], 150);
+              debouncedInvalidate(['auth_me'], 150);
             } else if (syncEvent.entity === 'collection' || syncEvent.entity === 'folder') {
-              queryClient.invalidateQueries({ queryKey: ['collections', workspaceId] });
+              debouncedInvalidate(['collections', workspaceId], 300);
             } else if (syncEvent.entity === 'endpoint') {
-              queryClient.invalidateQueries({ queryKey: ['collections', workspaceId] });
-              queryClient.invalidateQueries({ queryKey: ['endpoints'] });
+              debouncedInvalidate(['collections', workspaceId], 300);
+              debouncedInvalidate(['endpoints'], 300);
             } else if (syncEvent.entity === 'environment' || syncEvent.entity === 'variable') {
-              queryClient.invalidateQueries({ queryKey: ['environments', workspaceId] });
-              queryClient.invalidateQueries({ queryKey: ['variables'] });
+              debouncedInvalidate(['environments', workspaceId], 200);
+              debouncedInvalidate(['variables'], 200);
             } else if (syncEvent.entity === 'member') {
-              queryClient.invalidateQueries({ queryKey: ['members', workspaceId] });
+              debouncedInvalidate(['members', workspaceId], 200);
             } else if (syncEvent.entity === 'saved_response') {
               queryClient.invalidateQueries({ queryKey: ['saved_response', syncEvent.entity_id] });
             }

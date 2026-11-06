@@ -183,27 +183,37 @@ export async function executeSwaggerHierarchyCreation(
     config: any;
   }> = [];
 
-  // 2. Create service subfolders and collect child HTTP endpoints
-  for (const sFolder of planned.serviceFolders) {
+  // 2. Create service subfolders in concurrent batches of 10 to minimize network latency
+  const FOLDER_BATCH_SIZE = 10;
+  for (let i = 0; i < planned.serviceFolders.length; i += FOLDER_BATCH_SIZE) {
     if (signal?.aborted) break;
-    const childFolder = await api.post(`/collections/${collectionId}/folders`, {
-      name: sFolder.name,
-      parent_folder_id: rootFolderId,
-    });
-    createdServiceFoldersCount++;
+    const folderBatch = planned.serviceFolders.slice(i, i + FOLDER_BATCH_SIZE);
+    const createdFolders = await Promise.all(
+      folderBatch.map((sf) =>
+        api.post(`/collections/${collectionId}/folders`, {
+          name: sf.name,
+          parent_folder_id: rootFolderId,
+        })
+      )
+    );
+    createdServiceFoldersCount += createdFolders.length;
 
-    for (const ep of sFolder.endpoints) {
-      endpointsToCreate.push({
-        name: ep.name,
-        protocol: 'http',
-        folder_id: childFolder.id,
-        config: ep.config,
-      });
+    for (let j = 0; j < folderBatch.length; j++) {
+      const sf = folderBatch[j];
+      const childFolder = createdFolders[j];
+      for (const ep of sf.endpoints) {
+        endpointsToCreate.push({
+          name: ep.name,
+          protocol: 'http',
+          folder_id: childFolder.id,
+          config: ep.config,
+        });
+      }
     }
   }
 
-  // 3. Batch create endpoints in chunks of 10 to minimize backend API calls
-  const CHUNK_SIZE = 10;
+  // 3. Batch create endpoints in chunks of 50 to maximize throughput and minimize backend roundtrips
+  const CHUNK_SIZE = 50;
   for (let i = 0; i < endpointsToCreate.length; i += CHUNK_SIZE) {
     if (signal?.aborted) break;
     const chunk = endpointsToCreate.slice(i, i + CHUNK_SIZE);
