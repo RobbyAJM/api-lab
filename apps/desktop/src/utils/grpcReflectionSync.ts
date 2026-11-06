@@ -316,6 +316,17 @@ export interface SyncExecutionResult {
   methodsUpdated: number;
 }
 
+export interface SyncProgressInfo {
+  message: string;
+  percent: number;
+  current?: number;
+  total?: number;
+}
+
+export interface SyncAbortSignal {
+  aborted: boolean;
+}
+
 /**
  * Ensures that the nested folder hierarchy for segments exists under rootFolderId.
  * Reuses existing folders where names match case-sensitively.
@@ -370,8 +381,20 @@ export async function executeReflectionSync(
   plan: SyncPlan,
   freshPayloads: Record<string, any>,
   api: SyncApiCaller,
-  existingFolders: CollectionFolder[] = []
+  existingFolders: CollectionFolder[] = [],
+  onProgress?: (info: SyncProgressInfo | string) => void,
+  signal?: SyncAbortSignal
 ): Promise<SyncExecutionResult> {
+  if (signal?.aborted) {
+    return {
+      servicesDeleted: 0,
+      servicesCreated: 0,
+      methodsDeleted: 0,
+      methodsCreated: 0,
+      methodsUpdated: 0,
+    };
+  }
+
   let servicesDeleted = 0;
   let servicesCreated = 0;
   let methodsDeleted = 0;
@@ -383,6 +406,7 @@ export async function executeReflectionSync(
   // 1. Delete removed services (cascades to their endpoints)
   const deletedFolderIds = new Set<string>();
   for (const s of plan.servicesToDelete) {
+    if (signal?.aborted) break;
     await api.delete(`/folders/${s.folderId}`);
     deletedFolderIds.add(s.folderId);
     servicesDeleted++;
@@ -406,12 +430,21 @@ export async function executeReflectionSync(
 
   // 2. Delete removed methods in existing services
   for (const m of plan.methodsToDelete) {
+    if (signal?.aborted) break;
     await api.delete(`/endpoints/${m.endpointId}`);
     methodsDeleted++;
   }
 
-  // 3. Create new services and their methods
+  const endpointsToCreate: Array<{
+    name: string;
+    protocol: 'grpc';
+    folder_id: string;
+    config: any;
+  }> = [];
+
+  // 3. Create new service folders and collect their method endpoints
   for (const s of plan.servicesToCreate) {
+    if (signal?.aborted) break;
     const segments = splitServiceName(s.name);
     const leafFolderId = await ensureFolderPath(
       collectionId,
@@ -424,7 +457,7 @@ export async function executeReflectionSync(
 
     for (const m of s.methods) {
       const payload = freshPayloads[`${s.name}/${m.name}`] || {};
-      await api.post(`/collections/${collectionId}/endpoints`, {
+      endpointsToCreate.push({
         name: m.name,
         protocol: 'grpc',
         folder_id: leafFolderId,
@@ -438,14 +471,14 @@ export async function executeReflectionSync(
           auth: { auth_type: 'inherit' },
         },
       });
-      methodsCreated++;
     }
   }
 
-  // 4. Create new methods in existing services
+  // 4. Collect new methods in existing services
   for (const m of plan.methodsToCreate) {
+    if (signal?.aborted) break;
     const payload = freshPayloads[`${m.serviceName}/${m.methodName}`] || {};
-    await api.post(`/collections/${collectionId}/endpoints`, {
+    endpointsToCreate.push({
       name: m.methodName,
       protocol: 'grpc',
       folder_id: m.folderId,
@@ -459,17 +492,62 @@ export async function executeReflectionSync(
         auth: { auth_type: 'inherit' },
       },
     });
-    methodsCreated++;
   }
 
-  // 5. Update changed method payloads & stream types & server_address
+  const total =
+    plan.servicesToDelete.length +
+    plan.methodsToDelete.length +
+    endpointsToCreate.length +
+    plan.methodsToUpdate.length;
+  let done = servicesDeleted + methodsDeleted;
+
+  // 5. Batch create endpoints in chunks of 50
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < endpointsToCreate.length; i += CHUNK_SIZE) {
+    if (signal?.aborted) break;
+    const chunk = endpointsToCreate.slice(i, i + CHUNK_SIZE);
+
+    let batchSuccess = false;
+    try {
+      await api.post(`/collections/${collectionId}/endpoints/batch`, {
+        endpoints: chunk,
+      });
+      batchSuccess = true;
+      methodsCreated += chunk.length;
+      done += chunk.length;
+    } catch {
+      batchSuccess = false;
+    }
+
+    if (!batchSuccess) {
+      for (const ep of chunk) {
+        if (signal?.aborted) break;
+        await api.post(`/collections/${collectionId}/endpoints`, ep);
+        methodsCreated++;
+        done++;
+      }
+    }
+
+    const percent = 40 + Math.round((done / Math.max(total, 1)) * 55);
+    onProgress?.({
+      message: `Creating endpoints: ${methodsCreated}/${endpointsToCreate.length}...`,
+      percent: Math.min(percent, 95),
+      current: done,
+      total,
+    });
+  }
+
+  // 6. Update changed method payloads & stream types & server_address
   for (const u of plan.methodsToUpdate) {
+    if (signal?.aborted) break;
     const updatedConfig: Record<string, any> = {
       ...u.endpoint.config,
       stream_type: u.newStreamType,
       payload: u.newPayload,
     };
-    const effectiveAddr = u.newServerAddress || (serverAddress && serverAddress.trim() ? serverAddress.trim() : undefined);
+    const effectiveAddr =
+      u.newServerAddress ||
+      (serverAddress && serverAddress.trim() ? serverAddress.trim() : undefined);
     if (effectiveAddr) {
       updatedConfig.server_address = effectiveAddr;
     }
@@ -478,6 +556,19 @@ export async function executeReflectionSync(
       config: updatedConfig,
     });
     methodsUpdated++;
+    done++;
+
+    const percent = 40 + Math.round((done / Math.max(total, 1)) * 55);
+    onProgress?.({
+      message: `Updating endpoints: ${methodsUpdated}/${plan.methodsToUpdate.length}...`,
+      percent: Math.min(percent, 95),
+      current: done,
+      total,
+    });
+  }
+
+  if (!signal?.aborted) {
+    onProgress?.({ message: 'Finalizing collection settings...', percent: 100 });
   }
 
   return {

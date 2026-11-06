@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import {
@@ -9,11 +9,13 @@ import {
   planReflectionSync,
   executeReflectionSync,
   type SyncPlan,
+  type SyncProgressInfo,
 } from '../../utils/grpcReflectionSync';
 import {
   shouldAutoDetectTls,
   DEFAULT_GRPC_SERVER_ADDRESS,
   DEFAULT_GRPC_USE_TLS,
+  generateSamplePayloadsBatch,
 } from '../../utils/grpcReflectionGenerator';
 import { resolveRootFolderId, getDescendantFolderIds } from '../../utils/folderTree';
 import { VariableInput } from '../common/VariableInput';
@@ -30,6 +32,7 @@ import {
   MinusCircle,
   FileEdit,
   ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface SyncReflectionModalProps {
@@ -104,15 +107,21 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
 
   const [scanning, setScanning] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const abortRef = useRef({ aborted: false });
   const [plan, setPlan] = useState<SyncPlan | null>(null);
   const [freshPayloads, setFreshPayloads] = useState<Record<string, any>>({});
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [progressInfo, setProgressInfo] = useState<SyncProgressInfo | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
 
   // Auto-detect or sync selected root folder using ancestor resolver
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setShowCancelConfirm(false);
+      return;
+    }
+    abortRef.current = { aborted: false };
     if (initialFolderId) {
       const rootId = resolveRootFolderId(folders, initialFolderId);
       if (rootId) {
@@ -164,6 +173,14 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
 
   if (!isOpen) return null;
 
+  function handleRequestClose() {
+    if (scanning || syncing) {
+      setShowCancelConfirm(true);
+    } else {
+      onClose();
+    }
+  }
+
   async function handleScanAndCompare() {
     if (!serverAddress.trim() || !selectedRootFolderId) {
       setErrorMessage('Please specify server address and select a root folder');
@@ -172,7 +189,8 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
 
     setScanning(true);
     setErrorMessage(null);
-    setStatusMessage('Querying fresh gRPC reflection...');
+    abortRef.current = { aborted: false };
+    setProgressInfo({ message: 'Querying fresh gRPC reflection...', percent: 10 });
     setPlan(null);
 
     const effectiveTls = useTls || shouldAutoDetectTls(serverAddress, effectiveVariables);
@@ -183,6 +201,8 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         effectiveVariables
       );
 
+      if (abortRef.current.aborted) return;
+
       if (res.error) {
         throw new Error(res.error);
       }
@@ -190,33 +210,37 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         throw new Error('No services discovered via gRPC server reflection.');
       }
 
-      setStatusMessage(`Found ${res.services.length} services. Generating schema payloads...`);
+      setProgressInfo({
+        message: `Found ${res.services.length} services. Generating schema payloads...`,
+        percent: 25,
+      });
 
-      // Pre-generate sample payloads for all fresh methods
-      const payloads: Record<string, any> = {};
-      for (const s of res.services) {
-        for (const m of s.methods) {
-          try {
-            const pRes = await generateNativeGrpcSamplePayload(
-              {
-                server_address: serverAddress.trim(),
-                service: s.name,
-                method: m.name,
-                use_tls: effectiveTls,
-              },
-              effectiveVariables
-            );
-            if (pRes.payload) {
-              payloads[`${s.name}/${m.name}`] = pRes.payload;
-            }
-          } catch {
-            // fallback empty object
-          }
-        }
-      }
+      // Pre-generate sample payloads with bounded concurrency
+      const payloads = await generateSamplePayloadsBatch({
+        services: res.services,
+        serverAddress: serverAddress.trim(),
+        useTls: effectiveTls,
+        variables: effectiveVariables,
+        generateSamplePayload: generateNativeGrpcSamplePayload,
+        concurrency: 6,
+        onProgress: (comp, tot) => {
+          setProgressInfo({
+            message: `Generating schema payloads (${comp}/${tot})...`,
+            percent: 25 + Math.round((comp / Math.max(tot, 1)) * 15),
+            current: comp,
+            total: tot,
+          });
+        },
+        isAborted: () => abortRef.current.aborted,
+      });
+
+      if (abortRef.current.aborted) return;
       setFreshPayloads(payloads);
 
-      setStatusMessage('Comparing schema against workspace folders & endpoints...');
+      setProgressInfo({
+        message: 'Comparing schema against workspace folders & endpoints...',
+        percent: 40,
+      });
 
       const calculatedPlan = planReflectionSync(
         selectedRootFolderId,
@@ -228,12 +252,13 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
       );
 
       setPlan(calculatedPlan);
-      setStatusMessage(null);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to scan reflection');
-      setStatusMessage(null);
+      if (!abortRef.current.aborted) {
+        setErrorMessage(err.message || 'Failed to scan reflection');
+      }
     } finally {
       setScanning(false);
+      setProgressInfo(null);
     }
   }
 
@@ -242,7 +267,8 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
 
     setSyncing(true);
     setErrorMessage(null);
-    setStatusMessage('Applying sync changes to workspace...');
+    abortRef.current = { aborted: false };
+    setProgressInfo({ message: 'Applying sync changes to workspace...', percent: 40 });
 
     try {
       const apiCaller = {
@@ -260,8 +286,18 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         plan,
         freshPayloads,
         apiCaller,
-        folders
+        folders,
+        (info) => {
+          if (typeof info === 'string') {
+            setProgressInfo({ message: info, percent: 60 });
+          } else {
+            setProgressInfo(info);
+          }
+        },
+        abortRef.current
       );
+
+      if (abortRef.current.aborted) return;
 
       // Save/update root folder gRPC server address in folder and collection.settings
       try {
@@ -302,10 +338,12 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         onClose();
       }, 2000);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to apply reflection sync');
+      if (!abortRef.current.aborted) {
+        setErrorMessage(err.message || 'Failed to apply reflection sync');
+      }
     } finally {
       setSyncing(false);
-      setStatusMessage(null);
+      setProgressInfo(null);
     }
   }
 
@@ -319,11 +357,11 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
-      onClick={() => !syncing && onClose()}
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-100"
+      onClick={handleRequestClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh]"
+        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-lg w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-100 relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -345,7 +383,12 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
                 showManageShortcut={false}
               />
             )}
-            <button onClick={onClose} disabled={syncing} className="text-zinc-400 hover:text-zinc-200 p-1">
+            <button
+              type="button"
+              onClick={handleRequestClose}
+              disabled={scanning || syncing}
+              className="text-zinc-400 hover:text-zinc-200 p-1"
+            >
               <X size={14} />
             </button>
           </div>
@@ -407,10 +450,18 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
             </div>
           )}
 
-          {statusMessage && (
-            <div className="p-2 bg-zinc-950 border border-zinc-800 rounded text-zinc-300 text-xs font-mono flex items-center gap-2">
-              <RefreshCw size={12} className="animate-spin text-primary" />
-              <span>{statusMessage}</span>
+          {(scanning || syncing) && progressInfo && (
+            <div className="py-1 space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+                <span className="truncate pr-2">{progressInfo.message}</span>
+                <span className="text-emerald-400 font-medium flex-shrink-0">{progressInfo.percent}%</span>
+              </div>
+              <div className="w-full bg-zinc-950 border border-zinc-800 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-emerald-500 h-full rounded-full transition-all duration-200"
+                  style={{ width: `${Math.max(5, Math.min(100, progressInfo.percent))}%` }}
+                />
+              </div>
             </div>
           )}
 
@@ -483,8 +534,7 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
         <div className="flex items-center justify-end gap-2 p-3 border-t border-zinc-800 bg-zinc-950/50">
           <button
             type="button"
-            onClick={onClose}
-            disabled={syncing}
+            onClick={handleRequestClose}
             className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded text-xs font-medium transition"
           >
             Close
@@ -511,6 +561,58 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Stop Sync Confirmation Dialog */}
+      {showCancelConfirm && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 font-sans animate-in fade-in duration-100"
+          onClick={() => setShowCancelConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-4 space-y-3.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded bg-amber-950/60 border border-amber-800/60 text-amber-400 flex-shrink-0">
+                <AlertTriangle size={16} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xs font-semibold text-zinc-100">Stop Syncing Reflection?</h3>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  By stopping this operation, some changes that already applied will not be reverted.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(false)}
+                className="px-3 py-1.5 rounded text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition"
+              >
+                Continue Syncing
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  abortRef.current.aborted = true;
+                  setShowCancelConfirm(false);
+                  setScanning(false);
+                  setSyncing(false);
+                  queryClient.invalidateQueries({ queryKey: ['folders', collection.id] });
+                  queryClient.invalidateQueries({ queryKey: ['endpoints', collection.id] });
+                  queryClient.invalidateQueries({ queryKey: ['collection', collection.id] });
+                  queryClient.invalidateQueries({ queryKey: ['collections'] });
+                  onClose();
+                }}
+                className="px-3 py-1.5 rounded text-xs bg-red-600 hover:bg-red-500 text-white font-medium transition"
+              >
+                Stop & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

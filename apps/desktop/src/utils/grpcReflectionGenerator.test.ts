@@ -178,33 +178,29 @@ test('executeGrpcHierarchyCreation: recursively creates nested folders and child
     parent_folder_id: 'folder-3',
   });
 
-  // Call 5 & 6: Endpoints under 'folder-4' ('AuthAPI')
-  assert.equal(calls[4].path, '/collections/coll-123/endpoints');
-  assert.equal(calls[4].body.folder_id, 'folder-4');
-  assert.equal(calls[4].body.name, 'Login');
-
-  assert.equal(calls[5].path, '/collections/coll-123/endpoints');
-  assert.equal(calls[5].body.folder_id, 'folder-4');
-  assert.equal(calls[5].body.name, 'Profile');
-
-  // Call 7: Folder 'nuconnector' under root 'folder-1'
-  assert.equal(calls[6].path, '/collections/coll-123/folders');
-  assert.deepEqual(calls[6].body, {
+  // Call 5: Folder 'nuconnector' under root 'folder-1'
+  assert.equal(calls[4].path, '/collections/coll-123/folders');
+  assert.deepEqual(calls[4].body, {
     name: 'nuconnector',
     parent_folder_id: 'folder-1',
   });
 
-  // Call 8: Folder 'PriceStreamAPI' under 'folder-5' ('nuconnector')
-  assert.equal(calls[7].path, '/collections/coll-123/folders');
-  assert.deepEqual(calls[7].body, {
+  // Call 6: Folder 'PriceStreamAPI' under 'folder-5' ('nuconnector')
+  assert.equal(calls[5].path, '/collections/coll-123/folders');
+  assert.deepEqual(calls[5].body, {
     name: 'PriceStreamAPI',
     parent_folder_id: 'folder-5',
   });
 
-  // Call 9: Endpoint under 'folder-6' ('PriceStreamAPI')
-  assert.equal(calls[8].path, '/collections/coll-123/endpoints');
-  assert.equal(calls[8].body.folder_id, 'folder-6');
-  assert.equal(calls[8].body.name, 'SubscribePrice');
+  // Call 7: Batch endpoint creation in chunk of 50
+  assert.equal(calls[6].path, '/collections/coll-123/endpoints/batch');
+  assert.equal(calls[6].body.endpoints.length, 3);
+  assert.equal(calls[6].body.endpoints[0].name, 'Login');
+  assert.equal(calls[6].body.endpoints[0].folder_id, 'folder-4');
+  assert.equal(calls[6].body.endpoints[1].name, 'Profile');
+  assert.equal(calls[6].body.endpoints[1].folder_id, 'folder-4');
+  assert.equal(calls[6].body.endpoints[2].name, 'SubscribePrice');
+  assert.equal(calls[6].body.endpoints[2].folder_id, 'folder-6');
 });
 
 test('shouldAutoDetectTls: accurately detects remote domains vs local', () => {
@@ -288,8 +284,22 @@ test('generateGrpcCollection: complete end-to-end success with mock reflection a
   assert.equal(res.createdEndpointsCount, 3);
   assert.equal(res.samplePayloadsCount, 3);
   assert.equal(res.effectiveTls, true);
-  assert.ok(progressUpdates.some((s) => s.includes('Discovering services')));
-  assert.ok(progressUpdates.some((s) => s.includes('Generating sample payloads')));
+  assert.ok(
+    progressUpdates.some((s) =>
+      (typeof s === 'string' ? s : s.message).includes('Discovering services')
+    )
+  );
+  assert.ok(
+    progressUpdates.some((s) =>
+      (typeof s === 'string' ? s : s.message).includes('Generating sample payloads')
+    )
+  );
+  assert.ok(
+    progressUpdates.some((s) => typeof s === 'object' && s.percent === 10)
+  );
+  assert.ok(
+    progressUpdates.some((s) => typeof s === 'object' && s.percent === 100)
+  );
 });
 
 test('generateGrpcCollection: skip payload generation when generatePayloads is false', async () => {
@@ -393,5 +403,116 @@ test('getDefaultGrpcConfig: returns public grpcb.in test url default with TLS en
   assert.equal(planned.serverAddress, 'https://grpcb.in:9001/');
   const endpoint = planned.serviceFolders[0].children[0].children[0].endpoints[0];
   assert.equal(endpoint.config.use_tls, true);
+});
+
+test('executeGrpcHierarchyCreation: batches endpoints in chunks of 50', async () => {
+  const batchCalls: any[] = [];
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      if (path.includes('/endpoints/batch')) {
+        batchCalls.push(body.endpoints);
+      }
+      return { id: `res-${batchCalls.length}`, ...body };
+    },
+  };
+
+  const methods: { name: string; input_type: string; output_type: string }[] = [];
+  for (let i = 0; i < 125; i++) {
+    methods.push({
+      name: `Method${i}`,
+      input_type: `Req${i}`,
+      output_type: `Res${i}`,
+    });
+  }
+
+  const bigServices: GrpcServiceSummary[] = [
+    {
+      name: 'big.package.BigService',
+      methods,
+    },
+  ];
+
+  const planned = planGrpcHierarchy({
+    folderName: 'Big gRPC',
+    serverAddress: 'localhost:9091',
+    services: bigServices,
+  });
+
+  const progressUpdates: any[] = [];
+  const result = await executeGrpcHierarchyCreation(
+    'coll-big',
+    planned,
+    mockApi,
+    (info) => progressUpdates.push(info)
+  );
+
+  assert.equal(result.createdEndpointsCount, 125);
+  // 125 endpoints in chunks of 50 = 3 chunks (50, 50, 25)
+  assert.equal(batchCalls.length, 3);
+  assert.equal(batchCalls[0].length, 50);
+  assert.equal(batchCalls[1].length, 50);
+  assert.equal(batchCalls[2].length, 25);
+  assert.ok(progressUpdates.length >= 3);
+  assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.current === 50));
+  assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.current === 125));
+});
+
+test('executeGrpcHierarchyCreation: respects abort signal and halts creation', async () => {
+  const calls: string[] = [];
+  const mockApi = {
+    post: async (path: string) => {
+      calls.push(path);
+      return { id: 'f-1' };
+    },
+  };
+
+  const planned = planGrpcHierarchy({
+    folderName: 'NuTrade',
+    serverAddress: 'localhost:9091',
+    services: mockServices,
+  });
+
+  const abortSignal = { aborted: true };
+  const res = await executeGrpcHierarchyCreation(
+    'coll-abort',
+    planned,
+    mockApi,
+    undefined,
+    abortSignal
+  );
+
+  assert.equal(res.createdEndpointsCount, 0);
+  assert.equal(res.createdServiceFoldersCount, 0);
+  assert.equal(calls.length, 0);
+});
+
+test('generateGrpcCollection: reports granular progress percentages and respects abort signal', async () => {
+  const progressUpdates: any[] = [];
+  const abortSignal = { aborted: false };
+
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      // Abort after first folder
+      if (path.includes('/folders')) {
+        abortSignal.aborted = true;
+      }
+      return { id: 'id-abort', ...body };
+    },
+  };
+
+  const result = await generateGrpcCollection({
+    collectionId: 'coll-abort-gen',
+    folderName: 'NuTrade',
+    serverAddress: 'grpcb.in:9001',
+    discoverServices: async () => ({ services: mockServices }),
+    generateSamplePayload: async (req) => ({ payload: { m: req.method } }),
+    apiCaller: mockApi,
+    signal: abortSignal,
+    onProgress: (info) => progressUpdates.push(info),
+  });
+
+  assert.equal(result.createdEndpointsCount, 0);
+  assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 10));
+  assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 25));
 });
 

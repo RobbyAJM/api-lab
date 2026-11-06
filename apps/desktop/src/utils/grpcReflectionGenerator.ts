@@ -37,6 +37,17 @@ export interface PlannedHierarchy {
   totalEndpoints: number;
 }
 
+export interface GrpcProgressInfo {
+  message: string;
+  percent: number;
+  current?: number;
+  total?: number;
+}
+
+export interface GrpcAbortSignal {
+  aborted: boolean;
+}
+
 export const DEFAULT_GRPC_SERVER_ADDRESS = 'https://grpcb.in:9001/';
 export const DEFAULT_GRPC_FOLDER_NAME = 'gRPC Services';
 export const DEFAULT_GRPC_USE_TLS = true;
@@ -178,12 +189,18 @@ export interface ApiCaller {
 export async function executeGrpcHierarchyCreation(
   collectionId: string,
   planned: PlannedHierarchy,
-  api: ApiCaller
+  api: ApiCaller,
+  onProgress?: (info: GrpcProgressInfo | string) => void,
+  signal?: GrpcAbortSignal
 ): Promise<{
   rootFolderId: string;
   createdServiceFoldersCount: number;
   createdEndpointsCount: number;
 }> {
+  if (signal?.aborted) {
+    return { rootFolderId: '', createdServiceFoldersCount: 0, createdEndpointsCount: 0 };
+  }
+
   // 1. Create root folder {folderName} with grpc_url stored directly on the folder
   const rootFolder = await api.post(`/collections/${collectionId}/folders`, {
     name: planned.rootFolderName,
@@ -194,10 +211,20 @@ export async function executeGrpcHierarchyCreation(
   const rootFolderId = rootFolder.id;
   let createdServiceFoldersCount = 0;
   let createdEndpointsCount = 0;
+  const total = planned.totalEndpoints;
+  let done = 0;
 
-  // 2. Recursively create service subfolders and child endpoints
+  const endpointsToCreate: Array<{
+    name: string;
+    protocol: 'grpc';
+    folder_id: string;
+    config: any;
+  }> = [];
+
+  // 2. Recursively create service subfolders to obtain their folder_ids and flatten endpoints
   async function createNodes(nodes: PlannedFolderNode[], parentFolderId: string) {
     for (const node of nodes) {
+      if (signal?.aborted) break;
       const childFolder = await api.post(`/collections/${collectionId}/folders`, {
         name: node.name,
         parent_folder_id: parentFolderId,
@@ -205,13 +232,12 @@ export async function executeGrpcHierarchyCreation(
       createdServiceFoldersCount++;
 
       for (const ep of node.endpoints) {
-        await api.post(`/collections/${collectionId}/endpoints`, {
+        endpointsToCreate.push({
           name: ep.name,
           protocol: 'grpc',
           folder_id: childFolder.id,
           config: ep.config,
         });
-        createdEndpointsCount++;
       }
 
       if (node.children.length > 0) {
@@ -221,6 +247,42 @@ export async function executeGrpcHierarchyCreation(
   }
 
   await createNodes(planned.serviceFolders, rootFolderId);
+
+  // 3. Batch create endpoints in chunks of 50
+  const CHUNK_SIZE = 50;
+  for (let i = 0; i < endpointsToCreate.length; i += CHUNK_SIZE) {
+    if (signal?.aborted) break;
+    const chunk = endpointsToCreate.slice(i, i + CHUNK_SIZE);
+
+    let batchSuccess = false;
+    try {
+      await api.post(`/collections/${collectionId}/endpoints/batch`, {
+        endpoints: chunk,
+      });
+      batchSuccess = true;
+      createdEndpointsCount += chunk.length;
+      done += chunk.length;
+    } catch {
+      batchSuccess = false;
+    }
+
+    if (!batchSuccess) {
+      for (const ep of chunk) {
+        if (signal?.aborted) break;
+        await api.post(`/collections/${collectionId}/endpoints`, ep);
+        createdEndpointsCount++;
+        done++;
+      }
+    }
+
+    const percent = 25 + Math.round((done / Math.max(total, 1)) * 70);
+    onProgress?.({
+      message: `Creating endpoints: ${done}/${total}...`,
+      percent: Math.min(percent, 95),
+      current: done,
+      total,
+    });
+  }
 
   return {
     rootFolderId,
@@ -330,7 +392,8 @@ export interface GenerateGrpcCollectionOptions {
   variables?: Record<string, string>;
   timeoutMs?: number; // default 60_000 (1 minute)
   concurrency?: number; // default 6
-  onProgress?: (status: string, phase: GrpcGenerationPhase) => void;
+  onProgress?: (info: GrpcProgressInfo | string, phase?: GrpcGenerationPhase) => void;
+  signal?: GrpcAbortSignal;
   discoverServices: (
     req: GrpcReflectionRequest,
     vars: Record<string, string>
@@ -396,6 +459,18 @@ export async function generateGrpcCollection(
   });
 
   const executionPromise = (async (): Promise<GenerateGrpcCollectionResult> => {
+    if (options.signal?.aborted) {
+      return {
+        rootFolderId: '',
+        createdServiceFoldersCount: 0,
+        createdEndpointsCount: 0,
+        servicesDiscovered: 0,
+        totalEndpoints: 0,
+        samplePayloadsCount: 0,
+        effectiveTls: false,
+      };
+    }
+
     const cleanAddr = serverAddress.trim();
     const cleanFolderName = folderName.trim() || 'gRPC Services';
     const effectiveTls =
@@ -403,12 +478,24 @@ export async function generateGrpcCollection(
 
     // Phase 1: Discovery
     currentPhase = 'discovery';
-    onProgress?.('Discovering services via reflection...', 'discovery');
+    onProgress?.({ message: 'Discovering services via server reflection...', percent: 10 }, 'discovery');
 
     const reflection = await discoverServices(
       { server_address: cleanAddr, use_tls: effectiveTls },
       variables
     );
+
+    if (options.signal?.aborted) {
+      return {
+        rootFolderId: '',
+        createdServiceFoldersCount: 0,
+        createdEndpointsCount: 0,
+        servicesDiscovered: 0,
+        totalEndpoints: 0,
+        samplePayloadsCount: 0,
+        effectiveTls,
+      };
+    }
 
     if (timedOut) throw new Error('Aborted due to timeout');
 
@@ -433,7 +520,10 @@ export async function generateGrpcCollection(
         0
       );
       onProgress?.(
-        `Found ${reflection.services.length} services. Generating sample payloads...`,
+        {
+          message: `Found ${reflection.services.length} services. Generating sample payloads...`,
+          percent: 25,
+        },
         'payload_generation'
       );
 
@@ -448,19 +538,42 @@ export async function generateGrpcCollection(
           completedPayloads = comp;
           totalPayloads = tot;
           onProgress?.(
-            `Generating sample payloads (${comp}/${tot})...`,
+            {
+              message: `Generating sample payloads (${comp}/${tot})...`,
+              percent: 25,
+              current: comp,
+              total: tot,
+            },
             'payload_generation'
           );
         },
-        isAborted: () => timedOut,
+        isAborted: () => timedOut || Boolean(options.signal?.aborted),
       });
+
+      if (options.signal?.aborted) {
+        return {
+          rootFolderId: '',
+          createdServiceFoldersCount: 0,
+          createdEndpointsCount: 0,
+          servicesDiscovered: reflection.services.length,
+          totalEndpoints: 0,
+          samplePayloadsCount: Object.keys(samplePayloads).length,
+          effectiveTls,
+        };
+      }
 
       if (timedOut) throw new Error('Aborted due to timeout');
     }
 
     // Phase 3: Hierarchy Creation
     currentPhase = 'hierarchy_creation';
-    onProgress?.('Generating folder hierarchy and endpoints...', 'hierarchy_creation');
+    onProgress?.(
+      {
+        message: `Found ${reflection.services.length} services. Creating folders...`,
+        percent: 25,
+      },
+      'hierarchy_creation'
+    );
 
     const planned = planGrpcHierarchy({
       folderName: cleanFolderName,
@@ -470,7 +583,17 @@ export async function generateGrpcCollection(
       samplePayloads,
     });
 
-    const result = await executeGrpcHierarchyCreation(collectionId, planned, apiCaller);
+    const result = await executeGrpcHierarchyCreation(
+      collectionId,
+      planned,
+      apiCaller,
+      (info) => onProgress?.(info, 'hierarchy_creation'),
+      options.signal
+    );
+
+    if (!options.signal?.aborted) {
+      onProgress?.({ message: 'Finalizing collection settings...', percent: 100 }, 'hierarchy_creation');
+    }
 
     return {
       rootFolderId: result.rootFolderId,

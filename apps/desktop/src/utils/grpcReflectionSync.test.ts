@@ -461,9 +461,12 @@ test('executeReflectionSync: reuses shared parent folder and prunes empty interm
   // Check endpoint created inside the newly created folder
   const endpointPosts = calls.filter((c) => c.method === 'POST' && c.path.includes('/endpoints'));
   assert.equal(endpointPosts.length, 1);
-  assert.equal(endpointPosts[0].body.name, 'Pay');
-  assert.equal(endpointPosts[0].body.folder_id, 'folder-100');
-  assert.deepEqual(endpointPosts[0].body.config.auth, { auth_type: 'inherit' });
+  const createdEp = endpointPosts[0].body.endpoints
+    ? endpointPosts[0].body.endpoints[0]
+    : endpointPosts[0].body;
+  assert.equal(createdEp.name, 'Pay');
+  assert.equal(createdEp.folder_id, 'folder-100');
+  assert.deepEqual(createdEp.config.auth, { auth_type: 'inherit' });
 });
 
 test('executeReflectionSync: preserves folder settings and newly created endpoints inherit folder auth', async () => {
@@ -539,16 +542,19 @@ test('executeReflectionSync: preserves folder settings and newly created endpoin
 
   const endpointPosts = calls.filter((c) => c.method === 'POST' && c.path.includes('/endpoints'));
   assert.equal(endpointPosts.length, 1);
-  assert.equal(endpointPosts[0].body.name, 'Login');
-  assert.equal(endpointPosts[0].body.folder_id, 'f-sub');
-  assert.deepEqual(endpointPosts[0].body.config.auth, { auth_type: 'inherit' });
+  const createdEp = endpointPosts[0].body.endpoints
+    ? endpointPosts[0].body.endpoints[0]
+    : endpointPosts[0].body;
+  assert.equal(createdEp.name, 'Login');
+  assert.equal(createdEp.folder_id, 'f-sub');
+  assert.deepEqual(createdEp.config.auth, { auth_type: 'inherit' });
 
   // Verify that the new endpoint inherits from f-sub
   const { resolveInheritedAuth, getInheritedAuthHeader } = await import('./folderSettings.ts');
   const resolved = resolveInheritedAuth(
     { id: 'col-1', name: 'Collection', settings: { auth: { auth_type: 'none' } } },
     existingFolders,
-    endpointPosts[0].body.folder_id
+    createdEp.folder_id
   );
   assert.ok(resolved);
   assert.equal(resolved.sourceId, 'f-sub');
@@ -656,4 +662,100 @@ test('planReflectionSync & executeReflectionSync: detects stale dev server_addre
   assert.equal(patchCalls.length, 1);
   assert.equal(patchCalls[0].path, '/endpoints/ep-get-order');
   assert.equal(patchCalls[0].body.config.server_address, '{{LOCAL_GRPC_URL}}');
+});
+
+test('executeReflectionSync: batches endpoints in chunks of 50 and reports progress', async () => {
+  const batchCalls: any[] = [];
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      if (path.includes('/endpoints/batch')) {
+        batchCalls.push(body.endpoints);
+      }
+      return { id: 'mock-id' };
+    },
+    patch: async () => ({}),
+    delete: async () => ({}),
+  };
+
+  const methodsToCreate: any[] = [];
+  for (let i = 0; i < 110; i++) {
+    methodsToCreate.push({
+      folderId: 'f-exist',
+      serviceName: 'BigService',
+      methodName: `Method${i}`,
+      streamType: 'unary',
+    });
+  }
+
+  const plan = {
+    servicesToDelete: [],
+    servicesToCreate: [],
+    methodsToCreate,
+    methodsToDelete: [],
+    methodsToUpdate: [],
+  };
+
+  const progressUpdates: any[] = [];
+  const result = await executeReflectionSync(
+    'col-1',
+    'root-1',
+    'localhost:9091',
+    plan,
+    {},
+    mockApi,
+    [],
+    (info) => progressUpdates.push(info)
+  );
+
+  assert.equal(result.methodsCreated, 110);
+  // 110 endpoints in chunks of 50 = 3 chunks (50, 50, 10)
+  assert.equal(batchCalls.length, 3);
+  assert.equal(batchCalls[0].length, 50);
+  assert.equal(batchCalls[1].length, 50);
+  assert.equal(batchCalls[2].length, 10);
+  assert.ok(progressUpdates.length >= 3);
+  assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 100));
+});
+
+test('executeReflectionSync: respects abort signal and halts execution cleanly', async () => {
+  const calls: string[] = [];
+  const mockApi = {
+    post: async (path: string) => {
+      calls.push(path);
+      return { id: 'mock' };
+    },
+    patch: async (path: string) => {
+      calls.push(path);
+      return {};
+    },
+    delete: async (path: string) => {
+      calls.push(path);
+      return {};
+    },
+  };
+
+  const plan = {
+    servicesToDelete: [{ folderId: 'f-1', serviceName: 'Svc1' }],
+    servicesToCreate: [],
+    methodsToCreate: [{ folderId: 'f-1', serviceName: 'Svc1', methodName: 'M1', streamType: 'unary' as const }],
+    methodsToDelete: [],
+    methodsToUpdate: [],
+  };
+
+  const abortSignal = { aborted: true };
+  const result = await executeReflectionSync(
+    'col-1',
+    'root-1',
+    'localhost:9091',
+    plan,
+    {},
+    mockApi,
+    [],
+    undefined,
+    abortSignal
+  );
+
+  assert.equal(result.servicesDeleted, 0);
+  assert.equal(result.methodsCreated, 0);
+  assert.equal(calls.length, 0);
 });

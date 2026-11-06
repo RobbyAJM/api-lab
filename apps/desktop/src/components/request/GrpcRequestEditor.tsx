@@ -30,6 +30,7 @@ import {
   Search,
   X,
   Settings,
+  Lock,
 } from 'lucide-react';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { ConflictDiffModal } from './ConflictDiffModal';
@@ -89,7 +90,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     setActiveEndpoint,
     setEndpointDraft,
     clearEndpointDraft,
-    openReflectionSettingsModal,
     openFolderSettingsModal,
     openCollectionSettingsModal,
     setEndpointExecuting,
@@ -1234,34 +1234,12 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
             <div className="flex-1 h-full flex items-center min-w-0">
               {inheritedInfo.isInherited ? (
-                <div className="flex items-center justify-between w-full h-full pr-1 font-mono text-xs select-none">
-                  <div className="flex items-center gap-1.5 flex-1 min-w-0 pl-1">
-                    <span
-                      className="text-zinc-200 truncate select-text"
-                      title={`Inherited from reflection folder "${inheritedInfo.folderName}"`}
-                    >
-                      {effectiveServerAddress || <span className="text-zinc-500 italic">No address set</span>}
-                    </span>
-                    <span
-                      className="px-1.5 py-0.2 rounded bg-amber-950/60 border border-amber-800/50 text-amber-300 text-[10px] font-sans flex-shrink-0"
-                      title={`Inherited from reflection folder "${inheritedInfo.folderName}"`}
-                    >
-                      Inherited
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (inheritedInfo.folderId && endpoint.collection_id) {
-                        openReflectionSettingsModal(inheritedInfo.folderId, endpoint.collection_id);
-                      }
-                    }}
-                    className="flex items-center gap-1 px-2 py-0.5 rounded text-[11px] text-zinc-400 hover:text-zinc-100 bg-zinc-800/60 hover:bg-zinc-800 border border-zinc-700/60 transition cursor-pointer flex-shrink-0"
-                    title={`Edit gRPC address in ${inheritedInfo.folderName} reflection settings`}
-                  >
-                    <Settings size={11} className="text-primary" />
-                    <span>Edit</span>
-                  </button>
+                <div
+                  className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-950/80 border border-zinc-800 rounded text-xs font-mono text-zinc-300 w-full select-all cursor-default"
+                  title={`Server address is locked by gRPC reflection folder "${inheritedInfo.folderName}"`}
+                >
+                  <Lock size={11} className="text-emerald-400 flex-shrink-0" />
+                  <span className="truncate">{effectiveServerAddress}</span>
                 </div>
               ) : (
                 <VariableInput
