@@ -68,7 +68,10 @@ export function findServiceFolder(
  */
 export function reconcilePayload(
   existingPayload: any,
-  freshSamplePayload: any
+  freshSamplePayload: any,
+  options?: {
+    knownMapFields?: Set<string>;
+  }
 ): { updatedPayload: any; changed: boolean } {
   // If either is not an object or is an array, compare directly
   if (
@@ -105,7 +108,36 @@ export function reconcilePayload(
       const oldVal = existingPayload[key];
       const freshVal = freshSamplePayload[key];
 
-      if (
+      const isMapField =
+        options?.knownMapFields?.has(key) ||
+        (typeof freshVal === 'object' &&
+          freshVal !== null &&
+          !Array.isArray(freshVal) &&
+          Object.keys(freshVal).length === 1 &&
+          /^key(_\d+)?$/.test(Object.keys(freshVal)[0]));
+
+      if (isMapField && typeof oldVal === 'object' && oldVal !== null && !Array.isArray(oldVal)) {
+        // Map field: preserve user's dynamic map entries instead of overwriting with sample keys
+        const freshSampleKey = Object.keys(freshVal)[0];
+        const sampleValueTemplate = freshVal[freshSampleKey];
+
+        if (
+          typeof sampleValueTemplate === 'object' &&
+          sampleValueTemplate !== null &&
+          !Array.isArray(sampleValueTemplate)
+        ) {
+          const reconciledMap: Record<string, any> = {};
+          for (const [entryKey, entryVal] of Object.entries(oldVal)) {
+            const nested = reconcilePayload(entryVal, sampleValueTemplate, options);
+            reconciledMap[entryKey] = nested.updatedPayload;
+            if (nested.changed) changed = true;
+          }
+          updated[key] = reconciledMap;
+        } else {
+          // Primitive map entries (int, string, bool): keep existing entries
+          updated[key] = oldVal;
+        }
+      } else if (
         typeof oldVal === 'object' &&
         oldVal !== null &&
         typeof freshVal === 'object' &&
@@ -113,7 +145,7 @@ export function reconcilePayload(
         !Array.isArray(oldVal) &&
         !Array.isArray(freshVal)
       ) {
-        const nested = reconcilePayload(oldVal, freshVal);
+        const nested = reconcilePayload(oldVal, freshVal, options);
         updated[key] = nested.updatedPayload;
         if (nested.changed) changed = true;
       } else {
@@ -344,9 +376,19 @@ export function planReflectionSync(
       } else {
         // Method exists: reconcile payload
         const currentPayload = existingEp.config?.payload || {};
+        const mapFields = new Set<string>();
+        if (fm.request_fields) {
+          for (const rf of fm.request_fields) {
+            const ft = (rf.field_type || '').toLowerCase();
+            if (ft.startsWith('map') || ft.endsWith('entry[]') || ft.includes('entry[]')) {
+              mapFields.add(rf.name);
+            }
+          }
+        }
         const { updatedPayload, changed } = reconcilePayload(
           currentPayload,
-          freshPayload
+          freshPayload,
+          { knownMapFields: mapFields }
         );
         const currentStreamType = existingEp.config?.stream_type || 'unary';
         const cleanTargetAddr = targetServerAddress && targetServerAddress.trim() ? targetServerAddress.trim() : undefined;

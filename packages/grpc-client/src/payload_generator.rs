@@ -60,12 +60,17 @@ fn generate_sample_message(desc: &MessageDescriptor, depth: usize) -> Value {
                 let val_field = entry_desc.fields().find(|f| f.name() == "value");
 
                 let key_str = if let Some(kf) = key_field {
-                    match generate_primitive_sample(&kf.kind(), &kf, &mut rng) {
-                        Value::String(s) => s,
-                        other => other.to_string(),
+                    match kf.kind() {
+                        Kind::String => "key".to_string(),
+                        Kind::Int32 | Kind::Sint32 | Kind::Sfixed32 => "1".to_string(),
+                        Kind::Int64 | Kind::Sint64 | Kind::Sfixed64 => "100".to_string(),
+                        Kind::Uint32 | Kind::Fixed32 => "1".to_string(),
+                        Kind::Uint64 | Kind::Fixed64 => "100".to_string(),
+                        Kind::Bool => "true".to_string(),
+                        _ => "key".to_string(),
                     }
                 } else {
-                    format!("key_{}", rng.gen_range(1..100))
+                    "key".to_string()
                 };
 
                 let val = if let Some(vf) = val_field {
@@ -184,6 +189,8 @@ fn generate_primitive_sample<R: Rng>(
                 json!(format!("Sample_{}", rng.gen_range(1..500)))
             } else if field_name.contains("url") {
                 json!("https://example.com/api")
+            } else if field_name == "key" {
+                json!("key")
             } else {
                 json!(format!("{}_{}", field_name, rng.gen_range(1..100)))
             }

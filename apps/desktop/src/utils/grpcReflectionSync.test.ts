@@ -56,6 +56,45 @@ test('reconcilePayload: keeps existing values, appends new fields, removes dropp
   assert.equal(updatedPayload.profile.avatar_url, 'https://example.com/avatar.png');
 });
 
+test('reconcilePayload: preserves map fields with dynamic keys without false diff', () => {
+  const existingPayload = {
+    title: 'Test',
+    map_value: {
+      key_57: 123,
+      custom_user_key: 456,
+    },
+    mapped_string_value: {
+      key_14: 'hello',
+    },
+  };
+
+  const freshSamplePayload = {
+    title: 'Random Sample Title',
+    map_value: {
+      key_46: 999,
+    },
+    mapped_string_value: {
+      key: 'sample',
+    },
+  };
+
+  const { updatedPayload, changed } = reconcilePayload(
+    existingPayload,
+    freshSamplePayload,
+    { knownMapFields: new Set(['map_value', 'mapped_string_value']) }
+  );
+
+  assert.equal(changed, false);
+  assert.equal(updatedPayload.title, 'Test');
+  assert.deepEqual(updatedPayload.map_value, {
+    key_57: 123,
+    custom_user_key: 456,
+  });
+  assert.deepEqual(updatedPayload.mapped_string_value, {
+    key_14: 'hello',
+  });
+});
+
 test('computePayloadFieldDiff: detects added, removed, and changed nested fields', () => {
   const oldPayload = {
     user: 'alice',
