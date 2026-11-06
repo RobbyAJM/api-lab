@@ -79,6 +79,10 @@ pub fn create_router(state: SharedState) -> Router {
             get(collections::list_endpoints).post(collections::create_endpoint),
         )
         .route(
+            "/collections/{collection_id}/endpoints/batch",
+            post(collections::create_endpoints_batch),
+        )
+        .route(
             "/endpoints/{id}",
             get(collections::get_endpoint)
                 .patch(collections::update_endpoint)

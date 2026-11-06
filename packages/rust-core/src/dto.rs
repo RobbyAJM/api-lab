@@ -204,6 +204,11 @@ pub struct CreateEndpointDto {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchCreateEndpointsDto {
+    pub endpoints: Vec<CreateEndpointDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateEndpointDto {
     pub name: Option<String>,
     pub folder_id: Option<Option<Uuid>>,

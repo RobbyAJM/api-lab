@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../api/client';
 import {
@@ -10,7 +10,7 @@ import {
   type SwaggerProgressInfo,
 } from '../../utils/swaggerGenerator';
 import { VariableInput } from '../common/VariableInput';
-import { X, RefreshCw, FolderPlus, Globe, CheckCircle2 } from 'lucide-react';
+import { X, RefreshCw, FolderPlus, Globe, CheckCircle2, AlertTriangle } from 'lucide-react';
 import type { VariableResponse } from '@api-lab/api-types';
 
 interface GenerateSwaggerModalProps {
@@ -31,17 +31,31 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
   const [baseUrl, setBaseUrl] = useState(DEFAULT_SWAGGER_BASE_URL);
   const [swaggerPath, setSwaggerPath] = useState(DEFAULT_SWAGGER_PATH);
   const [loading, setLoading] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const abortRef = useRef({ aborted: false });
   const [progressInfo, setProgressInfo] = useState<SwaggerProgressInfo | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      setShowCancelConfirm(false);
+      return;
+    }
+    abortRef.current = { aborted: false };
     resolveVariables().then(setActiveVariables);
   }, [activeEnvironmentId, isOpen]);
 
   if (!isOpen) return null;
+
+  function handleRequestClose() {
+    if (loading) {
+      setShowCancelConfirm(true);
+    } else {
+      onClose();
+    }
+  }
 
   async function resolveVariables(): Promise<Record<string, string>> {
     const vars: Record<string, string> = {};
@@ -81,6 +95,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
 
     setLoading(true);
     setErrorText(null);
+    abortRef.current = { aborted: false };
     setProgressInfo({ message: 'Fetching Swagger specification...', percent: 10 });
 
     try {
@@ -100,6 +115,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
         baseUrl: baseUrl.trim(),
         variables: activeVars,
         timeoutMs: 60_000,
+        signal: abortRef.current,
         onProgress: (info) => {
           if (typeof info === 'string') {
             setProgressInfo({ message: info, percent: 30 });
@@ -109,6 +125,10 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
         },
         apiCaller,
       });
+
+      if (abortRef.current.aborted) {
+        return;
+      }
 
       // Link Swagger URL to generated root folder in collection settings
       try {
@@ -142,7 +162,9 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
         onClose();
       }, 1800);
     } catch (err: any) {
-      setErrorText(err.message || 'Failed to generate Swagger collection');
+      if (!abortRef.current.aborted) {
+        setErrorText(err.message || 'Failed to generate Swagger collection');
+      }
     } finally {
       setLoading(false);
       setProgressInfo(null);
@@ -152,10 +174,10 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
   return (
     <div
       className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-100"
-      onClick={() => !loading && onClose()}
+      onClick={handleRequestClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-md w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-100"
+        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-md w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-100 relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -167,8 +189,8 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
             </h2>
           </div>
           <button
-            onClick={onClose}
-            disabled={loading}
+            type="button"
+            onClick={handleRequestClose}
             className="text-zinc-400 hover:text-zinc-200 p-1"
           >
             <X size={14} />
@@ -259,8 +281,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
           <div className="pt-2 border-t border-zinc-800 flex justify-end gap-2">
             <button
               type="button"
-              onClick={onClose}
-              disabled={loading}
+              onClick={handleRequestClose}
               className="px-3 py-1.5 text-xs text-zinc-400 hover:text-zinc-200"
             >
               Cancel
@@ -285,6 +306,56 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Stop Generation Confirmation Dialog */}
+      {showCancelConfirm && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 font-sans animate-in fade-in duration-100"
+          onClick={() => setShowCancelConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-4 space-y-3.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded bg-amber-950/60 border border-amber-800/60 text-amber-400 flex-shrink-0">
+                <AlertTriangle size={16} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-xs font-semibold text-zinc-100">Stop Generating Swagger?</h3>
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  By stopping this operation, some endpoints that already generated will not be deleted.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+              <button
+                type="button"
+                onClick={() => setShowCancelConfirm(false)}
+                className="px-3 py-1.5 rounded text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition"
+              >
+                Continue Generating
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  abortRef.current.aborted = true;
+                  setShowCancelConfirm(false);
+                  setLoading(false);
+                  queryClient.invalidateQueries({ queryKey: ['folders', collectionId] });
+                  queryClient.invalidateQueries({ queryKey: ['endpoints', collectionId] });
+                  queryClient.invalidateQueries({ queryKey: ['collections'] });
+                  onClose();
+                }}
+                className="px-3 py-1.5 rounded text-xs bg-red-600 hover:bg-red-500 text-white font-medium transition"
+              >
+                Stop & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -48,6 +48,10 @@ export interface SwaggerProgressInfo {
   total?: number;
 }
 
+export interface SwaggerAbortSignal {
+  aborted: boolean;
+}
+
 export const DEFAULT_SWAGGER_BASE_URL = 'https://httpbin.dmuth.org';
 export const DEFAULT_SWAGGER_PATH = 'openapi.json';
 export const DEFAULT_SWAGGER_URL = `${DEFAULT_SWAGGER_BASE_URL}/${DEFAULT_SWAGGER_PATH}`;
@@ -148,12 +152,17 @@ export async function executeSwaggerHierarchyCreation(
   collectionId: string,
   planned: PlannedSwaggerHierarchy,
   api: ApiCaller,
-  onProgress?: (info: SwaggerProgressInfo | string) => void
+  onProgress?: (info: SwaggerProgressInfo | string) => void,
+  signal?: SwaggerAbortSignal
 ): Promise<{
   rootFolderId: string;
   createdServiceFoldersCount: number;
   createdEndpointsCount: number;
 }> {
+  if (signal?.aborted) {
+    return { rootFolderId: '', createdServiceFoldersCount: 0, createdEndpointsCount: 0 };
+  }
+
   // 1. Create root folder with swagger_url stored directly on the folder
   const rootFolder = await api.post(`/collections/${collectionId}/folders`, {
     name: planned.rootFolderName,
@@ -167,8 +176,16 @@ export async function executeSwaggerHierarchyCreation(
   const total = planned.totalEndpoints;
   let done = 0;
 
-  // 2. Create service subfolders and child HTTP endpoints
+  const endpointsToCreate: Array<{
+    name: string;
+    protocol: 'http';
+    folder_id: string;
+    config: any;
+  }> = [];
+
+  // 2. Create service subfolders and collect child HTTP endpoints
   for (const sFolder of planned.serviceFolders) {
+    if (signal?.aborted) break;
     const childFolder = await api.post(`/collections/${collectionId}/folders`, {
       name: sFolder.name,
       parent_folder_id: rootFolderId,
@@ -176,22 +193,49 @@ export async function executeSwaggerHierarchyCreation(
     createdServiceFoldersCount++;
 
     for (const ep of sFolder.endpoints) {
-      await api.post(`/collections/${collectionId}/endpoints`, {
+      endpointsToCreate.push({
         name: ep.name,
         protocol: 'http',
         folder_id: childFolder.id,
         config: ep.config,
       });
-      createdEndpointsCount++;
-      done++;
-      const percent = 25 + Math.round((done / Math.max(total, 1)) * 70);
-      onProgress?.({
-        message: `Creating endpoints: ${done}/${total}...`,
-        percent: Math.min(percent, 95),
-        current: done,
-        total,
-      });
     }
+  }
+
+  // 3. Batch create endpoints in chunks of 10 to minimize backend API calls
+  const CHUNK_SIZE = 10;
+  for (let i = 0; i < endpointsToCreate.length; i += CHUNK_SIZE) {
+    if (signal?.aborted) break;
+    const chunk = endpointsToCreate.slice(i, i + CHUNK_SIZE);
+
+    let batchSuccess = false;
+    try {
+      await api.post(`/collections/${collectionId}/endpoints/batch`, {
+        endpoints: chunk,
+      });
+      batchSuccess = true;
+      createdEndpointsCount += chunk.length;
+      done += chunk.length;
+    } catch {
+      batchSuccess = false;
+    }
+
+    if (!batchSuccess) {
+      for (const ep of chunk) {
+        if (signal?.aborted) break;
+        await api.post(`/collections/${collectionId}/endpoints`, ep);
+        createdEndpointsCount++;
+        done++;
+      }
+    }
+
+    const percent = 25 + Math.round((done / Math.max(total, 1)) * 70);
+    onProgress?.({
+      message: `Creating endpoints: ${done}/${total}...`,
+      percent: Math.min(percent, 95),
+      current: done,
+      total,
+    });
   }
 
   return {
@@ -330,6 +374,7 @@ export async function generateSwaggerCollection(options: {
   variables?: Record<string, string>;
   timeoutMs?: number;
   onProgress?: (info: SwaggerProgressInfo | string) => void;
+  signal?: SwaggerAbortSignal;
   apiCaller: ApiCaller;
   fetchFn?: typeof fetch;
 }): Promise<{
@@ -338,6 +383,10 @@ export async function generateSwaggerCollection(options: {
   createdEndpointsCount: number;
   totalEndpoints: number;
 }> {
+  if (options.signal?.aborted) {
+    return { rootFolderId: '', createdServiceFoldersCount: 0, createdEndpointsCount: 0, totalEndpoints: 0 };
+  }
+
   options.onProgress?.({ message: 'Fetching Swagger specification...', percent: 10 });
 
   const doc = await fetchSwaggerSpec(options.swaggerUrl, {
@@ -346,11 +395,19 @@ export async function generateSwaggerCollection(options: {
     fetchFn: options.fetchFn,
   });
 
+  if (options.signal?.aborted) {
+    return { rootFolderId: '', createdServiceFoldersCount: 0, createdEndpointsCount: 0, totalEndpoints: 0 };
+  }
+
   options.onProgress?.({ message: 'Parsing endpoints and schemas...', percent: 25 });
   const spec = parseSwaggerSpec(doc, options.swaggerUrl, options.baseUrl);
 
   if (spec.services.length === 0 || spec.totalEndpoints === 0) {
     throw new Error('No endpoints discovered in Swagger specification.');
+  }
+
+  if (options.signal?.aborted) {
+    return { rootFolderId: '', createdServiceFoldersCount: 0, createdEndpointsCount: 0, totalEndpoints: spec.totalEndpoints };
   }
 
   options.onProgress?.({
@@ -368,10 +425,13 @@ export async function generateSwaggerCollection(options: {
     options.collectionId,
     planned,
     options.apiCaller,
-    options.onProgress
+    options.onProgress,
+    options.signal
   );
 
-  options.onProgress?.({ message: 'Finalizing collection...', percent: 100 });
+  if (!options.signal?.aborted) {
+    options.onProgress?.({ message: 'Finalizing collection...', percent: 100 });
+  }
 
   return {
     ...result,

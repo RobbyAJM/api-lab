@@ -118,11 +118,17 @@ test('executeSwaggerHierarchyCreation: creates root folder, service folders, and
   assert.equal(calls[1].body.parent_folder_id, 'folder-1');
   assert.equal(calls[1].body.name, 'AuthAPI');
 
-  // Check Call 3: Endpoint 1
-  assert.equal(calls[2].path, '/collections/coll-123/endpoints');
-  assert.equal(calls[2].body.folder_id, 'folder-2');
-  assert.equal(calls[2].body.protocol, 'http');
-  assert.equal(calls[2].body.config.method, 'POST');
+  // Check Call 3: Child folder 2
+  assert.equal(calls[2].path, '/collections/coll-123/folders');
+  assert.equal(calls[2].body.parent_folder_id, 'folder-1');
+  assert.equal(calls[2].body.name, 'UserAPI');
+
+  // Check Call 4: Batch endpoint creation in chunk
+  assert.equal(calls[3].path, '/collections/coll-123/endpoints/batch');
+  assert.equal(calls[3].body.endpoints.length, 2);
+  assert.equal(calls[3].body.endpoints[0].folder_id, 'folder-2');
+  assert.equal(calls[3].body.endpoints[0].protocol, 'http');
+  assert.equal(calls[3].body.endpoints[0].config.method, 'POST');
 });
 
 test('generateSwaggerCollection: complete flow with mock fetch and api', async () => {
@@ -225,7 +231,9 @@ test('generateSwaggerCollection: uses custom baseUrl for endpoint routes and rep
   const createdEndpoints: any[] = [];
   const mockApi = {
     post: async (path: string, body: any) => {
-      if (path.includes('/endpoints')) {
+      if (path.includes('/endpoints/batch')) {
+        createdEndpoints.push(...body.endpoints);
+      } else if (path.includes('/endpoints')) {
         createdEndpoints.push(body);
       }
       return { id: 'created-id', ...body };
@@ -248,5 +256,82 @@ test('generateSwaggerCollection: uses custom baseUrl for endpoint routes and rep
   assert.equal(createdEndpoints[0].config.url, 'http://localhost:9091/status');
   assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 10));
   assert.ok(progressUpdates.some((p) => typeof p === 'object' && p.percent === 100));
+});
+
+test('executeSwaggerHierarchyCreation: batches endpoints in chunks of 10', async () => {
+  const batchCalls: any[] = [];
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      if (path.includes('/endpoints/batch')) {
+        batchCalls.push(body.endpoints);
+      }
+      return { id: `res-${batchCalls.length}`, ...body };
+    },
+  };
+
+  const endpoints: any[] = [];
+  for (let i = 0; i < 25; i++) {
+    endpoints.push({
+      name: `Endpoint ${i}`,
+      method: 'GET',
+      path: `/test/${i}`,
+      fullUrl: `http://localhost:9090/test/${i}`,
+      serviceTag: 'BigService',
+      queryParams: [],
+      headers: {},
+      bodyType: 'none',
+      body: '',
+    });
+  }
+
+  const bigSpec: ParsedSwaggerSpec = {
+    title: 'Big API',
+    version: '1.0',
+    baseUrl: 'http://localhost:9090',
+    totalEndpoints: 25,
+    services: [{ name: 'BigService', endpoints }],
+  };
+
+  const planned = planSwaggerHierarchy({
+    folderName: 'Big Folder',
+    swaggerUrl: 'http://localhost:9090/spec.json',
+    spec: bigSpec,
+  });
+
+  const result = await executeSwaggerHierarchyCreation('coll-big', planned, mockApi);
+  assert.equal(result.createdEndpointsCount, 25);
+  // 25 endpoints chunked into chunks of 10 -> 3 batches: 10, 10, 5
+  assert.equal(batchCalls.length, 3);
+  assert.equal(batchCalls[0].length, 10);
+  assert.equal(batchCalls[1].length, 10);
+  assert.equal(batchCalls[2].length, 5);
+});
+
+test('executeSwaggerHierarchyCreation: respects abort signal and halts endpoint creation', async () => {
+  const calls: { path: string; body: any }[] = [];
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      calls.push({ path, body });
+      return { id: `id-${calls.length}`, ...body };
+    },
+  };
+
+  const planned = planSwaggerHierarchy({
+    folderName: 'Cancel Test',
+    swaggerUrl: 'http://localhost:9090/spec.json',
+    spec: mockSpec,
+  });
+
+  const abortSignal = { aborted: true };
+  const result = await executeSwaggerHierarchyCreation(
+    'coll-abort',
+    planned,
+    mockApi,
+    undefined,
+    abortSignal
+  );
+
+  assert.equal(result.createdEndpointsCount, 0);
+  assert.equal(calls.length, 0);
 });
 

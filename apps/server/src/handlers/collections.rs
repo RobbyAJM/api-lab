@@ -1,8 +1,8 @@
 use axum::extract::{Path, State};
 use axum::Json;
 use rust_core::dto::{
-    CreateCollectionDto, CreateEndpointDto, CreateFolderDto, UpdateCollectionDto,
-    UpdateEndpointDto, UpdateFolderDto, WsSyncEvent,
+    BatchCreateEndpointsDto, CreateCollectionDto, CreateEndpointDto, CreateFolderDto,
+    UpdateCollectionDto, UpdateEndpointDto, UpdateFolderDto, WsSyncEvent,
 };
 use rust_core::models::{Collection, CollectionFolder, Endpoint, Protocol};
 use serde_json::json;
@@ -476,6 +476,68 @@ pub async fn create_endpoint(
         created_at: row.created_at,
         updated_at: row.updated_at,
     }))
+}
+
+pub async fn create_endpoints_batch(
+    auth: AuthUser,
+    Path(collection_id): Path<Uuid>,
+    State(state): State<SharedState>,
+    Json(dto): Json<BatchCreateEndpointsDto>,
+) -> Result<Json<Vec<Endpoint>>, ApiError> {
+    let ws_id = get_workspace_id_for_collection(&state.pool, collection_id).await?;
+    let _ = get_workspace_role(&state.pool, ws_id, auth.user.id).await?;
+
+    let mut created_endpoints = Vec::with_capacity(dto.endpoints.len());
+    let mut tx = state.pool.begin().await.map_err(ApiError::Database)?;
+
+    for ep_dto in dto.endpoints {
+        let name = ep_dto.name.trim();
+        if name.is_empty() {
+            continue;
+        }
+
+        let endpoint_id = Uuid::new_v4();
+        let row = sqlx::query!(
+            r#"
+            INSERT INTO endpoints (id, collection_id, folder_id, name, protocol, config, version)
+            VALUES ($1, $2, $3, $4, $5, $6, 1)
+            RETURNING id, collection_id, folder_id, name, protocol, config, sort_order, version, created_at, updated_at
+            "#,
+            endpoint_id,
+            collection_id,
+            ep_dto.folder_id,
+            name,
+            ep_dto.protocol.as_str(),
+            ep_dto.config
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(ApiError::Database)?;
+
+        created_endpoints.push(Endpoint {
+            id: row.id,
+            collection_id: row.collection_id,
+            folder_id: row.folder_id,
+            name: row.name,
+            protocol: ep_dto.protocol,
+            config: row.config,
+            sort_order: row.sort_order,
+            version: row.version,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        });
+
+        let _ = state.tx_ws.send(WsSyncEvent {
+            workspace_id: ws_id,
+            entity: "endpoint".into(),
+            action: "create".into(),
+            entity_id: endpoint_id,
+        });
+    }
+
+    tx.commit().await.map_err(ApiError::Database)?;
+
+    Ok(Json(created_endpoints))
 }
 
 pub async fn get_endpoint(

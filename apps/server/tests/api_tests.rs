@@ -257,6 +257,35 @@ async fn test_collections_endpoints_concurrency_and_saved_responses() {
     let ep_id = ep["id"].as_str().unwrap();
     assert_eq!(ep["version"].as_i64().unwrap(), 1);
 
+    // 3b. Create endpoints in batch
+    let batch_req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/collections/{coll_id}/endpoints/batch"))
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({
+                "endpoints": [
+                    {
+                        "name": "Batch EP 1",
+                        "protocol": "http",
+                        "config": { "method": "GET", "url": "https://httpbin.org/get" }
+                    },
+                    {
+                        "name": "Batch EP 2",
+                        "protocol": "http",
+                        "config": { "method": "POST", "url": "https://httpbin.org/post" }
+                    }
+                ]
+            })
+            .to_string(),
+        ))
+        .unwrap();
+    let batch_res = app.clone().oneshot(batch_req).await.unwrap();
+    assert_eq!(batch_res.status(), StatusCode::OK);
+    let batch_eps: Value = parse_body(batch_res.into_body()).await;
+    assert_eq!(batch_eps.as_array().unwrap().len(), 2);
+
     // 4. Optimistic locking: update with mismatched version -> 409 Conflict
     let patch_fail = Request::builder()
         .method("PATCH")

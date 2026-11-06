@@ -948,7 +948,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                     setQueryParams((prev) => parseUrlQueryParams(newUrl, prev));
                   }}
                   variables={activeVariables}
-                  placeholder="?query=value"
+                  placeholder=""
                   className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
                 />
               </div>
