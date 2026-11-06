@@ -197,7 +197,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
   return (
     <div
       onClick={() => inputRef.current?.focus()}
-      className={`relative flex items-center overflow-visible font-mono text-xs cursor-text ${className}`}
+      className={`relative flex items-center overflow-visible font-mono text-xs cursor-text min-h-[2rem] ${className}`}
     >
       {/* Syntax Highlight Backdrop */}
       <div
@@ -271,7 +271,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         onScroll={handleScroll}
         placeholder={placeholder}
         spellCheck={false}
-        className={`w-full h-full px-3 py-1.5 font-mono text-xs bg-transparent text-transparent caret-zinc-100 focus:outline-none placeholder-transparent selection:bg-primary/40 ${inputClassName}`}
+        className={`absolute inset-0 w-full h-full px-3 py-1.5 font-mono text-xs bg-transparent text-transparent caret-zinc-100 focus:outline-none placeholder-transparent selection:bg-primary/40 ${inputClassName}`}
       />
 
       {completionState && (

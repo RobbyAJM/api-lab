@@ -348,13 +348,13 @@ export const FolderSettingsModal: React.FC = () => {
                   <label className="block text-zinc-400 font-medium mb-1 text-[11px]">
                     gRPC Server Address
                   </label>
-                  <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition">
+                  <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition h-8 flex items-center">
                     <VariableInput
                       value={serverAddress}
                       onChange={setServerAddress}
                       placeholder={`e.g. ${DEFAULT_GRPC_SERVER_ADDRESS} or {{GRPC_HOST}}`}
                       variables={activeVariables}
-                      className="px-2.5 py-1.5 text-xs font-mono"
+                      className="w-full h-full"
                     />
                   </div>
                 </div>
@@ -366,13 +366,13 @@ export const FolderSettingsModal: React.FC = () => {
                   <label className="block text-zinc-400 font-medium mb-1 text-[11px]">
                     Swagger / OpenAPI Spec URL
                   </label>
-                  <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition">
+                  <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition h-8 flex items-center">
                     <VariableInput
                       value={swaggerUrl}
                       onChange={setSwaggerUrl}
                       placeholder={DEFAULT_SWAGGER_URL}
                       variables={activeVariables}
-                      className="px-2.5 py-1.5 text-xs font-mono"
+                      className="w-full h-full"
                     />
                   </div>
                 </div>
@@ -427,7 +427,7 @@ export const FolderSettingsModal: React.FC = () => {
                       onChange={setToken}
                       variables={activeVariables}
                       placeholder="{{TOKEN}} or raw-token"
-                      className="w-full h-full text-xs font-mono px-2.5 py-1"
+                      className="w-full h-full"
                     />
                   </div>
                 </div>
@@ -476,7 +476,7 @@ export const FolderSettingsModal: React.FC = () => {
                         onChange={setHeaderValue}
                         variables={activeVariables}
                         placeholder="{{API_KEY}}"
-                        className="w-full h-full text-xs font-mono px-2.5 py-1"
+                        className="w-full h-full"
                       />
                     </div>
                   </div>
