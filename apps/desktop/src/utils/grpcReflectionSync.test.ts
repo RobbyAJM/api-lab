@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   reconcilePayload,
+  computePayloadFieldDiff,
   planReflectionSync,
   getFolderDotPath,
   findServiceFolder,
@@ -53,6 +54,30 @@ test('reconcilePayload: keeps existing values, appends new fields, removes dropp
 
   // profile.avatar_url: appended!
   assert.equal(updatedPayload.profile.avatar_url, 'https://example.com/avatar.png');
+});
+
+test('computePayloadFieldDiff: detects added, removed, and changed nested fields', () => {
+  const oldPayload = {
+    user: 'alice',
+    old_secret: '123',
+    meta: {
+      version: 1,
+      deprecated_tag: 'legacy',
+    },
+  };
+  const newPayload = {
+    user: 'alice',
+    meta: {
+      version: 1,
+      new_tag: 'v2',
+    },
+    permissions: ['read'],
+  };
+
+  const diff = computePayloadFieldDiff(oldPayload, newPayload);
+  assert.deepEqual(diff.added, ['meta.new_tag', 'permissions']);
+  assert.deepEqual(diff.removed, ['old_secret', 'meta.deprecated_tag']);
+  assert.deepEqual(diff.changed, []);
 });
 
 test('planReflectionSync: plans service additions, service deletions, and method updates', () => {
@@ -196,6 +221,8 @@ test('planReflectionSync: plans service additions, service deletions, and method
   assert.equal(plan.methodsToUpdate[0].newPayload.login, '200010');
   assert.equal(plan.methodsToUpdate[0].newPayload.password, 'new_password');
   assert.equal('old_field' in plan.methodsToUpdate[0].newPayload, false);
+  assert.deepEqual(plan.methodsToUpdate[0].diff?.added, ['password']);
+  assert.deepEqual(plan.methodsToUpdate[0].diff?.removed, ['old_field']);
 });
 
 test('executeReflectionSync: makes appropriate delete, post, and patch calls', async () => {

@@ -133,6 +133,83 @@ export function reconcilePayload(
   };
 }
 
+export interface PayloadFieldDiff {
+  added: string[];
+  removed: string[];
+  changed: string[];
+}
+
+/**
+ * Computes dot-notated field paths for added, removed, and changed keys between payloads.
+ */
+export function computePayloadFieldDiff(
+  oldPayload: any,
+  newPayload: any,
+  prefix = ''
+): PayloadFieldDiff {
+  const result: PayloadFieldDiff = { added: [], removed: [], changed: [] };
+
+  if (
+    typeof oldPayload !== 'object' ||
+    oldPayload === null ||
+    typeof newPayload !== 'object' ||
+    newPayload === null
+  ) {
+    if (JSON.stringify(oldPayload) !== JSON.stringify(newPayload)) {
+      result.changed.push(prefix || 'value');
+    }
+    return result;
+  }
+
+  const oldKeys = Object.keys(oldPayload);
+  const newKeys = Object.keys(newPayload);
+
+  for (const k of oldKeys) {
+    const fullPath = prefix ? `${prefix}.${k}` : k;
+    if (!(k in newPayload)) {
+      result.removed.push(fullPath);
+    } else {
+      const oldVal = oldPayload[k];
+      const newVal = newPayload[k];
+      if (
+        typeof oldVal === 'object' &&
+        oldVal !== null &&
+        typeof newVal === 'object' &&
+        newVal !== null &&
+        !Array.isArray(oldVal) &&
+        !Array.isArray(newVal)
+      ) {
+        const nested = computePayloadFieldDiff(oldVal, newVal, fullPath);
+        result.added.push(...nested.added);
+        result.removed.push(...nested.removed);
+        result.changed.push(...nested.changed);
+      } else if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+        result.changed.push(fullPath);
+      }
+    }
+  }
+
+  for (const k of newKeys) {
+    const fullPath = prefix ? `${prefix}.${k}` : k;
+    if (!(k in oldPayload)) {
+      result.added.push(fullPath);
+    }
+  }
+
+  return result;
+}
+
+export interface MethodUpdateItem {
+  endpoint: Endpoint;
+  newPayload: any;
+  newStreamType: string;
+  newServerAddress?: string;
+  oldPayload?: any;
+  oldStreamType?: string;
+  oldServerAddress?: string;
+  diff?: PayloadFieldDiff;
+}
+
 export interface SyncPlan {
   servicesToDelete: { folderId: string; serviceName: string }[];
   servicesToCreate: GrpcServiceSummary[];
@@ -141,14 +218,10 @@ export interface SyncPlan {
     serviceName: string;
     methodName: string;
     streamType: string;
+    payload?: any;
   }[];
   methodsToDelete: { endpointId: string; methodName: string }[];
-  methodsToUpdate: {
-    endpoint: Endpoint;
-    newPayload: any;
-    newStreamType: string;
-    newServerAddress?: string;
-  }[];
+  methodsToUpdate: MethodUpdateItem[];
 }
 
 /**
@@ -266,6 +339,7 @@ export function planReflectionSync(
           serviceName: serviceName,
           methodName: fm.name,
           streamType,
+          payload: freshPayload,
         });
       } else {
         // Method exists: reconcile payload
@@ -287,6 +361,10 @@ export function planReflectionSync(
             newPayload: updatedPayload,
             newStreamType: streamType,
             newServerAddress: cleanTargetAddr,
+            oldPayload: currentPayload,
+            oldStreamType: currentStreamType,
+            oldServerAddress: existingEp.config?.server_address,
+            diff: computePayloadFieldDiff(currentPayload, updatedPayload),
           });
         }
       }

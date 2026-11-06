@@ -33,6 +33,7 @@ import {
   FileEdit,
   ArrowRight,
   AlertTriangle,
+  ChevronRight,
 } from 'lucide-react';
 
 interface SyncReflectionModalProps {
@@ -115,10 +116,22 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
 
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   // Auto-detect or sync selected root folder using ancestor resolver
   useEffect(() => {
     if (!isOpen) {
       setShowCancelConfirm(false);
+      setExpandedIds(new Set());
       return;
     }
     abortRef.current = { aborted: false };
@@ -469,46 +482,236 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
                   All services and method payloads are up to date. No changes detected.
                 </div>
               ) : (
-                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
                   {/* Services to Create */}
-                  {plan.servicesToCreate.map((s) => (
-                    <div key={s.name} className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px] p-1 bg-emerald-950/30 rounded border border-emerald-900/40">
-                      <PlusCircle size={12} />
-                      <span>Add Service: <strong>{s.name}</strong> ({s.methods.length} methods)</span>
-                    </div>
-                  ))}
+                  {plan.servicesToCreate.map((s) => {
+                    const isExp = expandedIds.has(`create-svc-${s.name}`);
+                    return (
+                      <div
+                        key={s.name}
+                        className="rounded border border-emerald-900/40 bg-emerald-950/20 overflow-hidden transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(`create-svc-${s.name}`)}
+                          className="w-full flex items-center justify-between p-1.5 text-left hover:bg-emerald-950/40 transition cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px] min-w-0">
+                            <ChevronRight
+                              size={12}
+                              className={`flex-shrink-0 transition-transform duration-150 ${
+                                isExp ? 'rotate-90 text-emerald-300' : 'text-emerald-500/70'
+                              }`}
+                            />
+                            <PlusCircle size={12} className="flex-shrink-0" />
+                            <span className="truncate">Add Service: <strong>{s.name}</strong></span>
+                          </div>
+                          <span className="text-[10px] text-zinc-400 font-mono flex-shrink-0">
+                            +{s.methods.length} methods
+                          </span>
+                        </button>
+                        {isExp && (
+                          <div className="p-2 border-t border-emerald-900/30 bg-zinc-950/60 space-y-1 text-[11px] font-mono">
+                            <div className="text-zinc-500 font-sans text-[9px] uppercase font-bold tracking-wider">Methods in Service:</div>
+                            <div className="space-y-0.5 pl-1.5">
+                              {s.methods.map((m) => (
+                                <div key={m.name} className="flex items-center justify-between text-zinc-300">
+                                  <span>• {m.name}</span>
+                                  <span className="text-[10px] text-zinc-500">{m.stream_type || 'unary'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {/* Services to Delete */}
                   {plan.servicesToDelete.map((s) => (
-                    <div key={s.folderId} className="flex items-center gap-1.5 text-red-400 font-mono text-[11px] p-1 bg-red-950/30 rounded border border-red-900/40">
-                      <MinusCircle size={12} />
+                    <div
+                      key={s.folderId}
+                      className="flex items-center gap-1.5 text-red-400 font-mono text-[11px] p-1.5 bg-red-950/20 rounded border border-red-900/40"
+                    >
+                      <MinusCircle size={12} className="flex-shrink-0" />
                       <span>Remove Service: <strong>{s.serviceName}</strong></span>
                     </div>
                   ))}
 
                   {/* Methods to Create */}
-                  {plan.methodsToCreate.map((m) => (
-                    <div key={`${m.serviceName}-${m.methodName}`} className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px] p-1 bg-emerald-950/30 rounded border border-emerald-900/40">
-                      <PlusCircle size={12} />
-                      <span>Add Method: {m.serviceName} → <strong>{m.methodName}</strong></span>
-                    </div>
-                  ))}
+                  {plan.methodsToCreate.map((m) => {
+                    const isExp = expandedIds.has(`create-m-${m.serviceName}-${m.methodName}`);
+                    return (
+                      <div
+                        key={`${m.serviceName}-${m.methodName}`}
+                        className="rounded border border-emerald-900/40 bg-emerald-950/20 overflow-hidden transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(`create-m-${m.serviceName}-${m.methodName}`)}
+                          className="w-full flex items-center justify-between p-1.5 text-left hover:bg-emerald-950/40 transition cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px] min-w-0">
+                            <ChevronRight
+                              size={12}
+                              className={`flex-shrink-0 transition-transform duration-150 ${
+                                isExp ? 'rotate-90 text-emerald-300' : 'text-emerald-500/70'
+                              }`}
+                            />
+                            <PlusCircle size={12} className="flex-shrink-0" />
+                            <span className="truncate">Add Method: {m.serviceName} → <strong>{m.methodName}</strong></span>
+                          </div>
+                          <span className="text-[10px] font-mono text-emerald-400/90 px-1.5 py-0.2 bg-emerald-950/60 rounded border border-emerald-800/40 flex-shrink-0">
+                            {m.streamType || 'unary'}
+                          </span>
+                        </button>
+                        {isExp && m.payload && (
+                          <div className="p-2 border-t border-emerald-900/30 bg-zinc-950/60 space-y-1 font-mono text-[10px]">
+                            <div className="text-zinc-500 font-sans text-[9px] uppercase font-bold tracking-wider">Sample JSON Payload:</div>
+                            <pre className="text-emerald-300/90 overflow-x-auto max-h-32 p-1.5 bg-zinc-900/80 rounded border border-zinc-800">
+                              {JSON.stringify(m.payload, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {/* Methods to Delete */}
                   {plan.methodsToDelete.map((m) => (
-                    <div key={m.endpointId} className="flex items-center gap-1.5 text-red-400 font-mono text-[11px] p-1 bg-red-950/30 rounded border border-red-900/40">
-                      <MinusCircle size={12} />
+                    <div
+                      key={m.endpointId}
+                      className="flex items-center gap-1.5 text-red-400 font-mono text-[11px] p-1.5 bg-red-950/20 rounded border border-red-900/40"
+                    >
+                      <MinusCircle size={12} className="flex-shrink-0" />
                       <span>Remove Method: <strong>{m.methodName}</strong></span>
                     </div>
                   ))}
 
                   {/* Methods to Update */}
-                  {plan.methodsToUpdate.map((u) => (
-                    <div key={u.endpoint.id} className="flex items-center gap-1.5 text-amber-400 font-mono text-[11px] p-1 bg-amber-950/30 rounded border border-amber-900/40">
-                      <FileEdit size={12} />
-                      <span>Update Payload: <strong>{u.endpoint.name}</strong> (schema reconciled)</span>
-                    </div>
-                  ))}
+                  {plan.methodsToUpdate.map((u) => {
+                    const isExp = expandedIds.has(`update-${u.endpoint.id}`);
+                    const addedCount = u.diff?.added.length || 0;
+                    const removedCount = u.diff?.removed.length || 0;
+                    const streamChanged = Boolean(u.oldStreamType && u.oldStreamType !== u.newStreamType);
+                    const addrChanged = Boolean(
+                      u.newServerAddress && u.oldServerAddress !== u.newServerAddress
+                    );
+
+                    return (
+                      <div
+                        key={u.endpoint.id}
+                        className="rounded border border-amber-900/40 bg-amber-950/20 overflow-hidden transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(`update-${u.endpoint.id}`)}
+                          className="w-full flex items-center justify-between p-1.5 text-left hover:bg-amber-950/40 transition cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-1.5 text-amber-400 font-mono text-[11px] min-w-0">
+                            <ChevronRight
+                              size={12}
+                              className={`flex-shrink-0 transition-transform duration-150 ${
+                                isExp ? 'rotate-90 text-amber-300' : 'text-amber-500/70'
+                              }`}
+                            />
+                            <FileEdit size={12} className="flex-shrink-0" />
+                            <span className="truncate">
+                              Update Payload: <strong>{u.endpoint.name}</strong>
+                            </span>
+                            <span className="text-[10px] text-amber-500/80 font-sans hidden sm:inline">
+                              (schema reconciled)
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 flex-shrink-0 text-[10px] font-mono">
+                            {addedCount > 0 && (
+                              <span className="px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-800/60 text-emerald-400">
+                                +{addedCount}
+                              </span>
+                            )}
+                            {removedCount > 0 && (
+                              <span className="px-1.5 py-0.2 rounded bg-red-950/80 border border-red-800/60 text-red-400">
+                                -{removedCount}
+                              </span>
+                            )}
+                            {streamChanged && (
+                              <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700/60 text-zinc-300">
+                                stream
+                              </span>
+                            )}
+                            {addrChanged && (
+                              <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700/60 text-zinc-300">
+                                address
+                              </span>
+                            )}
+                          </div>
+                        </button>
+
+                        {isExp && (
+                          <div className="p-2.5 pt-1.5 border-t border-amber-900/30 bg-zinc-950/70 space-y-2 text-xs">
+                            {streamChanged && (
+                              <div className="flex items-center gap-2 text-[11px] font-mono p-1.5 bg-zinc-900/90 rounded border border-zinc-800">
+                                <span className="text-zinc-500">Stream:</span>
+                                <span className="text-red-400 line-through">{u.oldStreamType || 'unary'}</span>
+                                <ArrowRight size={10} className="text-zinc-500 flex-shrink-0" />
+                                <span className="text-emerald-400">{u.newStreamType}</span>
+                              </div>
+                            )}
+
+                            {addrChanged && (
+                              <div className="flex items-center gap-2 text-[11px] font-mono p-1.5 bg-zinc-900/90 rounded border border-zinc-800">
+                                <span className="text-zinc-500">Address:</span>
+                                <span className="text-red-400 line-through truncate max-w-[140px]">
+                                  {u.oldServerAddress || '—'}
+                                </span>
+                                <ArrowRight size={10} className="text-zinc-500 flex-shrink-0" />
+                                <span className="text-emerald-400 truncate max-w-[140px]">
+                                  {u.newServerAddress}
+                                </span>
+                              </div>
+                            )}
+
+                            {u.diff && (u.diff.added.length > 0 || u.diff.removed.length > 0) && (
+                              <div className="space-y-1 p-1.5 bg-zinc-900/60 rounded border border-zinc-800/80">
+                                {u.diff.added.length > 0 && (
+                                  <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                    <span className="text-emerald-400 font-bold flex-shrink-0">+ Added:</span>
+                                    <span className="text-emerald-300 break-all">{u.diff.added.join(', ')}</span>
+                                  </div>
+                                )}
+                                {u.diff.removed.length > 0 && (
+                                  <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                    <span className="text-red-400 font-bold flex-shrink-0">- Removed:</span>
+                                    <span className="text-red-300 break-all">{u.diff.removed.join(', ')}</span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-2 pt-0.5 font-mono text-[10px]">
+                              <div className="p-2 bg-zinc-900/90 rounded border border-zinc-800/80 space-y-1">
+                                <div className="text-zinc-500 font-sans text-[9px] uppercase font-bold tracking-wider">
+                                  Current Local Payload
+                                </div>
+                                <pre className="text-zinc-400 overflow-x-auto max-h-36 scrollbar-thin">
+                                  {JSON.stringify(u.oldPayload || {}, null, 2)}
+                                </pre>
+                              </div>
+                              <div className="p-2 bg-zinc-900/90 rounded border border-zinc-800/80 space-y-1">
+                                <div className="text-emerald-400 font-sans text-[9px] uppercase font-bold tracking-wider">
+                                  Reconciled Fresh Payload
+                                </div>
+                                <pre className="text-emerald-300/90 overflow-x-auto max-h-36 scrollbar-thin">
+                                  {JSON.stringify(u.newPayload || {}, null, 2)}
+                                </pre>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
