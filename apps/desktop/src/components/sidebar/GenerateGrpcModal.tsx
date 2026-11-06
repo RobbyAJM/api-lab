@@ -279,16 +279,18 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
             </div>
           )}
 
-          {loading && progressInfo && (
+          {loading && (
             <div className="py-1 space-y-1.5">
               <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                <span className="truncate pr-2">{progressInfo.message}</span>
-                <span className="text-emerald-400 font-medium flex-shrink-0">{progressInfo.percent}%</span>
+                <span className="truncate pr-2">{progressInfo?.message || 'Discovering services...'}</span>
+                <span className="text-emerald-400 font-medium flex-shrink-0">
+                  {progressInfo?.percent ?? 10}%
+                </span>
               </div>
               <div className="w-full bg-zinc-950 border border-zinc-800 rounded-full h-1.5 overflow-hidden">
                 <div
                   className="bg-emerald-500 h-full rounded-full transition-all duration-200"
-                  style={{ width: `${Math.max(5, Math.min(100, progressInfo.percent))}%` }}
+                  style={{ width: `${Math.max(5, Math.min(100, progressInfo?.percent ?? 10))}%` }}
                 />
               </div>
             </div>

@@ -450,21 +450,6 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
             </div>
           )}
 
-          {(scanning || syncing) && progressInfo && (
-            <div className="py-1 space-y-1.5">
-              <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
-                <span className="truncate pr-2">{progressInfo.message}</span>
-                <span className="text-emerald-400 font-medium flex-shrink-0">{progressInfo.percent}%</span>
-              </div>
-              <div className="w-full bg-zinc-950 border border-zinc-800 rounded-full h-1.5 overflow-hidden">
-                <div
-                  className="bg-emerald-500 h-full rounded-full transition-all duration-200"
-                  style={{ width: `${Math.max(5, Math.min(100, progressInfo.percent))}%` }}
-                />
-              </div>
-            </div>
-          )}
-
           {successInfo && (
             <div className="p-2.5 bg-emerald-950/50 border border-emerald-800/60 rounded text-emerald-300 text-xs font-mono flex items-center gap-2">
               <CheckCircle2 size={13} />
@@ -529,6 +514,28 @@ export const SyncReflectionModal: React.FC<SyncReflectionModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Sticky Progress Bar */}
+        {(scanning || syncing) && (
+          <div className="px-4 py-2 border-t border-zinc-800 bg-zinc-950/70 space-y-1.5 flex-shrink-0">
+            <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400">
+              <span className="truncate pr-2">
+                {progressInfo?.message || (scanning ? 'Scanning reflection...' : 'Syncing changes...')}
+              </span>
+              <span className="text-emerald-400 font-medium flex-shrink-0">
+                {progressInfo?.percent ?? (scanning ? 10 : 40)}%
+              </span>
+            </div>
+            <div className="w-full bg-zinc-950 border border-zinc-800 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-emerald-500 h-full rounded-full transition-all duration-200"
+                style={{
+                  width: `${Math.max(5, Math.min(100, progressInfo?.percent ?? (scanning ? 10 : 40)))}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         {/* Footer Actions */}
         <div className="flex items-center justify-end gap-2 p-3 border-t border-zinc-800 bg-zinc-950/50">
