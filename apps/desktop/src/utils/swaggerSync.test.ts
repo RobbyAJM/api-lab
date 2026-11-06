@@ -665,3 +665,153 @@ test('planSwaggerSync: populates interactive diff details for endpointsToUpdate 
   assert.equal(uStatus.newName, 'UserStatus');
   assert.deepEqual(uStatus.diffSummary?.nameChange, { old: 'LegacyStatusName', new: 'UserStatus' });
 });
+
+test('planSwaggerSync: does not report false diff when GET/no-body endpoint has missing summary or edited values', () => {
+  const rootFolderId = 'root-swagger';
+  const existingFolders: CollectionFolder[] = [
+    {
+      id: 'root-swagger',
+      collection_id: 'coll-1',
+      name: 'Swagger APIs',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'folder-anything',
+      collection_id: 'coll-1',
+      parent_folder_id: 'root-swagger',
+      name: 'Anything',
+      sort_order: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const existingEndpoints: Endpoint[] = [
+    {
+      id: 'ep-anything-get',
+      collection_id: 'coll-1',
+      folder_id: 'folder-anything',
+      name: 'get_anything_get',
+      protocol: 'http',
+      config: {
+        method: 'GET',
+        url: 'https://httpbin.dmuth.org/anything',
+        // Summary was omitted or dropped by editor save
+        headers: {},
+        query_params: [],
+        body: '',
+      },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const freshSpec: ParsedSwaggerSpec = {
+    title: 'Httpbin',
+    version: '1.0',
+    baseUrl: 'https://httpbin.dmuth.org',
+    totalEndpoints: 1,
+    services: [
+      {
+        name: 'Anything',
+        endpoints: [
+          {
+            name: 'get_anything_get',
+            method: 'GET',
+            path: '/anything',
+            fullUrl: 'https://httpbin.dmuth.org/anything',
+            serviceTag: 'Anything',
+            summary: 'Returns anything that is passed into the request.',
+            queryParams: [],
+            headers: {},
+            bodyType: 'none',
+            body: '',
+          },
+        ],
+      },
+    ],
+  };
+
+  const plan = planSwaggerSync(rootFolderId, existingFolders, existingEndpoints, freshSpec);
+  assert.equal(plan.endpointsToUpdate.length, 0, 'Must NOT flag get_anything_get as an update');
+  assert.equal(plan.endpointsToCreate.length, 0);
+  assert.equal(plan.endpointsToDelete.length, 0);
+});
+
+test('planSwaggerSync: does not report false diff when user customizes payload values without schema structural changes', () => {
+  const rootFolderId = 'root-swagger';
+  const existingFolders: CollectionFolder[] = [
+    {
+      id: 'root-swagger',
+      collection_id: 'coll-1',
+      name: 'Swagger APIs',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'folder-auth',
+      collection_id: 'coll-1',
+      parent_folder_id: 'root-swagger',
+      name: 'Auth',
+      sort_order: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const existingEndpoints: Endpoint[] = [
+    {
+      id: 'ep-login',
+      collection_id: 'coll-1',
+      folder_id: 'folder-auth',
+      name: 'Login',
+      protocol: 'http',
+      config: {
+        method: 'POST',
+        url: 'https://api.example.com/login',
+        summary: 'Login endpoint',
+        headers: { 'Content-Type': 'application/json' },
+        query_params: [],
+        body: JSON.stringify({ email: 'user@example.com', password: 'secretpassword123' }),
+      },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const freshSpec: ParsedSwaggerSpec = {
+    title: 'Auth API',
+    version: '1.0',
+    baseUrl: 'https://api.example.com',
+    totalEndpoints: 1,
+    services: [
+      {
+        name: 'Auth',
+        endpoints: [
+          {
+            name: 'Login',
+            method: 'POST',
+            path: '/login',
+            fullUrl: 'https://api.example.com/login',
+            serviceTag: 'Auth',
+            summary: 'Login endpoint',
+            queryParams: [],
+            headers: { 'Content-Type': 'application/json' },
+            bodyType: 'json',
+            body: JSON.stringify({ email: '', password: '' }),
+          },
+        ],
+      },
+    ],
+  };
+
+  const plan = planSwaggerSync(rootFolderId, existingFolders, existingEndpoints, freshSpec);
+  assert.equal(plan.endpointsToUpdate.length, 0, 'Editing payload values must not trigger false diff');
+});

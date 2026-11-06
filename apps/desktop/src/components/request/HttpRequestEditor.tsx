@@ -520,6 +520,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       }
     }
     return {
+      ...(endpoint.config || {}),
       method,
       url,
       query_params: queryParams.filter(([k]) => k && k.trim()),

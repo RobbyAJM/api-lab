@@ -558,6 +558,7 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                     const methodChanged = Boolean(diff?.methodChange);
                     const urlChanged = Boolean(diff?.urlChange);
                     const nameChanged = Boolean(diff?.nameChange);
+                    const summaryChanged = Boolean(diff?.summaryChange);
                     const bodyChanged = Boolean(
                       (diff?.bodyDiff?.changed && diff.bodyDiff.changed.length > 0) ||
                       (diff?.bodyDiff && (diff.bodyDiff.added.length > 0 || diff.bodyDiff.removed.length > 0))
@@ -620,6 +621,11 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                                 name
                               </span>
                             )}
+                            {summaryChanged && (
+                              <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700/60 text-zinc-300">
+                                summary
+                              </span>
+                            )}
                           </div>
                         </button>
 
@@ -653,6 +659,19 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                                 <span className="text-red-400 line-through">{diff.nameChange.old}</span>
                                 <ArrowRight size={10} className="text-zinc-500 flex-shrink-0" />
                                 <span className="text-emerald-400">{diff.nameChange.new}</span>
+                              </div>
+                            )}
+
+                            {diff?.summaryChange && (
+                              <div className="flex items-center gap-2 text-[11px] font-mono p-1.5 bg-zinc-900/90 rounded border border-zinc-800">
+                                <span className="text-zinc-500 font-sans text-[10px] uppercase font-bold">Summary:</span>
+                                <span className="text-red-400 line-through truncate max-w-[160px]">
+                                  {diff.summaryChange.old}
+                                </span>
+                                <ArrowRight size={10} className="text-zinc-500 flex-shrink-0" />
+                                <span className="text-emerald-400 truncate max-w-[160px]">
+                                  {diff.summaryChange.new}
+                                </span>
                               </div>
                             )}
 
@@ -722,7 +741,14 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                                 </div>
                               )}
 
-                            {(diff?.oldBody !== undefined || diff?.newBody !== undefined) && (
+                            {((diff?.oldBody !== undefined && (typeof diff.oldBody === 'object' ? Object.keys(diff.oldBody).length > 0 : Boolean(diff.oldBody))) ||
+                              (diff?.newBody !== undefined && (typeof diff.newBody === 'object' ? Object.keys(diff.newBody).length > 0 : Boolean(diff.newBody))) ||
+                              Boolean(
+                                diff?.bodyDiff &&
+                                  (diff.bodyDiff.added.length > 0 ||
+                                    diff.bodyDiff.removed.length > 0 ||
+                                    diff.bodyDiff.changed.length > 0)
+                              )) && (
                               <div className="grid grid-cols-2 gap-2 pt-0.5 font-mono text-[10px]">
                                 <div className="p-2 bg-zinc-900/90 rounded border border-zinc-800/80 space-y-1">
                                   <div className="text-zinc-500 font-sans text-[9px] uppercase font-bold tracking-wider">

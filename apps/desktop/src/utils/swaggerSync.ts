@@ -11,6 +11,7 @@ export interface SwaggerEndpointDiffSummary {
   methodChange?: { old: string; new: string };
   urlChange?: { old: string; new: string };
   nameChange?: { old: string; new: string };
+  summaryChange?: { old: string; new: string };
   queryParamsDiff?: { added: string[]; removed: string[] };
   headersDiff?: { added: string[]; removed: string[] };
   bodyDiff?: PayloadFieldDiff;
@@ -276,24 +277,32 @@ export function planSwaggerSync(
           }
         }
 
-        let freshPayload: any = {};
+        let updatedPayload: any = curPayload;
+        let changed = false;
+        let bodyDiff: PayloadFieldDiff = { added: [], removed: [], changed: [] };
+
         if (fep.body) {
+          let freshPayload: any = {};
           try {
             freshPayload = JSON.parse(fep.body);
           } catch {
             freshPayload = fep.body;
           }
-        }
 
-        const { updatedPayload, changed } = reconcileHttpPayload(curPayload, freshPayload);
-        const bodyDiff = computePayloadFieldDiff(curPayload, updatedPayload);
+          const rec = reconcileHttpPayload(curPayload, freshPayload);
+          updatedPayload = rec.updatedPayload;
+          changed = rec.changed;
+          bodyDiff = computePayloadFieldDiff(curPayload, updatedPayload);
+        }
 
         const curBaseAndPath = (match.config?.url || '').split('?')[0];
         const freshBaseAndPath = fep.fullUrl.split('?')[0];
         const nameChanged = match.name !== fep.name;
         const urlChanged = curBaseAndPath !== freshBaseAndPath;
         const methodChanged = match.config?.method?.toUpperCase() !== fep.method.toUpperCase();
-        const summaryChanged = fep.summary !== undefined && match.config?.summary !== fep.summary;
+        const summaryChanged = Boolean(
+          match.config?.summary && fep.summary && match.config.summary !== fep.summary
+        );
 
         const oldParamKeys = extractQueryParamKeys(match.config?.query_params, match.config?.url);
         const newParamKeys = extractQueryParamKeys(fep.queryParams, fep.fullUrl);
@@ -317,6 +326,11 @@ export function planSwaggerSync(
           bodyDiff.added.length > 0 ||
           bodyDiff.removed.length > 0 ||
           bodyDiff.changed.length > 0;
+
+        const hasMeaningfulPayload = Boolean(
+          fep.body ||
+          (match.config?.body && match.config.body !== '{}' && match.config.body !== '')
+        );
 
         if (
           changed ||
@@ -348,9 +362,11 @@ export function planSwaggerSync(
               header_descriptions: fep.headerDescriptions,
               body_type: fep.bodyType,
               body:
-                typeof updatedPayload === 'object' && updatedPayload !== null
-                  ? JSON.stringify(updatedPayload, null, 2)
-                  : String(updatedPayload || ''),
+                fep.body
+                  ? typeof updatedPayload === 'object' && updatedPayload !== null
+                    ? JSON.stringify(updatedPayload, null, 2)
+                    : String(updatedPayload || '')
+                  : match.config?.body || '',
             },
             diffSummary: {
               methodChange: methodChanged
@@ -362,11 +378,14 @@ export function planSwaggerSync(
               nameChange: nameChanged
                 ? { old: match.name, new: fep.name }
                 : undefined,
+              summaryChange: summaryChanged
+                ? { old: match.config?.summary, new: fep.summary! }
+                : undefined,
               queryParamsDiff,
               headersDiff,
               bodyDiff: hasBodyDiff ? bodyDiff : undefined,
-              oldBody: curPayload,
-              newBody: updatedPayload,
+              oldBody: hasMeaningfulPayload ? curPayload : undefined,
+              newBody: hasMeaningfulPayload ? updatedPayload : undefined,
             },
           });
         }
