@@ -515,3 +515,153 @@ test('executeSwaggerSync: respects abort signal and halts execution cleanly', as
   assert.equal(result.createdEndpointsCount, 0);
   assert.equal(calls.length, 0);
 });
+
+test('planSwaggerSync: populates interactive diff details for endpointsToUpdate and endpointsToCreate', () => {
+  const rootFolderId = 'root-swagger';
+
+  const existingFolders: CollectionFolder[] = [
+    {
+      id: 'root-swagger',
+      collection_id: 'coll-1',
+      name: 'APIs',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'folder-user',
+      collection_id: 'coll-1',
+      parent_folder_id: 'root-swagger',
+      name: 'UserAPI',
+      sort_order: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const existingEndpoints: Endpoint[] = [
+    {
+      id: 'ep-user-profile',
+      collection_id: 'coll-1',
+      folder_id: 'folder-user',
+      name: 'UserProfile',
+      protocol: 'http',
+      config: {
+        method: 'GET',
+        url: 'http://api.local/v1/users/profile',
+        headers: { 'X-Old-Header': 'val' },
+        query_params: [['legacy_page', '1']],
+        body: JSON.stringify({ bio: 'developer', deprecatedField: 'remove_me' }),
+      },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'ep-user-status',
+      collection_id: 'coll-1',
+      folder_id: 'folder-user',
+      name: 'LegacyStatusName',
+      protocol: 'http',
+      config: {
+        method: 'GET',
+        url: 'http://api.local/v1/users/status',
+        headers: {},
+        query_params: [],
+        body: '',
+      },
+      sort_order: 1,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const freshSpec: ParsedSwaggerSpec = {
+    title: 'User API Spec',
+    version: '2.0',
+    baseUrl: 'http://api.local',
+    totalEndpoints: 3,
+    services: [
+      {
+        name: 'UserAPI',
+        endpoints: [
+          {
+            name: 'UserProfile',
+            method: 'PATCH',
+            path: '/v2/users/profile',
+            fullUrl: 'http://api.local/v2/users/profile',
+            serviceTag: 'UserAPI',
+            summary: 'Updated profile endpoint',
+            queryParams: [['filter', 'active']],
+            headers: { 'X-New-Header': 'val' },
+            bodyType: 'json',
+            body: JSON.stringify({ bio: 'default bio', newRole: 'admin' }),
+          },
+          {
+            name: 'UserStatus',
+            method: 'GET',
+            path: '/v1/users/status',
+            fullUrl: 'http://api.local/v1/users/status',
+            serviceTag: 'UserAPI',
+            queryParams: [],
+            headers: {},
+            bodyType: 'none',
+            body: '',
+          },
+          {
+            name: 'CreateUser',
+            method: 'POST',
+            path: '/v2/users',
+            fullUrl: 'http://api.local/v2/users',
+            serviceTag: 'UserAPI',
+            queryParams: [],
+            headers: { 'Content-Type': 'application/json' },
+            bodyType: 'json',
+            body: JSON.stringify({ username: 'guest' }),
+          },
+        ],
+      },
+    ],
+  };
+
+  const plan = planSwaggerSync(rootFolderId, existingFolders, existingEndpoints, freshSpec);
+
+  // Verify endpointsToCreate passes sample payload and headers
+  assert.equal(plan.endpointsToCreate.length, 1);
+  assert.equal(plan.endpointsToCreate[0].endpoint.name, 'CreateUser');
+  assert.deepEqual(plan.endpointsToCreate[0].payload, { username: 'guest' });
+  assert.deepEqual(plan.endpointsToCreate[0].headers, { 'Content-Type': 'application/json' });
+
+  // Verify endpointsToUpdate diffSummary
+  assert.equal(plan.endpointsToUpdate.length, 2);
+  const uProfile = plan.endpointsToUpdate.find((x) => x.endpoint.id === 'ep-user-profile')!;
+  assert.ok(uProfile);
+  assert.equal(uProfile.oldEndpoint?.id, 'ep-user-profile');
+
+  assert.ok(uProfile.diffSummary);
+  assert.deepEqual(uProfile.diffSummary.methodChange, { old: 'GET', new: 'PATCH' });
+  assert.deepEqual(uProfile.diffSummary.urlChange, {
+    old: 'http://api.local/v1/users/profile',
+    new: 'http://api.local/v2/users/profile',
+  });
+  assert.deepEqual(uProfile.diffSummary.queryParamsDiff, {
+    added: ['filter'],
+    removed: ['legacy_page'],
+  });
+  assert.deepEqual(uProfile.diffSummary.headersDiff, {
+    added: ['X-New-Header'],
+    removed: ['X-Old-Header'],
+  });
+  assert.ok(uProfile.diffSummary.bodyDiff);
+  assert.deepEqual(uProfile.diffSummary.bodyDiff.added, ['newRole']);
+  assert.deepEqual(uProfile.diffSummary.bodyDiff.removed, ['deprecatedField']);
+  assert.deepEqual(uProfile.diffSummary.oldBody, { bio: 'developer', deprecatedField: 'remove_me' });
+  assert.deepEqual(uProfile.diffSummary.newBody, { bio: 'developer', newRole: 'admin' });
+
+  const uStatus = plan.endpointsToUpdate.find((x) => x.endpoint.id === 'ep-user-status')!;
+  assert.ok(uStatus);
+  assert.equal(uStatus.newName, 'UserStatus');
+  assert.deepEqual(uStatus.diffSummary?.nameChange, { old: 'LegacyStatusName', new: 'UserStatus' });
+});

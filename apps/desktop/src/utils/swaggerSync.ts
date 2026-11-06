@@ -5,24 +5,44 @@
 
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
 import type { ParsedSwaggerSpec, ParsedSwaggerService, ParsedHttpEndpoint } from './swaggerParser.ts';
+import { computePayloadFieldDiff, type PayloadFieldDiff } from './grpcReflectionSync.ts';
+
+export interface SwaggerEndpointDiffSummary {
+  methodChange?: { old: string; new: string };
+  urlChange?: { old: string; new: string };
+  nameChange?: { old: string; new: string };
+  queryParamsDiff?: { added: string[]; removed: string[] };
+  headersDiff?: { added: string[]; removed: string[] };
+  bodyDiff?: PayloadFieldDiff;
+  oldBody?: any;
+  newBody?: any;
+}
+
+export interface SwaggerEndpointUpdateItem {
+  endpoint: Endpoint;
+  oldEndpoint?: Endpoint;
+  newName?: string;
+  newConfig: Record<string, any>;
+  diffSummary?: SwaggerEndpointDiffSummary;
+}
+
+export interface SwaggerEndpointCreateItem {
+  folderId: string;
+  serviceName: string;
+  endpoint: ParsedHttpEndpoint;
+  payload?: any;
+  headers?: Record<string, string>;
+}
 
 export interface SwaggerSyncPlan {
   servicesToDelete: { folderId: string; serviceName: string }[];
   servicesToCreate: ParsedSwaggerService[];
-  endpointsToCreate: {
-    folderId: string;
-    serviceName: string;
-    endpoint: ParsedHttpEndpoint;
-  }[];
+  endpointsToCreate: SwaggerEndpointCreateItem[];
   endpointsToDelete: {
     endpointId: string;
     endpointName: string;
   }[];
-  endpointsToUpdate: {
-    endpoint: Endpoint;
-    newName?: string;
-    newConfig: Record<string, any>;
-  }[];
+  endpointsToUpdate: SwaggerEndpointUpdateItem[];
 }
 
 /**
@@ -117,6 +137,49 @@ function findMatchingEndpoint(
   return undefined;
 }
 
+function extractQueryParamKeys(params: any, url?: string): string[] {
+  const keys: string[] = [];
+  if (Array.isArray(params) && params.length > 0) {
+    for (const item of params) {
+      if (Array.isArray(item) && item[0]) {
+        keys.push(String(item[0]));
+      } else if (item && typeof item === 'object' && item.key) {
+        keys.push(String(item.key));
+      }
+    }
+  } else if (url && url.includes('?')) {
+    const qs = url.split('?')[1];
+    if (qs) {
+      const searchParams = new URLSearchParams(qs);
+      for (const k of searchParams.keys()) {
+        if (!keys.includes(k)) {
+          keys.push(k);
+        }
+      }
+    }
+  }
+  return keys;
+}
+
+function extractHeaderKeys(headers: any): string[] {
+  if (!headers) return [];
+  if (Array.isArray(headers)) {
+    const keys: string[] = [];
+    for (const h of headers) {
+      if (Array.isArray(h) && h[0]) {
+        keys.push(String(h[0]));
+      } else if (h && typeof h === 'object' && h.key) {
+        keys.push(String(h.key));
+      }
+    }
+    return keys;
+  }
+  if (typeof headers === 'object') {
+    return Object.keys(headers);
+  }
+  return [];
+}
+
 /**
  * Plans the Swagger reconciliation between existing folders/endpoints and the freshly parsed Swagger spec.
  */
@@ -187,10 +250,20 @@ export function planSwaggerSync(
       });
 
       if (!match) {
+        let samplePayload: any = undefined;
+        if (fep.body) {
+          try {
+            samplePayload = JSON.parse(fep.body);
+          } catch {
+            samplePayload = fep.body;
+          }
+        }
         endpointsToCreate.push({
           folderId: sf.id,
           serviceName: sf.name,
           endpoint: fep,
+          payload: samplePayload,
+          headers: fep.headers,
         });
       } else {
         // Reconcile config
@@ -213,6 +286,7 @@ export function planSwaggerSync(
         }
 
         const { updatedPayload, changed } = reconcileHttpPayload(curPayload, freshPayload);
+        const bodyDiff = computePayloadFieldDiff(curPayload, updatedPayload);
 
         const curBaseAndPath = (match.config?.url || '').split('?')[0];
         const freshBaseAndPath = fep.fullUrl.split('?')[0];
@@ -221,7 +295,38 @@ export function planSwaggerSync(
         const methodChanged = match.config?.method?.toUpperCase() !== fep.method.toUpperCase();
         const summaryChanged = fep.summary !== undefined && match.config?.summary !== fep.summary;
 
-        if (changed || urlChanged || methodChanged || summaryChanged || nameChanged) {
+        const oldParamKeys = extractQueryParamKeys(match.config?.query_params, match.config?.url);
+        const newParamKeys = extractQueryParamKeys(fep.queryParams, fep.fullUrl);
+        const addedParams = newParamKeys.filter((k) => !oldParamKeys.includes(k));
+        const removedParams = oldParamKeys.filter((k) => !newParamKeys.includes(k));
+        const queryParamsDiff =
+          addedParams.length > 0 || removedParams.length > 0
+            ? { added: addedParams, removed: removedParams }
+            : undefined;
+
+        const oldHeaderKeys = extractHeaderKeys(match.config?.headers);
+        const newHeaderKeys = extractHeaderKeys(fep.headers);
+        const addedHeaders = newHeaderKeys.filter((k) => !oldHeaderKeys.includes(k));
+        const removedHeaders = oldHeaderKeys.filter((k) => !newHeaderKeys.includes(k));
+        const headersDiff =
+          addedHeaders.length > 0 || removedHeaders.length > 0
+            ? { added: addedHeaders, removed: removedHeaders }
+            : undefined;
+
+        const hasBodyDiff =
+          bodyDiff.added.length > 0 ||
+          bodyDiff.removed.length > 0 ||
+          bodyDiff.changed.length > 0;
+
+        if (
+          changed ||
+          urlChanged ||
+          methodChanged ||
+          summaryChanged ||
+          nameChanged ||
+          !!queryParamsDiff ||
+          !!headersDiff
+        ) {
           const curQueryString = (match.config?.url || '').includes('?')
             ? '?' + (match.config?.url || '').split('?')[1]
             : '';
@@ -229,6 +334,7 @@ export function planSwaggerSync(
 
           endpointsToUpdate.push({
             endpoint: match,
+            oldEndpoint: match,
             newName: nameChanged ? fep.name : undefined,
             newConfig: {
               ...match.config,
@@ -245,6 +351,22 @@ export function planSwaggerSync(
                 typeof updatedPayload === 'object' && updatedPayload !== null
                   ? JSON.stringify(updatedPayload, null, 2)
                   : String(updatedPayload || ''),
+            },
+            diffSummary: {
+              methodChange: methodChanged
+                ? { old: match.config?.method || 'GET', new: fep.method }
+                : undefined,
+              urlChange: urlChanged
+                ? { old: curBaseAndPath, new: freshBaseAndPath }
+                : undefined,
+              nameChange: nameChanged
+                ? { old: match.name, new: fep.name }
+                : undefined,
+              queryParamsDiff,
+              headersDiff,
+              bodyDiff: hasBodyDiff ? bodyDiff : undefined,
+              oldBody: curPayload,
+              newBody: updatedPayload,
             },
           });
         }

@@ -30,6 +30,7 @@ import {
   FileEdit,
   ArrowRight,
   AlertTriangle,
+  ChevronRight,
 } from 'lucide-react';
 
 interface SyncSwaggerModalProps {
@@ -106,11 +107,22 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
   const [progressInfo, setProgressInfo] = useState<SwaggerSyncProgressInfo | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  function toggleExpand(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // Auto-detect or sync selected root folder
   useEffect(() => {
     if (!isOpen) {
       setShowCancelConfirm(false);
+      setExpandedIds(new Set());
       return;
     }
     abortRef.current = { aborted: false };
@@ -156,6 +168,7 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
     abortRef.current = { aborted: false };
     setProgressInfo({ message: 'Fetching fresh Swagger specification...', percent: 10 });
     setPlan(null);
+    setExpandedIds(new Set());
 
     try {
       const doc = await fetchSwaggerSpec(swaggerUrl.trim(), {
@@ -327,6 +340,7 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                 onChange={(val) => {
                   setSelectedRootFolderId(val);
                   setPlan(null);
+                  setExpandedIds(new Set());
                 }}
                 options={rootFolders.map((f) => ({
                   value: f.id,
@@ -349,6 +363,7 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                   onChange={(val) => {
                     setSwaggerUrl(val);
                     setPlan(null);
+                    setExpandedIds(new Set());
                   }}
                   variables={envVars}
                   disabled={scanning || syncing}
@@ -387,70 +402,364 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
                   Your local Swagger folder endpoints are identical to the Swagger specification.
                 </div>
               ) : (
-                <div className="space-y-2 text-xs">
+                <div className="space-y-1.5 text-xs">
                   {/* Services to create */}
-                  {plan.servicesToCreate.map((s) => (
-                    <div
-                      key={s.name}
-                      className="p-2 bg-emerald-950/20 border border-emerald-800/40 rounded flex items-center justify-between text-emerald-300"
-                    >
-                      <div className="flex items-center gap-2">
-                        <PlusCircle size={13} className="text-emerald-400" />
-                        <span className="font-medium">Service Folder: {s.name}</span>
+                  {plan.servicesToCreate.map((s) => {
+                    const isExp = expandedIds.has(`create-s-${s.name}`);
+                    return (
+                      <div
+                        key={s.name}
+                        className="rounded border border-emerald-900/40 bg-emerald-950/20 overflow-hidden transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(`create-s-${s.name}`)}
+                          className="w-full flex items-center justify-between p-1.5 text-left hover:bg-emerald-950/40 transition cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px] min-w-0">
+                            <ChevronRight
+                              size={12}
+                              className={`flex-shrink-0 transition-transform duration-150 ${
+                                isExp ? 'rotate-90 text-emerald-300' : 'text-emerald-500/70'
+                              }`}
+                            />
+                            <PlusCircle size={12} className="flex-shrink-0" />
+                            <span className="truncate">Add Service: <strong>{s.name}</strong></span>
+                          </div>
+                          <span className="text-[10px] text-zinc-400 font-mono flex-shrink-0">
+                            +{s.endpoints.length} endpoints
+                          </span>
+                        </button>
+                        {isExp && (
+                          <div className="p-2 border-t border-emerald-900/30 bg-zinc-950/60 space-y-1 text-[11px] font-mono">
+                            <div className="text-zinc-500 font-sans text-[9px] uppercase font-bold tracking-wider">
+                              Endpoints in Service:
+                            </div>
+                            <div className="space-y-0.5 pl-1.5">
+                              {s.endpoints.map((ep) => (
+                                <div key={ep.name} className="flex items-center justify-between text-zinc-300">
+                                  <span className="truncate">• {ep.name}</span>
+                                  <span className="text-[10px] uppercase font-bold text-emerald-400 flex-shrink-0 ml-2">
+                                    {ep.method}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      <span className="text-[10px] text-zinc-400">+{s.endpoints.length} endpoints</span>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Services to delete */}
                   {plan.servicesToDelete.map((s) => (
                     <div
                       key={s.folderId}
-                      className="p-2 bg-red-950/20 border border-red-800/40 rounded flex items-center gap-2 text-red-300"
+                      className="flex items-center gap-1.5 text-red-400 font-mono text-[11px] p-1.5 bg-red-950/20 rounded border border-red-900/40"
                     >
-                      <MinusCircle size={13} className="text-red-400" />
-                      <span>Remove Service Folder: {s.serviceName}</span>
+                      <MinusCircle size={12} className="flex-shrink-0" />
+                      <span>Remove Service: <strong>{s.serviceName}</strong></span>
                     </div>
                   ))}
 
                   {/* Endpoints to create */}
-                  {plan.endpointsToCreate.map((m, idx) => (
-                    <div
-                      key={idx}
-                      className="p-2 bg-emerald-950/20 border border-emerald-800/40 rounded flex items-center gap-2 text-emerald-300"
-                    >
-                      <PlusCircle size={13} className="text-emerald-400" />
-                      <span className="font-mono text-[10px] uppercase font-bold text-emerald-400">
-                        {m.endpoint.method}
-                      </span>
-                      <span className="truncate">{m.endpoint.name}</span>
-                      <span className="text-[10px] text-zinc-500 ml-auto">{m.serviceName}</span>
-                    </div>
-                  ))}
+                  {plan.endpointsToCreate.map((m, idx) => {
+                    const itemKey = `create-ep-${m.folderId}-${m.endpoint.name}-${idx}`;
+                    const isExp = expandedIds.has(itemKey);
+                    let samplePayload = m.payload;
+                    if (!samplePayload && m.endpoint.body) {
+                      try {
+                        samplePayload = JSON.parse(m.endpoint.body);
+                      } catch {
+                        samplePayload = m.endpoint.body;
+                      }
+                    }
+                    const hasQueryParams = m.endpoint.queryParams && m.endpoint.queryParams.length > 0;
+                    return (
+                      <div
+                        key={itemKey}
+                        className="rounded border border-emerald-900/40 bg-emerald-950/20 overflow-hidden transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(itemKey)}
+                          className="w-full flex items-center justify-between p-1.5 text-left hover:bg-emerald-950/40 transition cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-1.5 text-emerald-400 font-mono text-[11px] min-w-0">
+                            <ChevronRight
+                              size={12}
+                              className={`flex-shrink-0 transition-transform duration-150 ${
+                                isExp ? 'rotate-90 text-emerald-300' : 'text-emerald-500/70'
+                              }`}
+                            />
+                            <PlusCircle size={12} className="flex-shrink-0" />
+                            <span className="font-mono text-[10px] uppercase font-bold text-emerald-400 px-1 py-0.2 rounded bg-emerald-950/80 border border-emerald-800/60 flex-shrink-0">
+                              {m.endpoint.method}
+                            </span>
+                            <span className="truncate">Add: <strong>{m.endpoint.name}</strong></span>
+                          </div>
+                          <span className="text-[10px] text-zinc-500 font-mono flex-shrink-0 ml-2">
+                            {m.serviceName}
+                          </span>
+                        </button>
+                        {isExp && (
+                          <div className="p-2.5 pt-1.5 border-t border-emerald-900/30 bg-zinc-950/70 space-y-2 text-xs">
+                            <div className="text-[11px] font-mono p-1.5 bg-zinc-900/90 rounded border border-zinc-800 break-all text-zinc-300">
+                              <span className="text-zinc-500 mr-1.5 font-sans text-[10px] uppercase font-bold">URL:</span>
+                              {m.endpoint.fullUrl}
+                            </div>
+                            {hasQueryParams && (
+                              <div className="p-1.5 bg-zinc-900/60 rounded border border-zinc-800/80 space-y-1">
+                                <div className="text-zinc-500 font-sans text-[9px] uppercase font-bold tracking-wider">
+                                  Query Parameters:
+                                </div>
+                                <div className="flex flex-wrap gap-1">
+                                  {m.endpoint.queryParams.map(([k, v], qIdx) => (
+                                    <span
+                                      key={qIdx}
+                                      className="px-1.5 py-0.2 font-mono text-[10px] rounded bg-zinc-800 border border-zinc-700/60 text-zinc-300"
+                                    >
+                                      {k}{v ? `=${v}` : ''}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {samplePayload && (
+                              <div className="p-2 bg-zinc-900/90 rounded border border-zinc-800/80 space-y-1 font-mono text-[10px]">
+                                <div className="text-zinc-500 font-sans text-[9px] uppercase font-bold tracking-wider">
+                                  Sample Request Payload:
+                                </div>
+                                <pre className="text-emerald-300/90 overflow-x-auto max-h-36 scrollbar-thin">
+                                  {typeof samplePayload === 'object' && samplePayload !== null
+                                    ? JSON.stringify(samplePayload, null, 2)
+                                    : String(samplePayload)}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {/* Endpoints to update */}
-                  {plan.endpointsToUpdate.map((u) => (
-                    <div
-                      key={u.endpoint.id}
-                      className="p-2 bg-amber-950/20 border border-amber-800/40 rounded flex items-center gap-2 text-amber-300"
-                    >
-                      <FileEdit size={13} className="text-amber-400" />
-                      <span className="font-mono text-[10px] uppercase font-bold text-amber-400">
-                        {u.endpoint.config?.method || 'HTTP'}
-                      </span>
-                      <span className="truncate">{u.endpoint.name}</span>
-                      <span className="text-[10px] text-amber-500/80 ml-auto">payload/url update</span>
-                    </div>
-                  ))}
+                  {plan.endpointsToUpdate.map((u) => {
+                    const isExp = expandedIds.has(`update-${u.endpoint.id}`);
+                    const diff = u.diffSummary;
+                    const addedCount =
+                      (diff?.bodyDiff?.added.length || 0) +
+                      (diff?.queryParamsDiff?.added.length || 0) +
+                      (diff?.headersDiff?.added.length || 0);
+                    const removedCount =
+                      (diff?.bodyDiff?.removed.length || 0) +
+                      (diff?.queryParamsDiff?.removed.length || 0) +
+                      (diff?.headersDiff?.removed.length || 0);
+                    const methodChanged = Boolean(diff?.methodChange);
+                    const urlChanged = Boolean(diff?.urlChange);
+                    const nameChanged = Boolean(diff?.nameChange);
+                    const bodyChanged = Boolean(
+                      (diff?.bodyDiff?.changed && diff.bodyDiff.changed.length > 0) ||
+                      (diff?.bodyDiff && (diff.bodyDiff.added.length > 0 || diff.bodyDiff.removed.length > 0))
+                    );
+
+                    return (
+                      <div
+                        key={u.endpoint.id}
+                        className="rounded border border-amber-900/40 bg-amber-950/20 overflow-hidden transition"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(`update-${u.endpoint.id}`)}
+                          className="w-full flex items-center justify-between p-1.5 text-left hover:bg-amber-950/40 transition cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-1.5 text-amber-400 font-mono text-[11px] min-w-0">
+                            <ChevronRight
+                              size={12}
+                              className={`flex-shrink-0 transition-transform duration-150 ${
+                                isExp ? 'rotate-90 text-amber-300' : 'text-amber-500/70'
+                              }`}
+                            />
+                            <FileEdit size={12} className="flex-shrink-0" />
+                            <span className="font-mono text-[10px] uppercase font-bold text-amber-400 px-1 py-0.2 rounded bg-amber-950/80 border border-amber-800/60 flex-shrink-0">
+                              {u.newConfig?.method || u.endpoint.config?.method || 'HTTP'}
+                            </span>
+                            <span className="truncate">
+                              Update: <strong>{u.endpoint.name}</strong>
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1 flex-shrink-0 text-[10px] font-mono">
+                            {addedCount > 0 && (
+                              <span className="px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-800/60 text-emerald-400">
+                                +{addedCount}
+                              </span>
+                            )}
+                            {removedCount > 0 && (
+                              <span className="px-1.5 py-0.2 rounded bg-red-950/80 border border-red-800/60 text-red-400">
+                                -{removedCount}
+                              </span>
+                            )}
+                            {methodChanged && (
+                              <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700/60 text-zinc-300">
+                                method
+                              </span>
+                            )}
+                            {urlChanged && (
+                              <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700/60 text-zinc-300">
+                                url
+                              </span>
+                            )}
+                            {bodyChanged && (
+                              <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700/60 text-zinc-300">
+                                body
+                              </span>
+                            )}
+                            {nameChanged && (
+                              <span className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700/60 text-zinc-300">
+                                name
+                              </span>
+                            )}
+                          </div>
+                        </button>
+
+                        {isExp && (
+                          <div className="p-2.5 pt-1.5 border-t border-amber-900/30 bg-zinc-950/70 space-y-2 text-xs">
+                            {diff?.methodChange && (
+                              <div className="flex items-center gap-2 text-[11px] font-mono p-1.5 bg-zinc-900/90 rounded border border-zinc-800">
+                                <span className="text-zinc-500 font-sans text-[10px] uppercase font-bold">Method:</span>
+                                <span className="text-red-400 line-through">{diff.methodChange.old}</span>
+                                <ArrowRight size={10} className="text-zinc-500 flex-shrink-0" />
+                                <span className="text-emerald-400">{diff.methodChange.new}</span>
+                              </div>
+                            )}
+
+                            {diff?.urlChange && (
+                              <div className="flex items-center gap-2 text-[11px] font-mono p-1.5 bg-zinc-900/90 rounded border border-zinc-800">
+                                <span className="text-zinc-500 font-sans text-[10px] uppercase font-bold">URL:</span>
+                                <span className="text-red-400 line-through truncate max-w-[160px]">
+                                  {diff.urlChange.old}
+                                </span>
+                                <ArrowRight size={10} className="text-zinc-500 flex-shrink-0" />
+                                <span className="text-emerald-400 truncate max-w-[160px]">
+                                  {diff.urlChange.new}
+                                </span>
+                              </div>
+                            )}
+
+                            {diff?.nameChange && (
+                              <div className="flex items-center gap-2 text-[11px] font-mono p-1.5 bg-zinc-900/90 rounded border border-zinc-800">
+                                <span className="text-zinc-500 font-sans text-[10px] uppercase font-bold">Name:</span>
+                                <span className="text-red-400 line-through">{diff.nameChange.old}</span>
+                                <ArrowRight size={10} className="text-zinc-500 flex-shrink-0" />
+                                <span className="text-emerald-400">{diff.nameChange.new}</span>
+                              </div>
+                            )}
+
+                            {((diff?.queryParamsDiff &&
+                              (diff.queryParamsDiff.added.length > 0 || diff.queryParamsDiff.removed.length > 0)) ||
+                              (diff?.headersDiff &&
+                                (diff.headersDiff.added.length > 0 || diff.headersDiff.removed.length > 0))) && (
+                              <div className="space-y-1 p-1.5 bg-zinc-900/60 rounded border border-zinc-800/80">
+                                {diff?.queryParamsDiff?.added && diff.queryParamsDiff.added.length > 0 && (
+                                  <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                    <span className="text-emerald-400 font-bold flex-shrink-0">+ Query Params:</span>
+                                    <span className="text-emerald-300 break-all">
+                                      {diff.queryParamsDiff.added.join(', ')}
+                                    </span>
+                                  </div>
+                                )}
+                                {diff?.queryParamsDiff?.removed && diff.queryParamsDiff.removed.length > 0 && (
+                                  <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                    <span className="text-red-400 font-bold flex-shrink-0">- Query Params:</span>
+                                    <span className="text-red-300 break-all">
+                                      {diff.queryParamsDiff.removed.join(', ')}
+                                    </span>
+                                  </div>
+                                )}
+                                {diff?.headersDiff?.added && diff.headersDiff.added.length > 0 && (
+                                  <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                    <span className="text-emerald-400 font-bold flex-shrink-0">+ Headers:</span>
+                                    <span className="text-emerald-300 break-all">
+                                      {diff.headersDiff.added.join(', ')}
+                                    </span>
+                                  </div>
+                                )}
+                                {diff?.headersDiff?.removed && diff.headersDiff.removed.length > 0 && (
+                                  <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                    <span className="text-red-400 font-bold flex-shrink-0">- Headers:</span>
+                                    <span className="text-red-300 break-all">
+                                      {diff.headersDiff.removed.join(', ')}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {diff?.bodyDiff &&
+                              (diff.bodyDiff.added.length > 0 ||
+                                diff.bodyDiff.removed.length > 0 ||
+                                diff.bodyDiff.changed.length > 0) && (
+                                <div className="space-y-1 p-1.5 bg-zinc-900/60 rounded border border-zinc-800/80">
+                                  {diff.bodyDiff.added.length > 0 && (
+                                    <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                      <span className="text-emerald-400 font-bold flex-shrink-0">+ Added Body Fields:</span>
+                                      <span className="text-emerald-300 break-all">{diff.bodyDiff.added.join(', ')}</span>
+                                    </div>
+                                  )}
+                                  {diff.bodyDiff.removed.length > 0 && (
+                                    <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                      <span className="text-red-400 font-bold flex-shrink-0">- Removed Body Fields:</span>
+                                      <span className="text-red-300 break-all">{diff.bodyDiff.removed.join(', ')}</span>
+                                    </div>
+                                  )}
+                                  {diff.bodyDiff.changed.length > 0 && (
+                                    <div className="flex items-start gap-1.5 text-[11px] font-mono">
+                                      <span className="text-amber-400 font-bold flex-shrink-0">~ Changed Body Fields:</span>
+                                      <span className="text-amber-300 break-all">{diff.bodyDiff.changed.join(', ')}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                            {(diff?.oldBody !== undefined || diff?.newBody !== undefined) && (
+                              <div className="grid grid-cols-2 gap-2 pt-0.5 font-mono text-[10px]">
+                                <div className="p-2 bg-zinc-900/90 rounded border border-zinc-800/80 space-y-1">
+                                  <div className="text-zinc-500 font-sans text-[9px] uppercase font-bold tracking-wider">
+                                    Current Local Payload
+                                  </div>
+                                  <pre className="text-zinc-400 overflow-x-auto max-h-36 scrollbar-thin">
+                                    {typeof diff?.oldBody === 'object' && diff?.oldBody !== null
+                                      ? JSON.stringify(diff.oldBody, null, 2)
+                                      : String(diff?.oldBody ?? '{}')}
+                                  </pre>
+                                </div>
+                                <div className="p-2 bg-zinc-900/90 rounded border border-zinc-800/80 space-y-1">
+                                  <div className="text-emerald-400 font-sans text-[9px] uppercase font-bold tracking-wider">
+                                    Reconciled Fresh Payload
+                                  </div>
+                                  <pre className="text-emerald-300/90 overflow-x-auto max-h-36 scrollbar-thin">
+                                    {typeof diff?.newBody === 'object' && diff?.newBody !== null
+                                      ? JSON.stringify(diff.newBody, null, 2)
+                                      : String(diff?.newBody ?? '{}')}
+                                  </pre>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {/* Endpoints to delete */}
                   {plan.endpointsToDelete.map((d) => (
                     <div
                       key={d.endpointId}
-                      className="p-2 bg-red-950/20 border border-red-800/40 rounded flex items-center gap-2 text-red-300"
+                      className="flex items-center gap-1.5 text-red-400 font-mono text-[11px] p-1.5 bg-red-950/20 rounded border border-red-900/40"
                     >
-                      <MinusCircle size={13} className="text-red-400" />
-                      <span>Remove Endpoint: {d.endpointName}</span>
+                      <MinusCircle size={12} className="flex-shrink-0" />
+                      <span>Remove Endpoint: <strong>{d.endpointName}</strong></span>
                     </div>
                   ))}
                 </div>
