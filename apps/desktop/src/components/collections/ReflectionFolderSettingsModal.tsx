@@ -200,14 +200,13 @@ export const ReflectionFolderSettingsModal: React.FC = () => {
             <label className="block text-zinc-400 font-medium mb-1 text-[11px]">
               gRPC Server Address
             </label>
-            <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition">
+            <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition h-8 flex items-center">
               <VariableInput
                 value={serverAddress}
                 onChange={setServerAddress}
                 variables={envVars}
                 placeholder={`${DEFAULT_GRPC_SERVER_ADDRESS} or {{GRPC_HOST}}`}
-                className="w-full h-8 px-2.5"
-                inputClassName="text-xs"
+                className="w-full h-full"
               />
             </div>
           </div>
