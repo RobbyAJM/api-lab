@@ -306,13 +306,33 @@ export function getFolderSwaggerUrl(
 
 /**
  * Checks if endpoints can be manually added to a folder.
- * Swagger and gRPC Reflection folders are spec-managed and disallow manual endpoint addition.
+ * Swagger and gRPC Reflection folders (and their child folders) are spec-managed and disallow manual endpoint addition.
  */
 export function canAddEndpointToFolder(
   folder: CollectionFolder,
-  collectionSettings?: Record<string, any>
+  collectionSettings?: Record<string, any>,
+  folders?: CollectionFolder[]
 ): boolean {
-  return !isReflectionFolder(folder, collectionSettings) && !isSwaggerFolder(folder, collectionSettings);
+  if (isReflectionFolder(folder, collectionSettings) || isSwaggerFolder(folder, collectionSettings)) {
+    return false;
+  }
+  if (!folders || !folder.parent_folder_id) {
+    return true;
+  }
+  const folderMap = new Map<string, CollectionFolder>(folders.map((f) => [f.id, f]));
+  let currentId: string | null = folder.parent_folder_id;
+  const visited = new Set<string>();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const parent = folderMap.get(currentId);
+    if (!parent) break;
+    if (isReflectionFolder(parent, collectionSettings) || isSwaggerFolder(parent, collectionSettings)) {
+      return false;
+    }
+    currentId = parent.parent_folder_id ?? null;
+  }
+  return true;
 }
 
 /**

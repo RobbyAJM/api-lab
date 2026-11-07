@@ -947,6 +947,7 @@ const FolderTreeNodeComponent: React.FC<{
   isEndpointsLoading?: boolean;
   onSyncReflection?: (folderId: string) => void;
   onSyncSwagger?: (folderId: string) => void;
+  parentCanAddEndpoint?: boolean;
 }> = ({
   node,
   collectionId,
@@ -958,6 +959,7 @@ const FolderTreeNodeComponent: React.FC<{
   isEndpointsLoading = false,
   onSyncReflection,
   onSyncSwagger,
+  parentCanAddEndpoint = true,
 }) => {
   const queryClient = useQueryClient();
   const {
@@ -983,7 +985,7 @@ const FolderTreeNodeComponent: React.FC<{
   const grpcUrl = getFolderGrpcUrl(node.folder, collectionSettings);
   const isSwagger = isSwaggerFolder(node.folder, collectionSettings);
   const swaggerUrl = getFolderSwaggerUrl(node.folder, collectionSettings);
-  const canAddEndpoint = canAddEndpointToFolder(node.folder, collectionSettings);
+  const canAddEndpoint = parentCanAddEndpoint && canAddEndpointToFolder(node.folder, collectionSettings);
 
   useEffect(() => {
     if (isFolderHighlighted || isTargetRevealed) {
@@ -1358,6 +1360,7 @@ const FolderTreeNodeComponent: React.FC<{
               isEndpointsLoading={isEndpointsLoading}
               onSyncReflection={onSyncReflection}
               onSyncSwagger={onSyncSwagger}
+              parentCanAddEndpoint={canAddEndpoint}
             />
           ))}
         </div>

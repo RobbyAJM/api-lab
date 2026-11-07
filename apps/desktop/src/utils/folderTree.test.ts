@@ -367,6 +367,59 @@ test('canAddEndpointToFolder: allows manual endpoints for normal folders, disall
   assert.equal(canAddEndpointToFolder(reflectionFolder), false);
   assert.equal(canAddEndpointToFolder(legacySwaggerFolder, settings), false);
   assert.equal(canAddEndpointToFolder(legacyReflectionFolder, settings), false);
+
+  // Child folders under reflection or swagger also disallow manual endpoints
+  const swaggerChildFolder: CollectionFolder = {
+    id: 'f-swag-child',
+    collection_id: 'c1',
+    parent_folder_id: 'f-swag',
+    name: 'Pet Service',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+  const reflectionGrandchildFolder: CollectionFolder = {
+    id: 'f-refl-grandchild',
+    collection_id: 'c1',
+    parent_folder_id: 'f-refl-child',
+    name: 'Nested Service',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+  const reflectionChildFolder: CollectionFolder = {
+    id: 'f-refl-child',
+    collection_id: 'c1',
+    parent_folder_id: 'f-refl',
+    name: 'V1 Service',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+  const normalChildFolder: CollectionFolder = {
+    id: 'f-norm-child',
+    collection_id: 'c1',
+    parent_folder_id: 'f-norm',
+    name: 'Sub normal',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+
+  const allFolders = [
+    normalFolder,
+    swaggerFolder,
+    reflectionFolder,
+    swaggerChildFolder,
+    reflectionChildFolder,
+    reflectionGrandchildFolder,
+    normalChildFolder,
+  ];
+
+  assert.equal(canAddEndpointToFolder(swaggerChildFolder, settings, allFolders), false);
+  assert.equal(canAddEndpointToFolder(reflectionChildFolder, settings, allFolders), false);
+  assert.equal(canAddEndpointToFolder(reflectionGrandchildFolder, settings, allFolders), false);
+  assert.equal(canAddEndpointToFolder(normalChildFolder, settings, allFolders), true);
 });
 
 test('findSwaggerFolderForEndpoint: finds swagger folder for direct and nested subfolder endpoints', () => {
