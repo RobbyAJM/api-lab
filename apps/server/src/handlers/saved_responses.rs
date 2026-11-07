@@ -16,24 +16,33 @@ pub async fn get_saved_response(
     Path(endpoint_id): Path<Uuid>,
     State(state): State<SharedState>,
 ) -> Result<Json<SavedResponse>, ApiError> {
-    let ws_id = get_workspace_id_for_endpoint(&state.pool, endpoint_id).await?;
-    let _ = get_workspace_role(&state.pool, ws_id, auth.user.id).await?;
-
+    // Fast path: fetch saved response directly joining workspace_members for access check in 1 roundtrip
     let row = sqlx::query_as!(
         SavedResponse,
         r#"
-        SELECT id, endpoint_id, workspace_id, created_by, status_code, response_headers, response_body, response_time_ms, response_size_bytes, created_at, updated_at
-        FROM saved_responses
-        WHERE endpoint_id = $1
+        SELECT sr.id, sr.endpoint_id, sr.workspace_id, sr.created_by, sr.status_code,
+               sr.response_headers, sr.response_body, sr.response_time_ms, sr.response_size_bytes,
+               sr.created_at, sr.updated_at
+        FROM saved_responses sr
+        JOIN workspace_members wm ON wm.workspace_id = sr.workspace_id AND wm.user_id = $2
+        WHERE sr.endpoint_id = $1
         "#,
-        endpoint_id
+        endpoint_id,
+        auth.user.id
     )
     .fetch_optional(&state.pool)
     .await
-    .map_err(ApiError::Database)?
-    .ok_or_else(|| ApiError::NotFound("no saved response found for this endpoint".into()))?;
+    .map_err(ApiError::Database)?;
 
-    Ok(Json(row))
+    if let Some(saved) = row {
+        return Ok(Json(saved));
+    }
+
+    // Fallback: distinguish 404 (no saved response) from 403 (unauthorized) / 404 (endpoint not found)
+    let ws_id = get_workspace_id_for_endpoint(&state.pool, endpoint_id).await?;
+    let _ = get_workspace_role(&state.pool, ws_id, auth.user.id).await?;
+
+    Err(ApiError::NotFound("no saved response found for this endpoint".into()))
 }
 
 pub async fn put_saved_response(

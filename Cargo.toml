@@ -30,7 +30,7 @@ rand = "0.8"
 base64 = "0.22"
 aes-gcm = "0.10"
 axum = { version = "0.8", features = ["ws", "macros"] }
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
 futures = "0.3"
 tokio-stream = "0.1"
 http = "1.0"

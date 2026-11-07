@@ -629,14 +629,61 @@ export function extractSwaggerSpecification(
     }
   }
 
+  // Prune to reachable schemas and enums only (prevents multi-megabyte DB payload bloat)
+  const reachableSchemas: Record<string, SwaggerFieldSummary[]> = {};
+  const reachableEnums: Record<string, string[]> = {};
+  const queue: string[] = [];
+  const visitedTypes = new Set<string>();
+
+  const enqueueType = (rawType?: string) => {
+    if (!rawType) return;
+    const base = rawType.replace(/\[\]$/, '').trim();
+    if (!base) return;
+    if (!visitedTypes.has(base)) queue.push(base);
+    const short = base.split('.').pop() || base;
+    if (short && short !== base && !visitedTypes.has(short)) queue.push(short);
+  };
+
+  enqueueType(requestTypeName);
+  enqueueType(responseTypeName);
+  for (const f of requestFields) enqueueType(f.type);
+  for (const f of responseFields) enqueueType(f.type);
+
+  while (queue.length > 0) {
+    const typeName = queue.pop()!;
+    if (visitedTypes.has(typeName)) continue;
+    visitedTypes.add(typeName);
+
+    if (allEnums[typeName]) {
+      reachableEnums[typeName] = allEnums[typeName];
+    }
+
+    let matchedKey = allSchemas[typeName] ? typeName : undefined;
+    if (!matchedKey) {
+      matchedKey = Object.keys(allSchemas).find(
+        (k) => k === typeName || k.split('.').pop() === typeName
+      );
+    }
+
+    if (matchedKey && allSchemas[matchedKey]) {
+      reachableSchemas[matchedKey] = allSchemas[matchedKey];
+      for (const field of allSchemas[matchedKey]) {
+        enqueueType(field.type);
+        if (field.enum && field.enum.length > 0 && field.type) {
+          reachableEnums[field.type] = field.enum;
+        }
+      }
+    }
+  }
+
   return {
     summary: operation?.summary,
     requestTypeName,
     requestFields,
     responseTypeName,
     responseFields,
-    schemas: allSchemas,
-    enums: allEnums,
+    schemas: reachableSchemas,
+    enums: reachableEnums,
   };
 }
 

@@ -1,5 +1,6 @@
 use axum::routing::{delete, get, patch, post, put};
 use axum::Router;
+use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
@@ -120,5 +121,6 @@ pub fn create_router(state: SharedState) -> Router {
         .nest("/api/v1", api_routes)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
+        .layer(CompressionLayer::new())
         .with_state(state)
 }
