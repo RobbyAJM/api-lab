@@ -24,11 +24,18 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     category: 'Request',
   },
   {
-    id: 'open_command',
+    id: 'open_endpoint_search',
     keyLabel: 'Ctrl + K',
     macKeyLabel: '⌘ + K',
-    description: 'Open Command Palette (Search & navigate to any endpoint)',
+    description: 'Quick search endpoints across collections',
     category: 'Navigation',
+  },
+  {
+    id: 'open_command_palette',
+    keyLabel: 'Ctrl + P',
+    macKeyLabel: '⌘ + P',
+    description: 'Open command palette to execute actions',
+    category: 'General',
   },
   {
     id: 'switch_workspace',
@@ -157,8 +164,11 @@ export function matchesShortcut(event: KeyboardEventLike, shortcutId: string): b
       return isMod && !event.shiftKey && (key === 's' || key === 'S');
     case 'switch_workspace':
       return isMod && !!event.shiftKey && (key === 's' || key === 'S');
+    case 'open_endpoint_search':
     case 'open_command':
-      return isMod && (key === 'k' || key === 'K');
+      return isMod && !event.shiftKey && (key === 'k' || key === 'K');
+    case 'open_command_palette':
+      return isMod && !event.shiftKey && (key === 'p' || key === 'P');
     case 'open_shortcuts':
       return isMod && (key === '/' || key === '?');
     case 'open_environment':
@@ -214,11 +224,13 @@ export interface CommandPaletteItem {
 /**
  * Filters endpoints across collections for the command palette.
  * Searches by endpoint name, collection name, HTTP method, gRPC service, or URL.
+ * ponytail: in-memory linear filter scales to ~10k endpoints; add indexed trie if collections exceed 50k.
  */
 export function searchEndpointsForCommandPalette(
   endpoints: Endpoint[],
   collections: Collection[],
-  query: string
+  query: string,
+  history: PaletteActionRecord[] = []
 ): CommandPaletteItem[] {
   const collMap = new Map<string, string>();
   for (const c of collections) {
@@ -248,34 +260,85 @@ export function searchEndpointsForCommandPalette(
     };
   });
 
-  if (!q) {
-    return items;
+  let filtered = items;
+  if (q) {
+    // Multi-keyword search: all whitespace-separated keywords must match any field
+    // (equivalent to SQL: field LIKE '%k1%' AND field LIKE '%k2%')
+    const keywords = q.split(/\s+/).filter(Boolean);
+    filtered = items.filter((item) => {
+      const searchable = `${item.endpoint.name} ${item.collectionName} ${item.methodLabel} ${item.urlOrService} ${item.protocol}`.toLowerCase();
+      return keywords.every((kw) => searchable.includes(kw));
+    });
   }
 
-  // Multi-keyword search: all whitespace-separated keywords must match any field
-  // (equivalent to SQL: field LIKE '%k1%' AND field LIKE '%k2%')
-  const keywords = q.split(/\s+/).filter(Boolean);
+  if (!history || history.length === 0) {
+    return filtered;
+  }
 
-  return items.filter((item) => {
-    const searchable = `${item.endpoint.name} ${item.collectionName} ${item.methodLabel} ${item.urlOrService} ${item.protocol}`.toLowerCase();
-    return keywords.every((kw) => searchable.includes(kw));
-  });
+  const recencyMap = new Map<string, number>();
+  for (const h of history) {
+    if (h.type === 'endpoint' && !recencyMap.has(h.id)) {
+      recencyMap.set(h.id, h.timestamp);
+    }
+  }
+
+  return filtered
+    .map((item, originalIndex) => ({
+      item,
+      originalIndex,
+      timestamp: recencyMap.get(item.endpoint.id) ?? -1,
+    }))
+    .sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return b.timestamp - a.timestamp;
+      }
+      return a.originalIndex - b.originalIndex;
+    })
+    .map((entry) => entry.item);
 }
+
+export type PaletteActionId =
+  | 'switch_workspace'
+  | 'close_tab'
+  | 'close_other_tabs'
+  | 'close_all_tabs'
+  | 'prev_tab'
+  | 'next_tab'
+  | 'open_endpoint_search'
+  | 'open_environment'
+  | 'open_settings'
+  | 'open_shortcuts'
+  | 'open_theme_picker'
+  | 'open_members'
+  | 'zoom_in'
+  | 'zoom_out'
+  | 'zoom_reset'
+  | 'logout';
 
 export interface PaletteCommandAction {
   id: string;
-  actionId: 'close_tab' | 'close_other_tabs' | 'close_all_tabs' | 'switch_workspace';
+  actionId: PaletteActionId;
   title: string;
   description: string;
-  keyLabel: string;
+  category: 'Tabs' | 'Navigation' | 'View' | 'Settings' | 'Workspace';
+  keyLabel?: string;
 }
 
 export const COMMAND_PALETTE_ACTIONS: PaletteCommandAction[] = [
+  {
+    id: 'cmd_open_endpoint_search',
+    actionId: 'open_endpoint_search',
+    title: 'Quick Search Endpoints',
+    description: 'Search and navigate to any endpoint',
+    category: 'Navigation',
+    keyLabel: 'Ctrl + K',
+  },
   {
     id: 'cmd_switch_workspace',
     actionId: 'switch_workspace',
     title: 'Switch Workspace',
     description: 'Open workspace picker and search workspaces',
+    category: 'Workspace',
     keyLabel: 'Ctrl + Shift + S',
   },
   {
@@ -283,21 +346,109 @@ export const COMMAND_PALETTE_ACTIONS: PaletteCommandAction[] = [
     actionId: 'close_tab',
     title: 'Close Tab',
     description: 'Force close active endpoint tab',
+    category: 'Tabs',
     keyLabel: 'Ctrl + W',
-  },
-  {
-    id: 'cmd_close_all_tabs',
-    actionId: 'close_all_tabs',
-    title: 'Close All Tabs',
-    description: 'Force close all open tabs',
-    keyLabel: 'Ctrl + Shift + W',
   },
   {
     id: 'cmd_close_other_tabs',
     actionId: 'close_other_tabs',
     title: 'Close All Other Tabs',
     description: 'Force close all tabs except current active tab',
+    category: 'Tabs',
     keyLabel: 'Ctrl + Alt + T',
+  },
+  {
+    id: 'cmd_close_all_tabs',
+    actionId: 'close_all_tabs',
+    title: 'Close All Tabs',
+    description: 'Force close all open tabs',
+    category: 'Tabs',
+    keyLabel: 'Ctrl + Shift + W',
+  },
+  {
+    id: 'cmd_prev_tab',
+    actionId: 'prev_tab',
+    title: 'Previous Tab',
+    description: 'Switch to previous open tab',
+    category: 'Tabs',
+    keyLabel: 'Ctrl + [',
+  },
+  {
+    id: 'cmd_next_tab',
+    actionId: 'next_tab',
+    title: 'Next Tab',
+    description: 'Switch to next open tab',
+    category: 'Tabs',
+    keyLabel: 'Ctrl + ]',
+  },
+  {
+    id: 'cmd_open_environment',
+    actionId: 'open_environment',
+    title: 'Environment Variables',
+    description: 'Open environment variables manager',
+    category: 'Workspace',
+    keyLabel: 'Ctrl + E',
+  },
+  {
+    id: 'cmd_open_settings',
+    actionId: 'open_settings',
+    title: 'Settings',
+    description: 'Open desktop app settings dialog',
+    category: 'Settings',
+    keyLabel: 'Ctrl + ,',
+  },
+  {
+    id: 'cmd_open_shortcuts',
+    actionId: 'open_shortcuts',
+    title: 'Keyboard Shortcuts Reference',
+    description: 'View full cheat sheet of keyboard shortcuts',
+    category: 'Settings',
+    keyLabel: 'Ctrl + /',
+  },
+  {
+    id: 'cmd_open_theme_picker',
+    actionId: 'open_theme_picker',
+    title: 'Change Color Theme',
+    description: 'Select visual theme and color palette',
+    category: 'View',
+  },
+  {
+    id: 'cmd_open_members',
+    actionId: 'open_members',
+    title: 'Workspace Members',
+    description: 'Manage collaborators and invitation tokens',
+    category: 'Workspace',
+  },
+  {
+    id: 'cmd_zoom_in',
+    actionId: 'zoom_in',
+    title: 'Zoom In UI',
+    description: 'Increase desktop interface scale',
+    category: 'View',
+    keyLabel: 'Ctrl + +',
+  },
+  {
+    id: 'cmd_zoom_out',
+    actionId: 'zoom_out',
+    title: 'Zoom Out UI',
+    description: 'Decrease desktop interface scale',
+    category: 'View',
+    keyLabel: 'Ctrl + -',
+  },
+  {
+    id: 'cmd_zoom_reset',
+    actionId: 'zoom_reset',
+    title: 'Reset UI Zoom',
+    description: 'Reset interface zoom to 100%',
+    category: 'View',
+    keyLabel: 'Ctrl + 0',
+  },
+  {
+    id: 'cmd_logout',
+    actionId: 'logout',
+    title: 'Sign Out',
+    description: 'Log out of current account and return to login',
+    category: 'Settings',
   },
 ];
 
@@ -309,10 +460,11 @@ export type UnifiedPaletteItem =
   | {
       type: 'command';
       id: string;
-      actionId: 'close_tab' | 'close_other_tabs' | 'close_all_tabs' | 'switch_workspace';
+      actionId: PaletteActionId;
       title: string;
       description: string;
-      keyLabel: string;
+      category?: string;
+      keyLabel?: string;
     };
 
 export interface PaletteActionRecord {
@@ -381,6 +533,49 @@ export function savePaletteRecency(
 }
 
 /**
+ * Searches executable commands in Command Palette (Ctrl+P).
+ * Matches are sorted descending by latest action timestamp.
+ */
+export function searchCommandsForPalette(
+  query: string,
+  history: PaletteActionRecord[] = []
+): PaletteCommandAction[] {
+  const q = query.trim().toLowerCase();
+  const keywords = q.split(/\s+/).filter(Boolean);
+
+  const matchedCommands = COMMAND_PALETTE_ACTIONS.filter((action) => {
+    if (!q) return true;
+    const searchable = `${action.title} ${action.description} ${action.category} ${action.keyLabel || ''}`.toLowerCase();
+    return keywords.every((kw) => searchable.includes(kw));
+  });
+
+  if (!history || history.length === 0) {
+    return matchedCommands;
+  }
+
+  const recencyMap = new Map<string, number>();
+  for (const h of history) {
+    if (h.type === 'command' && !recencyMap.has(h.id)) {
+      recencyMap.set(h.id, h.timestamp);
+    }
+  }
+
+  return matchedCommands
+    .map((item, originalIndex) => ({
+      item,
+      originalIndex,
+      timestamp: recencyMap.get(item.id) ?? -1,
+    }))
+    .sort((a, b) => {
+      if (a.timestamp !== b.timestamp) {
+        return b.timestamp - a.timestamp;
+      }
+      return a.originalIndex - b.originalIndex;
+    })
+    .map((entry) => entry.item);
+}
+
+/**
  * Searches both executable actions and workspace endpoints in Command Palette.
  * Matches are sorted descending by latest action timestamp.
  */
@@ -390,26 +585,21 @@ export function searchUnifiedCommandPalette(
   query: string,
   history: PaletteActionRecord[] = []
 ): UnifiedPaletteItem[] {
-  const q = query.trim().toLowerCase();
-  const keywords = q.split(/\s+/).filter(Boolean);
-
-  const matchedCommands: UnifiedPaletteItem[] = COMMAND_PALETTE_ACTIONS.filter((action) => {
-    if (!q) return true;
-    const searchable = `${action.title} ${action.description} ${action.keyLabel}`.toLowerCase();
-    return keywords.every((kw) => searchable.includes(kw));
-  }).map((action) => ({
+  const matchedCommands: UnifiedPaletteItem[] = searchCommandsForPalette(query, history).map((action) => ({
     type: 'command',
     id: action.id,
     actionId: action.actionId,
     title: action.title,
     description: action.description,
+    category: action.category,
     keyLabel: action.keyLabel,
   }));
 
   const endpointItems: UnifiedPaletteItem[] = searchEndpointsForCommandPalette(
     endpoints,
     collections,
-    query
+    query,
+    history
   ).map((item) => ({
     type: 'endpoint',
     id: item.endpoint.id,

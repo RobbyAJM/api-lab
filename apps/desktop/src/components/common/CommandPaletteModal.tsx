@@ -1,73 +1,41 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
-import { apiRequest } from '../../api/client';
-import type { Collection, Endpoint } from '@api-lab/api-types';
-import { Search, X, CornerDownLeft, Layers, Radio, Terminal, ArrowDownUp } from 'lucide-react';
+import { Terminal, X, CornerDownLeft, Layers, ArrowDownUp } from 'lucide-react';
 import {
-  searchUnifiedCommandPalette,
+  searchCommandsForPalette,
   navigateListIndex,
   recordPaletteAction,
   loadPaletteRecency,
   savePaletteRecency,
-  type UnifiedPaletteItem,
+  type PaletteCommandAction,
   type PaletteActionRecord,
 } from '../../utils/shortcuts';
-import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
 
 export const CommandPaletteModal: React.FC = () => {
-  const queryClient = useQueryClient();
   const {
-    activeWorkspaceId,
     activeEndpointId,
+    openEndpoints,
     commandPaletteOpen,
     setCommandPaletteOpen,
-    setActiveEndpoint,
+    setEndpointSearchOpen,
+    openEndpoint,
     closeEndpoint,
     closeOtherEndpoints,
     closeAllEndpoints,
     setWorkspaceDropdownOpen,
+    setEnvModalOpen,
+    setAppSettingsOpen,
+    setShortcutsHelpOpen,
+    setThemeModalOpen,
+    setMembersModalOpen,
+    logout,
   } = useAppStore();
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [allEndpoints, setAllEndpoints] = useState<Endpoint[]>([]);
   const [paletteHistory, setPaletteHistory] = useState<PaletteActionRecord[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-
-  // Fetch collections
-  const { data: collections = [] } = useQuery<Collection[]>({
-    queryKey: ['collections', activeWorkspaceId],
-    queryFn: () => apiRequest(`/workspaces/${activeWorkspaceId}/collections`),
-    enabled: !!activeWorkspaceId && commandPaletteOpen,
-  });
-
-  // Load all endpoints across workspace collections
-  useEffect(() => {
-    if (!commandPaletteOpen || collections.length === 0) return;
-
-    let mounted = true;
-    Promise.all(
-      collections.map(async (c) => {
-        const cached = queryClient.getQueryData<Endpoint[]>(['endpoints', c.id]);
-        if (cached) return cached;
-        try {
-          return await apiRequest<Endpoint[]>(`/collections/${c.id}/endpoints`);
-        } catch {
-          return [];
-        }
-      })
-    ).then((results) => {
-      if (mounted) {
-        setAllEndpoints(results.flat());
-      }
-    });
-
-    return () => {
-      mounted = false;
-    };
-  }, [commandPaletteOpen, collections, queryClient]);
 
   // Auto-focus input and load latest recency when opened
   useEffect(() => {
@@ -79,7 +47,7 @@ export const CommandPaletteModal: React.FC = () => {
     }
   }, [commandPaletteOpen]);
 
-  const items = searchUnifiedCommandPalette(allEndpoints, collections, query, paletteHistory);
+  const items = searchCommandsForPalette(query, paletteHistory);
 
   // Reset selected index when query changes
   useEffect(() => {
@@ -98,38 +66,73 @@ export const CommandPaletteModal: React.FC = () => {
 
   if (!commandPaletteOpen) return null;
 
-  function handleSelect(item: UnifiedPaletteItem) {
-    if (item.type === 'command') {
-      const recency = loadPaletteRecency();
-      const updated = recordPaletteAction(recency, { id: item.id, type: 'command' });
-      savePaletteRecency(updated);
-      setPaletteHistory(updated);
-
-      if (item.actionId === 'close_tab') {
-        if (activeEndpointId) {
-          closeEndpoint(activeEndpointId);
-        }
-      } else if (item.actionId === 'close_other_tabs') {
-        if (activeEndpointId) {
-          closeOtherEndpoints(activeEndpointId);
-        }
-      } else if (item.actionId === 'close_all_tabs') {
-        closeAllEndpoints();
-      } else if (item.actionId === 'switch_workspace') {
-        setCommandPaletteOpen(false);
-        setWorkspaceDropdownOpen(true);
-        return;
-      }
-    } else {
-      const recency = loadPaletteRecency();
-      const updated = recordPaletteAction(recency, { id: item.endpoint.id, type: 'endpoint' });
-      savePaletteRecency(updated);
-      setPaletteHistory(updated);
-
-      setActiveEndpoint(item.endpoint);
-      localStorage.setItem('api_lab_active_endpoint_id', item.endpoint.id);
-    }
+  function executeCommand(action: PaletteCommandAction) {
+    const recency = loadPaletteRecency();
+    const updated = recordPaletteAction(recency, { id: action.id, type: 'command' });
+    savePaletteRecency(updated);
+    setPaletteHistory(updated);
     setCommandPaletteOpen(false);
+
+    switch (action.actionId) {
+      case 'close_tab':
+        if (activeEndpointId) closeEndpoint(activeEndpointId);
+        break;
+      case 'close_other_tabs':
+        if (activeEndpointId) closeOtherEndpoints(activeEndpointId);
+        break;
+      case 'close_all_tabs':
+        closeAllEndpoints();
+        break;
+      case 'switch_workspace':
+        setWorkspaceDropdownOpen(true);
+        break;
+      case 'open_endpoint_search':
+        setEndpointSearchOpen(true);
+        break;
+      case 'open_environment':
+        setEnvModalOpen(true);
+        break;
+      case 'open_settings':
+        setAppSettingsOpen(true);
+        break;
+      case 'open_shortcuts':
+        setShortcutsHelpOpen(true);
+        break;
+      case 'open_theme_picker':
+        setThemeModalOpen(true);
+        break;
+      case 'open_members':
+        setMembersModalOpen(true, 'members');
+        break;
+      case 'zoom_in':
+        window.dispatchEvent(new CustomEvent('api-lab-zoom', { detail: 'in' }));
+        break;
+      case 'zoom_out':
+        window.dispatchEvent(new CustomEvent('api-lab-zoom', { detail: 'out' }));
+        break;
+      case 'zoom_reset':
+        window.dispatchEvent(new CustomEvent('api-lab-zoom', { detail: 'reset' }));
+        break;
+      case 'logout':
+        logout();
+        break;
+      case 'prev_tab':
+        if (openEndpoints.length > 1) {
+          const curr = openEndpoints.findIndex((ep) => ep.id === activeEndpointId);
+          const next = curr > 0 ? curr - 1 : openEndpoints.length - 1;
+          openEndpoint(openEndpoints[next]);
+        }
+        break;
+      case 'next_tab':
+        if (openEndpoints.length > 1) {
+          const curr = openEndpoints.findIndex((ep) => ep.id === activeEndpointId);
+          const next = curr >= 0 && curr < openEndpoints.length - 1 ? curr + 1 : 0;
+          openEndpoint(openEndpoints[next]);
+        }
+        break;
+      default:
+        break;
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -142,7 +145,7 @@ export const CommandPaletteModal: React.FC = () => {
     } else if (e.key === 'Enter') {
       e.preventDefault();
       if (items[selectedIndex]) {
-        handleSelect(items[selectedIndex]);
+        executeCommand(items[selectedIndex]);
       }
     } else if (e.key === 'Escape') {
       e.preventDefault();
@@ -162,20 +165,21 @@ export const CommandPaletteModal: React.FC = () => {
       >
         {/* Search Input Bar */}
         <div className="flex items-center px-3.5 py-3 border-b border-zinc-800 gap-2.5 bg-zinc-900/60">
-          <Search size={16} className="text-zinc-400 flex-shrink-0" />
+          <Terminal size={16} className="text-zinc-400 flex-shrink-0" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search method, endpoint, service, URL..."
+            placeholder="Type a command... (Ctrl+P)"
             className="flex-1 bg-transparent text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none font-sans"
           />
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60">
-              Esc to exit
+              Esc
             </kbd>
             <button
+              type="button"
               onClick={() => setCommandPaletteOpen(false)}
               className="text-zinc-500 hover:text-zinc-300 p-0.5"
             >
@@ -184,63 +188,21 @@ export const CommandPaletteModal: React.FC = () => {
           </div>
         </div>
 
-        {/* Results List */}
+        {/* Commands List */}
         <div ref={listRef} className="max-h-80 overflow-y-auto p-1.5 space-y-0.5">
           {items.length === 0 ? (
             <div className="py-8 text-center text-xs text-zinc-500 flex flex-col items-center gap-1.5 select-none">
               <Layers size={24} className="text-zinc-700" />
-              <span>No commands or endpoints matching "{query}"</span>
+              <span>No commands matching &quot;{query}&quot;</span>
             </div>
           ) : (
             items.map((item, idx) => {
               const isSelected = idx === selectedIndex;
 
-              if (item.type === 'command') {
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => handleSelect(item)}
-                    onMouseEnter={() => setSelectedIndex(idx)}
-                    className={`flex items-center justify-between px-3 py-2 rounded text-xs cursor-pointer transition ${
-                      isSelected
-                        ? 'bg-zinc-800 text-white border border-zinc-700/80'
-                        : 'hover:bg-zinc-900/80 text-zinc-300 border border-transparent'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 truncate">
-                      <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 border border-zinc-700/60 flex items-center gap-1 select-none">
-                        <Terminal size={10} />
-                        COMMAND
-                      </span>
-                      <div className="truncate">
-                        <span className="font-semibold text-zinc-200">{item.title}</span>
-                        <span className="text-zinc-500 text-[11px] ml-2">
-                          {item.description}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60 select-none">
-                        {item.keyLabel}
-                      </kbd>
-                      {isSelected && (
-                        <div className="flex items-center gap-1 text-[11px] text-primary font-medium">
-                          <span>Run</span>
-                          <CornerDownLeft size={12} />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              }
-
-              const isHttp = item.protocol === 'http';
-
               return (
                 <div
                   key={item.id}
-                  onClick={() => handleSelect(item)}
+                  onClick={() => executeCommand(item)}
                   onMouseEnter={() => setSelectedIndex(idx)}
                   className={`flex items-center justify-between px-3 py-2 rounded text-xs cursor-pointer transition ${
                     isSelected
@@ -249,69 +211,53 @@ export const CommandPaletteModal: React.FC = () => {
                   }`}
                 >
                   <div className="flex items-center gap-2.5 truncate">
-                    {/* Method Badge */}
-                    {isHttp ? (
-                      <span
-                        className={`text-[9px] font-bold font-mono px-1.5 py-0.5 rounded border ${getHttpMethodBadgeClass(
-                          item.methodLabel
-                        )}`}
-                      >
-                        {item.methodLabel}
-                      </span>
-                    ) : item.methodLabel === 'STREAM' ? (
-                      <span className="text-[9px] font-medium font-mono px-1.5 py-0.5 rounded text-amber-300 bg-amber-950/40 border border-amber-800/30 flex items-center gap-1">
-                        <ArrowDownUp size={10} />
-                        Stream
-                      </span>
-                    ) : (
-                      <span className="text-[9px] font-medium font-mono px-1.5 py-0.5 rounded text-zinc-300 bg-zinc-900 border border-zinc-800 flex items-center gap-1">
-                        <Radio size={10} />
-                        gRPC
-                      </span>
-                    )}
-
-                    {/* Endpoint name and collection */}
+                    <span className="text-[9px] font-bold font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60 flex items-center gap-1 select-none">
+                      {item.category.toUpperCase()}
+                    </span>
                     <div className="truncate">
-                      <span className="font-medium text-zinc-200">
-                        {item.endpoint.name}
-                      </span>
+                      <span className="font-semibold text-zinc-200">{item.title}</span>
                       <span className="text-zinc-500 text-[11px] ml-2">
-                        in {item.collectionName}
+                        {item.description}
                       </span>
-                      {item.urlOrService && (
-                        <div className="text-[10px] text-zinc-500 font-mono truncate">
-                          {item.urlOrService}
-                        </div>
-                      )}
                     </div>
                   </div>
 
-                  {isSelected && (
-                    <div className="flex items-center gap-1 text-[11px] text-primary flex-shrink-0 font-medium">
-                      <span>Jump</span>
-                      <CornerDownLeft size={12} />
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {item.keyLabel && (
+                      <kbd className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/60 select-none">
+                        {item.keyLabel}
+                      </kbd>
+                    )}
+                    {isSelected && (
+                      <div className="flex items-center gap-1 text-[11px] text-primary font-medium">
+                        <span>Run</span>
+                        <CornerDownLeft size={12} />
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })
           )}
         </div>
 
-        {/* Footer info */}
-        <div className="px-3 py-1.5 bg-zinc-900/50 border-t border-zinc-800/80 text-[11px] text-zinc-500 flex items-center justify-between select-none">
+        {/* Footer Hint Bar */}
+        <div className="px-3 py-2 border-t border-zinc-800/80 bg-zinc-950/80 flex items-center justify-between text-[11px] text-zinc-500 select-none">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1">
-              <kbd className="font-mono bg-zinc-800 px-1 rounded text-[10px] text-zinc-400">↑</kbd>
-              <kbd className="font-mono bg-zinc-800 px-1 rounded text-[10px] text-zinc-400">↓</kbd>
-              <span>to navigate</span>
+              <ArrowDownUp size={12} />
+              <span>Navigate</span>
             </span>
             <span className="flex items-center gap-1">
-              <kbd className="font-mono bg-zinc-800 px-1 rounded text-[10px] text-zinc-400">↵</kbd>
-              <span>to select</span>
+              <kbd className="font-mono px-1 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-[10px]">
+                ↵
+              </kbd>
+              <span>Execute</span>
             </span>
           </div>
-          <span>{items.length} item{items.length === 1 ? '' : 's'}</span>
+          <span className="font-mono text-[10px]">
+            {items.length} {items.length === 1 ? 'command' : 'commands'}
+          </span>
         </div>
       </div>
     </div>

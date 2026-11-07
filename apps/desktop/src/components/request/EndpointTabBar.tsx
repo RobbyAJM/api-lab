@@ -20,7 +20,7 @@ export const EndpointTabBar: React.FC = () => {
     closeAllEndpoints,
     isEndpointDirty,
     activeWorkspaceId,
-    setCommandPaletteOpen,
+    setEndpointSearchOpen,
   } = useAppStore();
 
   const [contextMenu, setContextMenu] = useState<{
@@ -74,9 +74,9 @@ export const EndpointTabBar: React.FC = () => {
       <div className="flex items-center justify-between h-9 px-3 bg-zinc-950 border-b border-zinc-800/80 select-none flex-shrink-0">
         <button
           type="button"
-          onClick={() => setCommandPaletteOpen(true)}
+          onClick={() => setEndpointSearchOpen(true)}
           className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 py-1 px-2 rounded hover:bg-zinc-900 transition"
-          title="New Request / Open Palette (Ctrl+K)"
+          title="Search Endpoints (Ctrl+K)"
         >
           <Plus size={13} />
           <span>New Request</span>
@@ -224,9 +224,9 @@ export const EndpointTabBar: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setCommandPaletteOpen(true)}
+            onClick={() => setEndpointSearchOpen(true)}
             className="p-1.5 mx-1 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-900 rounded transition flex-shrink-0"
-            title="New Request / Search (Ctrl+K)"
+            title="Search Endpoints (Ctrl+K)"
           >
             <Plus size={13} />
           </button>

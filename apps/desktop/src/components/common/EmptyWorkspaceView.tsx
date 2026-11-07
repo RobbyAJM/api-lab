@@ -4,7 +4,7 @@ import { useAppStore } from '../../store/useAppStore';
 
 // ponytail: Static actions list; upgrade to dynamic recent requests or collection shortcuts when store supports it
 export const EmptyWorkspaceView: React.FC = () => {
-  const { setCommandPaletteOpen, setShortcutsHelpOpen } = useAppStore();
+  const { setEndpointSearchOpen, setCommandPaletteOpen, setShortcutsHelpOpen } = useAppStore();
 
   const isMac =
     typeof navigator !== 'undefined' &&
@@ -14,9 +14,15 @@ export const EmptyWorkspaceView: React.FC = () => {
 
   const actions = [
     {
-      label: 'Find in workspace',
-      description: 'Search endpoints, collections, and environments',
+      label: 'Find endpoint',
+      description: 'Search endpoints, methods, and services',
       keyLabel: `${modKey} K`,
+      onClick: () => setEndpointSearchOpen(true),
+    },
+    {
+      label: 'Command palette',
+      description: 'Search and execute workspace commands',
+      keyLabel: `${modKey} P`,
       onClick: () => setCommandPaletteOpen(true),
     },
     {

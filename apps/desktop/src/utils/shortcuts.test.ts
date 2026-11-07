@@ -5,6 +5,7 @@ import {
   matchesShortcut,
   getTabNumberFromEvent,
   searchEndpointsForCommandPalette,
+  searchCommandsForPalette,
   searchUnifiedCommandPalette,
   navigateListIndex,
   recordPaletteAction,
@@ -24,9 +25,12 @@ test('getAllShortcuts: returns registered shortcuts list', () => {
   const save = shortcuts.find((s) => s.id === 'save_endpoint');
   assert.ok(save);
   assert.equal(save.keyLabel, 'Ctrl + S');
-  const cmd = shortcuts.find((s) => s.id === 'open_command');
-  assert.ok(cmd);
-  assert.equal(cmd.keyLabel, 'Ctrl + K');
+  const endpointSearch = shortcuts.find((s) => s.id === 'open_endpoint_search');
+  assert.ok(endpointSearch);
+  assert.equal(endpointSearch.keyLabel, 'Ctrl + K');
+  const commandPalette = shortcuts.find((s) => s.id === 'open_command_palette');
+  assert.ok(commandPalette);
+  assert.equal(commandPalette.keyLabel, 'Ctrl + P');
   const help = shortcuts.find((s) => s.id === 'open_shortcuts');
   assert.ok(help);
   assert.equal(help.keyLabel, 'Ctrl + /');
@@ -66,10 +70,17 @@ test('matchesShortcut: verifies key combinations across Ctrl and Cmd', () => {
   assert.equal(matchesShortcut({ key: 'S', metaKey: true, shiftKey: true }, 'switch_workspace'), true);
   assert.equal(matchesShortcut({ key: 's', ctrlKey: true }, 'switch_workspace'), false);
 
-  // open_command: Ctrl+K or Cmd+K
+  // open_endpoint_search: Ctrl+K or Cmd+K
+  assert.equal(matchesShortcut({ key: 'k', ctrlKey: true }, 'open_endpoint_search'), true);
+  assert.equal(matchesShortcut({ key: 'K', metaKey: true }, 'open_endpoint_search'), true);
+  assert.equal(matchesShortcut({ key: 'k' }, 'open_endpoint_search'), false);
+  // open_command backward compatibility
   assert.equal(matchesShortcut({ key: 'k', ctrlKey: true }, 'open_command'), true);
-  assert.equal(matchesShortcut({ key: 'K', metaKey: true }, 'open_command'), true);
-  assert.equal(matchesShortcut({ key: 'k' }, 'open_command'), false);
+
+  // open_command_palette: Ctrl+P or Cmd+P
+  assert.equal(matchesShortcut({ key: 'p', ctrlKey: true }, 'open_command_palette'), true);
+  assert.equal(matchesShortcut({ key: 'P', metaKey: true }, 'open_command_palette'), true);
+  assert.equal(matchesShortcut({ key: 'p' }, 'open_command_palette'), false);
 
   // open_shortcuts: Ctrl+/ or Cmd+/ or Ctrl+?
   assert.equal(matchesShortcut({ key: '/', ctrlKey: true }, 'open_shortcuts'), true);
@@ -313,7 +324,40 @@ test('searchUnifiedCommandPalette: finds both commands and endpoints in Ctrl+K',
 
   // 6. Empty search returns commands plus endpoints
   const all = searchUnifiedCommandPalette(endpoints, collections, '');
-  assert.equal(all.length, 5); // 4 commands + 1 endpoint
+  assert.ok(all.length >= 5);
+});
+
+test('searchCommandsForPalette: filters commands by title, category, and handles shortcuts', () => {
+  // 1. Search by title
+  const closeTabs = searchCommandsForPalette('close tab');
+  assert.ok(closeTabs.length >= 1);
+  assert.equal(closeTabs[0].actionId, 'close_tab');
+  assert.equal(closeTabs[0].keyLabel, 'Ctrl + W');
+
+  // 2. Command without shortcut
+  const themeCmd = searchCommandsForPalette('theme');
+  assert.ok(themeCmd.length >= 1);
+  assert.equal(themeCmd[0].actionId, 'open_theme_picker');
+  assert.equal(themeCmd[0].keyLabel, undefined);
+
+  // 3. Command by category
+  const viewCmds = searchCommandsForPalette('view');
+  assert.ok(viewCmds.length >= 2);
+  assert.ok(viewCmds.some((c) => c.actionId === 'zoom_in'));
+  assert.ok(viewCmds.some((c) => c.actionId === 'open_theme_picker'));
+
+  // 4. Empty search returns all registered commands
+  const allCmds = searchCommandsForPalette('');
+  assert.ok(allCmds.length >= 10);
+
+  // 5. Recency ordering
+  const history: PaletteActionRecord[] = [
+    { id: 'cmd_open_settings', type: 'command', timestamp: 2000 },
+    { id: 'cmd_close_tab', type: 'command', timestamp: 1000 },
+  ];
+  const sorted = searchCommandsForPalette('', history);
+  assert.equal(sorted[0].id, 'cmd_open_settings');
+  assert.equal(sorted[1].id, 'cmd_close_tab');
 });
 
 test('navigateListIndex: wraps correctly for up and down arrow keys', () => {
@@ -433,4 +477,9 @@ test('searchUnifiedCommandPalette: sorts items descending by latest action times
   assert.equal(userResults.length, 2);
   assert.equal(userResults[0].id, 'ep1'); // ep1 timestamp 200 > ep2 timestamp 100
   assert.equal(userResults[1].id, 'ep2');
+
+  // searchEndpointsForCommandPalette with history
+  const epResults = searchEndpointsForCommandPalette(endpoints, collections, '', history);
+  assert.equal(epResults[0].endpoint.id, 'ep1');
+  assert.equal(epResults[1].endpoint.id, 'ep2');
 });

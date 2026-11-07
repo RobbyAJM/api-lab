@@ -18,6 +18,7 @@ import { CollectionSettingsModal } from './components/collections/CollectionSett
 import { MembersModal } from './components/members/MembersModal';
 import { WorkspaceSettingsModal } from './components/workspaces/WorkspaceSettingsModal';
 import { CommandPaletteModal } from './components/common/CommandPaletteModal';
+import { EndpointSearchModal } from './components/common/EndpointSearchModal';
 import { ShortcutsHelpModal } from './components/common/ShortcutsHelpModal';
 import { ThemePickerModal } from './components/common/ThemePickerModal';
 import { AppSettingsModal } from './components/settings/AppSettingsModal';
@@ -57,6 +58,8 @@ export const App: React.FC = () => {
     setWorkspaceModalOpen,
     workspaceDropdownOpen,
     setWorkspaceDropdownOpen,
+    endpointSearchOpen,
+    setEndpointSearchOpen,
     commandPaletteOpen,
     setCommandPaletteOpen,
     shortcutsHelpOpen,
@@ -161,6 +164,23 @@ export const App: React.FC = () => {
     void applyZoom(zoomFactor);
   }, []);
 
+  // Listen for programmatic zoom actions from Command Palette
+  useEffect(() => {
+    const handleZoomEvent = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (detail === 'in' || detail === 'out' || detail === 'reset') {
+        setZoomFactor((curr) => {
+          const next = calculateNextZoom(detail === 'reset' ? 1.0 : curr, detail);
+          localStorage.setItem(ZOOM_STORAGE_KEY, String(next));
+          void applyZoom(next);
+          return next;
+        });
+      }
+    };
+    window.addEventListener('api-lab-zoom', handleZoomEvent);
+    return () => window.removeEventListener('api-lab-zoom', handleZoomEvent);
+  }, []);
+
   // Global Keyboard Shortcuts
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -200,17 +220,25 @@ export const App: React.FC = () => {
       // Switch Workspace shortcut (Ctrl + Shift + S)
       if (matchesShortcut(e, 'switch_workspace')) {
         e.preventDefault();
+        setEndpointSearchOpen(false);
         setCommandPaletteOpen(false);
         setWorkspaceDropdownOpen(!workspaceDropdownOpen);
         return;
       }
 
-      // 1. Open / Toggle Command Palette (Ctrl + K)
-      if (matchesShortcut(e, 'open_command')) {
+      // 1. Open / Toggle Endpoint Search (Ctrl + K)
+      if (matchesShortcut(e, 'open_endpoint_search')) {
         e.preventDefault();
+        setCommandPaletteOpen(false);
+        setEndpointSearchOpen(!endpointSearchOpen);
+      }
+      // 2. Open / Toggle Command Palette (Ctrl + P)
+      else if (matchesShortcut(e, 'open_command_palette')) {
+        e.preventDefault();
+        setEndpointSearchOpen(false);
         setCommandPaletteOpen(!commandPaletteOpen);
       }
-      // 2. Open / Toggle Shortcuts Help (Ctrl + /) - skip if typing in input or code editor
+      // 3. Open / Toggle Shortcuts Help (Ctrl + /) - skip if typing in input or code editor
       else if (matchesShortcut(e, 'open_shortcuts')) {
         const target = e.target as HTMLElement | null;
         const isEditing = target && (
@@ -281,7 +309,10 @@ export const App: React.FC = () => {
       }
       // 9. Escape closes any active top modal
       else if (matchesShortcut(e, 'escape')) {
-        if (commandPaletteOpen) {
+        if (endpointSearchOpen) {
+          e.preventDefault();
+          setEndpointSearchOpen(false);
+        } else if (commandPaletteOpen) {
           e.preventDefault();
           setCommandPaletteOpen(false);
         } else if (appSettingsOpen) {
@@ -309,6 +340,7 @@ export const App: React.FC = () => {
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [
+    endpointSearchOpen,
     commandPaletteOpen,
     appSettingsOpen,
     shortcutsHelpOpen,
@@ -319,6 +351,7 @@ export const App: React.FC = () => {
     openEndpoints,
     openEndpoint,
     activeEndpointId,
+    setEndpointSearchOpen,
     setCommandPaletteOpen,
     setAppSettingsOpen,
     setShortcutsHelpOpen,
@@ -345,6 +378,7 @@ export const App: React.FC = () => {
       <CollectionSettingsModal />
       <MembersModal />
       <WorkspaceSettingsModal />
+      <EndpointSearchModal />
       <CommandPaletteModal />
       <ShortcutsHelpModal />
       <ThemePickerModal />

@@ -16,7 +16,7 @@ import { ProfileDropdown } from './ProfileDropdown';
 import { WindowControls } from '../common/WindowControls';
 
 export const TopBar: React.FC = () => {
-  const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen);
+  const setEndpointSearchOpen = useAppStore((s) => s.setEndpointSearchOpen);
   const setMembersModalOpen = useAppStore((s) => s.setMembersModalOpen);
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
   const lastToggleRef = useRef(0);
@@ -140,13 +140,13 @@ export const TopBar: React.FC = () => {
       <div className="w-80 max-w-sm mx-2" data-tauri-no-drag>
         <button
           type="button"
-          onClick={() => setCommandPaletteOpen(true)}
+          onClick={() => setEndpointSearchOpen(true)}
           className="w-full h-6 px-2.5 bg-zinc-900 hover:bg-zinc-800/90 border border-zinc-800 hover:border-zinc-700 rounded flex items-center justify-between text-xs text-zinc-400 transition group focus:outline-none"
-          title="Search workspaces, requests, collections (Ctrl+K)"
+          title="Search endpoints, methods, services (Ctrl+K)"
         >
           <div className="flex items-center gap-2 truncate">
             <Search size={12} className="text-zinc-500 group-hover:text-zinc-400" />
-            <span className="truncate">Search API Lab...</span>
+            <span className="truncate">Search endpoints...</span>
           </div>
           <kbd className="px-1.5 py-0.2 bg-zinc-950 border border-zinc-800 rounded text-[10px] font-mono text-zinc-500 group-hover:text-zinc-400 flex-shrink-0">
             Ctrl K
