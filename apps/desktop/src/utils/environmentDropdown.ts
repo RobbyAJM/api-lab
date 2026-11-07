@@ -51,8 +51,10 @@ export function findActiveEnvironment<T extends { id: string }>(
  */
 export function shouldShowEnvironmentDropdownSkeleton(
   isLoading: boolean,
-  environmentCount: number
+  environmentCount: number,
+  isBootstrapping = false
 ): boolean {
+  if (isBootstrapping) return true;
   return isLoading && environmentCount === 0;
 }
 

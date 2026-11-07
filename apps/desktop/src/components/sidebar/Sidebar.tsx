@@ -64,7 +64,9 @@ import {
 export const Sidebar: React.FC = () => {
   const queryClient = useQueryClient();
   const {
+    token,
     user,
+    workspaces,
     activeWorkspaceId,
     activeEnvironmentId,
     setActiveEnvironmentId,
@@ -145,7 +147,7 @@ export const Sidebar: React.FC = () => {
   }, [environments, activeWorkspaceId, activeEnvironmentId, setActiveEnvironmentId]);
 
   // 2. Fetch collections for active workspace
-  const { data: collections = [], isLoading: isCollectionsLoading } = useQuery<Collection[]>({
+  const { data: collections = [], isLoading: isCollectionsQueryLoading } = useQuery<Collection[]>({
     queryKey: ['collections', activeWorkspaceId],
     queryFn: () =>
       activeWorkspaceId
@@ -153,6 +155,10 @@ export const Sidebar: React.FC = () => {
         : Promise.resolve([]),
     enabled: !!activeWorkspaceId,
   });
+
+  const isCollectionsLoading =
+    (!!token && (!user || workspaces.length === 0)) ||
+    (isCollectionsQueryLoading && collections.length === 0);
 
   // Delete Collection
   const [collectionToDelete, setCollectionToDelete] = useState<{ id: string; name: string } | null>(null);
@@ -890,6 +896,14 @@ const CollectionNode: React.FC<{
                 <EndpointItem key={endpoint.id} endpoint={endpoint} />
               ))}
 
+              {/* Direct Collection Endpoints skeleton */}
+              {isEndpointsLoading && endpoints.length === 0 && (hasCollectionMatch && searchQuery ? fullTree : filteredTree).rootFolders.length === 0 && (
+                <div className="flex items-center gap-2 py-1 px-1" aria-busy="true" aria-label="Loading endpoints">
+                  <Skeleton className="w-6 h-3 rounded-sm" />
+                  <Skeleton className="w-24 h-3 rounded-sm" />
+                </div>
+              )}
+
               {/* Root Folders and their recursive children */}
               {(hasCollectionMatch && searchQuery ? fullTree : filteredTree).rootFolders.map((node) => (
                 <FolderTreeNodeComponent
@@ -901,6 +915,7 @@ const CollectionNode: React.FC<{
                   highlightedFolderIds={highlightedFolderIds}
                   collapseSignal={collapseSignal}
                   level={0}
+                  isEndpointsLoading={isEndpointsLoading && endpoints.length === 0}
                   onSyncReflection={(folderId) => {
                     setSyncTargetFolderId(folderId);
                     setShowSyncModal(true);
@@ -928,6 +943,7 @@ const FolderTreeNodeComponent: React.FC<{
   highlightedFolderIds?: Set<string>;
   collapseSignal?: number;
   level?: number;
+  isEndpointsLoading?: boolean;
   onSyncReflection?: (folderId: string) => void;
   onSyncSwagger?: (folderId: string) => void;
 }> = ({
@@ -938,6 +954,7 @@ const FolderTreeNodeComponent: React.FC<{
   highlightedFolderIds,
   collapseSignal = 0,
   level = 0,
+  isEndpointsLoading = false,
   onSyncReflection,
   onSyncSwagger,
 }) => {
@@ -1308,6 +1325,14 @@ const FolderTreeNodeComponent: React.FC<{
 
       {isAutoExpanded && (
         <div className="pl-3 space-y-0.5 border-l border-zinc-800/40 ml-2">
+          {/* Skeleton while endpoints in folder are loading */}
+          {isEndpointsLoading && node.endpoints.length === 0 && node.children.length === 0 && (
+            <div className="flex items-center gap-2 py-1 px-0.5" aria-busy="true" aria-label="Loading endpoints">
+              <Skeleton className="w-6 h-3 rounded-sm" />
+              <Skeleton className="w-20 h-3 rounded-sm" />
+            </div>
+          )}
+
           {/* Child Endpoints */}
           {node.endpoints.map((ep) => (
             <EndpointItem key={ep.id} endpoint={ep} />
@@ -1324,6 +1349,7 @@ const FolderTreeNodeComponent: React.FC<{
               highlightedFolderIds={highlightedFolderIds}
               collapseSignal={collapseSignal}
               level={level + 1}
+              isEndpointsLoading={isEndpointsLoading}
               onSyncReflection={onSyncReflection}
               onSyncSwagger={onSyncSwagger}
             />

@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useIsFetching } from '@tanstack/react-query';
 import { Users, ChevronDown, Plus, Search, Star, Check, LayoutGrid } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { filterWorkspaces, sortWorkspaces } from '../../utils/workspacePicker';
@@ -30,9 +29,9 @@ export const WorkspaceDropdown: React.FC = () => {
   const setActiveWorkspaceId = useAppStore((s) => s.setActiveWorkspaceId);
   const setWorkspaceModalOpen = useAppStore((s) => s.setWorkspaceModalOpen);
   const token = useAppStore((s) => s.token);
+  const user = useAppStore((s) => s.user);
 
-  const isFetchingMe = useIsFetching({ queryKey: ['auth_me', token] }) > 0;
-  const isLoading = !!token && isFetchingMe && workspaces.length === 0;
+  const isLoading = !!token && (!user || workspaces.length === 0);
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
 

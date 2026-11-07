@@ -140,5 +140,7 @@ test('shouldShowEnvironmentDropdownSkeleton: checks loading flag and cached envi
   assert.equal(shouldShowEnvironmentDropdownSkeleton(true, 3), false);
   assert.equal(shouldShowEnvironmentDropdownSkeleton(false, 0), false);
   assert.equal(shouldShowEnvironmentDropdownSkeleton(false, 3), false);
+  assert.equal(shouldShowEnvironmentDropdownSkeleton(false, 0, true), true);
+  assert.equal(shouldShowEnvironmentDropdownSkeleton(false, 3, true), true);
 });
 

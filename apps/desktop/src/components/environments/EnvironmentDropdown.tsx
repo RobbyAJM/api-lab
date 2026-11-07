@@ -41,6 +41,9 @@ export function EnvironmentDropdown({
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const {
+    token,
+    user,
+    workspaces,
     activeWorkspaceId,
     activeEnvironmentId: storeEnvId,
     setActiveEnvironmentId: setStoreEnvId,
@@ -62,9 +65,11 @@ export function EnvironmentDropdown({
 
   const environments = propEnvironments || fetchedEnvironments;
   const activeEnv = findActiveEnvironment(environments, activeEnvironmentId);
+  const isBootstrapping = !!token && (!user || workspaces.length === 0);
   const isEffectiveLoading = shouldShowEnvironmentDropdownSkeleton(
     propLoading !== undefined ? propLoading : isFetchingEnvs,
-    environments.length
+    environments.length,
+    isBootstrapping
   );
 
   // Close on outside click
