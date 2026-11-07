@@ -37,6 +37,7 @@ import { CollectionSettingsModal } from '../collections/CollectionSettingsModal'
 import { SyncReflectionModal } from '../collections/SyncReflectionModal';
 import { SyncSwaggerModal } from '../collections/SyncSwaggerModal';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
+import { Skeleton } from '../common/Skeleton';
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 import { getHttpMethodColor } from '../../utils/httpMethodUtils';
 import {
@@ -144,7 +145,7 @@ export const Sidebar: React.FC = () => {
   }, [environments, activeWorkspaceId, activeEnvironmentId, setActiveEnvironmentId]);
 
   // 2. Fetch collections for active workspace
-  const { data: collections = [] } = useQuery<Collection[]>({
+  const { data: collections = [], isLoading: isCollectionsLoading } = useQuery<Collection[]>({
     queryKey: ['collections', activeWorkspaceId],
     queryFn: () =>
       activeWorkspaceId
@@ -315,26 +316,69 @@ export const Sidebar: React.FC = () => {
             )}
           </div>
         )}
-        {collections.map((coll) => (
-          <CollectionNode
-            key={coll.id}
-            collection={coll}
-            searchQuery={searchQuery}
-            collapseSignal={collapseSignal}
-            onDelete={() => setCollectionToDelete({ id: coll.id, name: coll.name })}
-          />
-        ))}
+        {isCollectionsLoading && collections.length === 0 ? (
+          <div className="px-2.5 py-2 space-y-3" aria-busy="true" aria-label="Loading collections">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 py-0.5">
+                <Skeleton className="w-3 h-3 rounded-sm" />
+                <Skeleton className="w-28 h-3.5 rounded-sm" />
+              </div>
+              <div className="pl-4 space-y-1">
+                <div className="flex items-center gap-2 py-0.5">
+                  <Skeleton className="w-7 h-3 rounded-sm" />
+                  <Skeleton className="w-24 h-3 rounded-sm" />
+                </div>
+                <div className="flex items-center gap-2 py-0.5">
+                  <Skeleton className="w-7 h-3 rounded-sm" />
+                  <Skeleton className="w-20 h-3 rounded-sm" />
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 py-0.5">
+                <Skeleton className="w-3 h-3 rounded-sm" />
+                <Skeleton className="w-32 h-3.5 rounded-sm" />
+              </div>
+              <div className="pl-4 space-y-1">
+                <div className="flex items-center gap-2 py-0.5">
+                  <Skeleton className="w-3 h-3 rounded-sm" />
+                  <Skeleton className="w-16 h-3 rounded-sm" />
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          collections.map((coll) => (
+            <CollectionNode
+              key={coll.id}
+              collection={coll}
+              searchQuery={searchQuery}
+              collapseSignal={collapseSignal}
+              onDelete={() => setCollectionToDelete({ id: coll.id, name: coll.name })}
+            />
+          ))
+        )}
       </div>
 
       {/* Footer / User Profile */}
       <div className="p-2 border-t border-zinc-800/60 flex items-center justify-between text-xs bg-zinc-950 flex-shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Avatar avatar={user?.avatar} name={user?.name} size={24} />
-          <div className="truncate min-w-0">
-            <div className="font-medium text-zinc-200 text-xs truncate leading-tight">{user?.name || 'Admin'}</div>
-            <div className="text-[10px] text-zinc-500 font-mono truncate leading-tight">{user?.email || 'admin@nutrade.internal'}</div>
+        {!user ? (
+          <div className="flex items-center gap-2 min-w-0" aria-busy="true" aria-label="Loading user profile">
+            <Skeleton className="w-6 h-6 rounded-full flex-shrink-0" />
+            <div className="space-y-1">
+              <Skeleton className="w-16 h-3 rounded-sm" />
+              <Skeleton className="w-24 h-2.5 rounded-sm" />
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center gap-2 min-w-0">
+            <Avatar avatar={user.avatar} name={user.name} size={24} />
+            <div className="truncate min-w-0">
+              <div className="font-medium text-zinc-200 text-xs truncate leading-tight">{user.name}</div>
+              <div className="text-[10px] text-zinc-500 font-mono truncate leading-tight">{user.email}</div>
+            </div>
+          </div>
+        )}
 
         <button
           type="button"
@@ -424,13 +468,13 @@ const CollectionNode: React.FC<{
   }, []);
 
   // Fetch Folders
-  const { data: folders = [] } = useQuery<CollectionFolder[]>({
+  const { data: folders = [], isLoading: isFoldersLoading } = useQuery<CollectionFolder[]>({
     queryKey: ['folders', collection.id],
     queryFn: () => apiRequest(`/collections/${collection.id}/folders`),
   });
 
   // Fetch Endpoints
-  const { data: endpoints = [] } = useQuery<Endpoint[]>({
+  const { data: endpoints = [], isLoading: isEndpointsLoading } = useQuery<Endpoint[]>({
     queryKey: ['endpoints', collection.id],
     queryFn: () => apiRequest(`/collections/${collection.id}/endpoints`),
   });
@@ -828,32 +872,47 @@ const CollectionNode: React.FC<{
       {/* Recursive Multi-Level Tree Rendering (Feature 2) */}
       {isExpanded && (
         <div className="pl-3 pr-1 pb-1 space-y-0.5">
-          {/* Direct Collection Endpoints */}
-          {(hasCollectionMatch && searchQuery ? fullTree : filteredTree).rootEndpoints.map((endpoint) => (
-            <EndpointItem key={endpoint.id} endpoint={endpoint} />
-          ))}
+          {(isFoldersLoading || isEndpointsLoading) && folders.length === 0 && endpoints.length === 0 ? (
+            <div className="pl-3 py-1 space-y-1.5" aria-busy="true" aria-label="Loading contents">
+              <div className="flex items-center gap-2 py-0.5">
+                <Skeleton className="w-3 h-3 rounded-sm" />
+                <Skeleton className="w-20 h-3 rounded-sm" />
+              </div>
+              <div className="flex items-center gap-2 py-0.5">
+                <Skeleton className="w-7 h-3 rounded-sm" />
+                <Skeleton className="w-28 h-3 rounded-sm" />
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Direct Collection Endpoints */}
+              {(hasCollectionMatch && searchQuery ? fullTree : filteredTree).rootEndpoints.map((endpoint) => (
+                <EndpointItem key={endpoint.id} endpoint={endpoint} />
+              ))}
 
-          {/* Root Folders and their recursive children */}
-          {(hasCollectionMatch && searchQuery ? fullTree : filteredTree).rootFolders.map((node) => (
-            <FolderTreeNodeComponent
-              key={node.folder.id}
-              node={node}
-              collectionId={collection.id}
-              collectionSettings={collection.settings}
-              expandedFolderIds={hasCollectionMatch && searchQuery ? new Set(folders.map((f) => f.id)) : matchedFolderIds}
-              highlightedFolderIds={highlightedFolderIds}
-              collapseSignal={collapseSignal}
-              level={0}
-              onSyncReflection={(folderId) => {
-                setSyncTargetFolderId(folderId);
-                setShowSyncModal(true);
-              }}
-              onSyncSwagger={(folderId) => {
-                setSyncTargetSwaggerFolderId(folderId);
-                setShowSwaggerSyncModal(true);
-              }}
-            />
-          ))}
+              {/* Root Folders and their recursive children */}
+              {(hasCollectionMatch && searchQuery ? fullTree : filteredTree).rootFolders.map((node) => (
+                <FolderTreeNodeComponent
+                  key={node.folder.id}
+                  node={node}
+                  collectionId={collection.id}
+                  collectionSettings={collection.settings}
+                  expandedFolderIds={hasCollectionMatch && searchQuery ? new Set(folders.map((f) => f.id)) : matchedFolderIds}
+                  highlightedFolderIds={highlightedFolderIds}
+                  collapseSignal={collapseSignal}
+                  level={0}
+                  onSyncReflection={(folderId) => {
+                    setSyncTargetFolderId(folderId);
+                    setShowSyncModal(true);
+                  }}
+                  onSyncSwagger={(folderId) => {
+                    setSyncTargetSwaggerFolderId(folderId);
+                    setShowSwaggerSyncModal(true);
+                  }}
+                />
+              ))}
+            </>
+          )}
         </div>
       )}
     </div>

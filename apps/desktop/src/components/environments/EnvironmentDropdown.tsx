@@ -4,11 +4,13 @@ import { ChevronDown, Check, Settings } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Environment } from '@api-lab/api-types';
+import { Skeleton } from '../common/Skeleton';
 import {
   getEnvironmentDropdownSizeClass,
   getEnvironmentDropdownTitle,
   getEnvironmentDropdownLabel,
   findActiveEnvironment,
+  shouldShowEnvironmentDropdownSkeleton,
 } from '../../utils/environmentDropdown';
 
 // ponytail: environment search filter skipped; add when workspaces exceed 20 environments.
@@ -21,6 +23,7 @@ export interface EnvironmentDropdownProps {
   value?: string | null;
   onChange?: (id: string | null) => void;
   environments?: Environment[];
+  isLoading?: boolean;
 }
 
 export function EnvironmentDropdown({
@@ -31,6 +34,7 @@ export function EnvironmentDropdown({
   value: propValue,
   onChange: propOnChange,
   environments: propEnvironments,
+  isLoading: propLoading,
 }: EnvironmentDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -47,7 +51,7 @@ export function EnvironmentDropdown({
   const setActiveEnvironmentId = propOnChange || setStoreEnvId;
 
   // Query workspace environments if not provided via props
-  const { data: fetchedEnvironments = [] } = useQuery<Environment[]>({
+  const { data: fetchedEnvironments = [], isLoading: isFetchingEnvs } = useQuery<Environment[]>({
     queryKey: ['environments', activeWorkspaceId],
     queryFn: () =>
       activeWorkspaceId
@@ -58,6 +62,10 @@ export function EnvironmentDropdown({
 
   const environments = propEnvironments || fetchedEnvironments;
   const activeEnv = findActiveEnvironment(environments, activeEnvironmentId);
+  const isEffectiveLoading = shouldShowEnvironmentDropdownSkeleton(
+    propLoading !== undefined ? propLoading : isFetchingEnvs,
+    environments.length
+  );
 
   // Close on outside click
   useEffect(() => {
@@ -85,6 +93,19 @@ export function EnvironmentDropdown({
   }, [isOpen]);
 
   const sizeClasses = getEnvironmentDropdownSizeClass(size);
+
+  if (isEffectiveLoading) {
+    return (
+      <div
+        className={`flex items-center gap-2 bg-zinc-900/60 border border-zinc-800/80 rounded-md font-mono select-none ${sizeClasses} ${className}`}
+        aria-busy="true"
+        aria-label="Loading environment"
+      >
+        <Skeleton className="w-1.5 h-1.5 rounded-full" />
+        <Skeleton className="w-16 h-2.5 rounded-sm" />
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={`relative inline-block ${className}`}>

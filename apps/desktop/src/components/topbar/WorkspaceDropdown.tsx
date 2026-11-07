@@ -1,8 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useIsFetching } from '@tanstack/react-query';
 import { Users, ChevronDown, Plus, Search, Star, Check, LayoutGrid } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { filterWorkspaces, sortWorkspaces } from '../../utils/workspacePicker';
 import { navigateListIndex } from '../../utils/shortcuts';
+import { Skeleton } from '../common/Skeleton';
 
 export const WorkspaceDropdown: React.FC = () => {
   const workspaceDropdownOpen = useAppStore((s) => s.workspaceDropdownOpen);
@@ -27,6 +29,10 @@ export const WorkspaceDropdown: React.FC = () => {
   const activeWorkspaceId = useAppStore((s) => s.activeWorkspaceId);
   const setActiveWorkspaceId = useAppStore((s) => s.setActiveWorkspaceId);
   const setWorkspaceModalOpen = useAppStore((s) => s.setWorkspaceModalOpen);
+  const token = useAppStore((s) => s.token);
+
+  const isFetchingMe = useIsFetching({ queryKey: ['auth_me', token] }) > 0;
+  const isLoading = !!token && isFetchingMe && workspaces.length === 0;
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
 
@@ -79,6 +85,19 @@ export const WorkspaceDropdown: React.FC = () => {
   useEffect(() => {
     setHighlightedIndex(0);
   }, [search, open]);
+
+  if (isLoading) {
+    return (
+      <div
+        className="flex items-center gap-1.5 px-2 py-1 select-none"
+        aria-busy="true"
+        aria-label="Loading workspace"
+      >
+        <Skeleton className="w-3.5 h-3.5 rounded-sm" />
+        <Skeleton className="w-20 h-3 rounded-sm" />
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className="relative flex items-center">

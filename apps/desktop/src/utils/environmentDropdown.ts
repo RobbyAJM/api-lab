@@ -47,6 +47,16 @@ export function findActiveEnvironment<T extends { id: string }>(
 }
 
 /**
+ * Determines whether environment dropdown should render skeleton loading state.
+ */
+export function shouldShowEnvironmentDropdownSkeleton(
+  isLoading: boolean,
+  environmentCount: number
+): boolean {
+  return isLoading && environmentCount === 0;
+}
+
+/**
  * Returns localStorage key for a workspace's active environment.
  */
 export function getWorkspaceEnvStorageKey(workspaceId: string): string {

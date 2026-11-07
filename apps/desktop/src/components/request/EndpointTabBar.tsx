@@ -32,7 +32,7 @@ export const EndpointTabBar: React.FC = () => {
   const [confirmEndpoint, setConfirmEndpoint] = useState<Endpoint | null>(null);
 
   // Fetch environments for active workspace
-  const { data: environments = [] } = useQuery<Environment[]>({
+  const { data: environments = [], isLoading: isEnvironmentsLoading } = useQuery<Environment[]>({
     queryKey: ['environments', activeWorkspaceId],
     queryFn: () =>
       activeWorkspaceId
@@ -64,7 +64,7 @@ export const EndpointTabBar: React.FC = () => {
   function renderEnvironmentDropdown() {
     return (
       <div className="flex items-center ml-auto pl-2 flex-shrink-0">
-        <EnvironmentDropdown environments={environments} align="right" />
+        <EnvironmentDropdown environments={environments} isLoading={isEnvironmentsLoading} align="right" />
       </div>
     );
   }

@@ -5,6 +5,7 @@ import {
   getEnvironmentDropdownLabel,
   getEnvironmentDropdownTitle,
   findActiveEnvironment,
+  shouldShowEnvironmentDropdownSkeleton,
   getWorkspaceEnvStorageKey,
   getStoredWorkspaceEnvironment,
   setStoredWorkspaceEnvironment,
@@ -132,5 +133,12 @@ test('resolveWorkspaceEnvironment: resolves matching, default, and explicit none
   assert.equal(resolveWorkspaceEnvironment([], 'env-1'), null);
   assert.equal(resolveWorkspaceEnvironment([], null), null);
   assert.equal(resolveWorkspaceEnvironment([], NO_ENVIRONMENT_VALUE), null);
+});
+
+test('shouldShowEnvironmentDropdownSkeleton: checks loading flag and cached environments', () => {
+  assert.equal(shouldShowEnvironmentDropdownSkeleton(true, 0), true);
+  assert.equal(shouldShowEnvironmentDropdownSkeleton(true, 3), false);
+  assert.equal(shouldShowEnvironmentDropdownSkeleton(false, 0), false);
+  assert.equal(shouldShowEnvironmentDropdownSkeleton(false, 3), false);
 });
 

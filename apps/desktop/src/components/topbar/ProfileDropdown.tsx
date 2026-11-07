@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Settings, LogOut } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { Avatar } from '../common/Avatar';
+import { Skeleton } from '../common/Skeleton';
 
 export const ProfileDropdown: React.FC = () => {
   const [open, setOpen] = useState(false);
@@ -26,7 +27,16 @@ export const ProfileDropdown: React.FC = () => {
     };
   }, [open]);
 
+  const token = useAppStore((s) => s.token);
+
   if (!user) {
+    if (token) {
+      return (
+        <div className="p-0.5" aria-busy="true" aria-label="Loading profile">
+          <Skeleton className="w-6 h-6 rounded-full" />
+        </div>
+      );
+    }
     return (
       <button
         type="button"
