@@ -9,6 +9,7 @@ import {
   getFolderGrpcUrl,
   isSwaggerFolder,
   getFolderSwaggerUrl,
+  canAddEndpointToFolder,
   findSwaggerFolderForEndpoint,
   getSidebarItemType,
   resolveRootFolderId,
@@ -305,6 +306,67 @@ test('isSwaggerFolder and getFolderSwaggerUrl: identifies swagger folder with co
   assert.equal(isSwaggerFolder(legacySwaggerFolder, settings), true);
   assert.equal(getFolderSwaggerUrl(legacySwaggerFolder, settings), 'http://localhost:9090/swagger/combined/nuconnector.swagger.json');
   assert.equal(getSidebarItemType('folder', legacySwaggerFolder, settings), 'swagger_folder');
+});
+
+test('canAddEndpointToFolder: allows manual endpoints for normal folders, disallows for swagger and reflection', () => {
+  const normalFolder: CollectionFolder = {
+    id: 'f-norm',
+    collection_id: 'c1',
+    name: 'Normal Folder',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+  const swaggerFolder: CollectionFolder = {
+    id: 'f-swag',
+    collection_id: 'c1',
+    name: 'Swagger Folder',
+    swagger_url: 'http://localhost:9090/swagger.json',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+  const reflectionFolder: CollectionFolder = {
+    id: 'f-refl',
+    collection_id: 'c1',
+    name: 'Reflection Folder',
+    grpc_url: 'localhost:50051',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+  const legacySwaggerFolder: CollectionFolder = {
+    id: 'f-legacy-swag',
+    collection_id: 'c1',
+    name: 'Legacy Swagger',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+  const legacyReflectionFolder: CollectionFolder = {
+    id: 'f-legacy-refl',
+    collection_id: 'c1',
+    name: 'Legacy Reflection',
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+
+  const settings = {
+    swagger_sources: {
+      'f-legacy-swag': { swagger_url: 'http://localhost:9090/swagger.json' },
+    },
+    grpc_sources: {
+      'f-legacy-refl': { server_address: 'localhost:50051' },
+    },
+  };
+
+  assert.equal(canAddEndpointToFolder(normalFolder), true);
+  assert.equal(canAddEndpointToFolder(normalFolder, settings), true);
+  assert.equal(canAddEndpointToFolder(swaggerFolder), false);
+  assert.equal(canAddEndpointToFolder(reflectionFolder), false);
+  assert.equal(canAddEndpointToFolder(legacySwaggerFolder, settings), false);
+  assert.equal(canAddEndpointToFolder(legacyReflectionFolder, settings), false);
 });
 
 test('findSwaggerFolderForEndpoint: finds swagger folder for direct and nested subfolder endpoints', () => {

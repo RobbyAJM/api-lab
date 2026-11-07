@@ -47,6 +47,7 @@ import {
   getFolderGrpcUrl,
   isSwaggerFolder,
   getFolderSwaggerUrl,
+  canAddEndpointToFolder,
   getAncestorFolderIds,
   isCollectionHighlighted,
   type FolderTreeNode,
@@ -982,6 +983,7 @@ const FolderTreeNodeComponent: React.FC<{
   const grpcUrl = getFolderGrpcUrl(node.folder, collectionSettings);
   const isSwagger = isSwaggerFolder(node.folder, collectionSettings);
   const swaggerUrl = getFolderSwaggerUrl(node.folder, collectionSettings);
+  const canAddEndpoint = canAddEndpointToFolder(node.folder, collectionSettings);
 
   useEffect(() => {
     if (isFolderHighlighted || isTargetRevealed) {
@@ -1134,13 +1136,15 @@ const FolderTreeNodeComponent: React.FC<{
         </button>
 
         <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition">
-          <button
-            onClick={() => setShowAddSubEndpoint(!showAddSubEndpoint)}
-            title="Add Endpoint in this folder"
-            className="p-0.5 hover:text-zinc-200 text-zinc-500"
-          >
-            <Plus size={11} />
-          </button>
+          {canAddEndpoint && (
+            <button
+              onClick={() => setShowAddSubEndpoint(!showAddSubEndpoint)}
+              title="Add Endpoint in this folder"
+              className="p-0.5 hover:text-zinc-200 text-zinc-500"
+            >
+              <Plus size={11} />
+            </button>
+          )}
           <button
             onClick={() => setShowAddSubFolder(!showAddSubFolder)}
             title="Add Subfolder"
@@ -1234,17 +1238,19 @@ const FolderTreeNodeComponent: React.FC<{
               <div className="h-px bg-zinc-800 my-1" />
             </>
           )}
-          <button
-            onClick={() => {
-              setFolderContextMenuPos(null);
-              setIsOpen(true);
-              setShowAddSubEndpoint(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <Plus size={12} className="text-zinc-400" />
-            <span>Add Endpoint</span>
-          </button>
+          {canAddEndpoint && (
+            <button
+              onClick={() => {
+                setFolderContextMenuPos(null);
+                setIsOpen(true);
+                setShowAddSubEndpoint(true);
+              }}
+              className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+            >
+              <Plus size={12} className="text-zinc-400" />
+              <span>Add Endpoint</span>
+            </button>
+          )}
           <button
             onClick={() => {
               setFolderContextMenuPos(null);
