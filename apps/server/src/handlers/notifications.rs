@@ -80,7 +80,7 @@ pub async fn mark_notification_read(
     .map_err(ApiError::Database)?
     .ok_or_else(|| ApiError::NotFound("notification not found".into()))?;
 
-    Ok(Json(NotificationItem {
+    let notif = NotificationItem {
         id: row.id,
         user_id: row.user_id,
         workspace_id: row.workspace_id,
@@ -89,7 +89,14 @@ pub async fn mark_notification_read(
         category: row.category,
         read: row.read,
         created_at: row.created_at,
-    }))
+    };
+
+    let _ = state.tx_presence.send(rust_core::dto::PresenceEvent::Notification {
+        workspace_id: row.workspace_id.unwrap_or_default(),
+        notification: serde_json::to_value(&notif).unwrap_or_default(),
+    });
+
+    Ok(Json(notif))
 }
 
 pub async fn mark_all_notifications_read(
@@ -111,6 +118,11 @@ pub async fn mark_all_notifications_read(
     .await
     .map_err(ApiError::Database)?;
 
+    let _ = state.tx_presence.send(rust_core::dto::PresenceEvent::Notification {
+        workspace_id: query.workspace_id.unwrap_or_default(),
+        notification: serde_json::json!({ "user_id": auth.user.id, "action": "mark_all_read" }),
+    });
+
     Ok(Json(serde_json::json!({ "message": "all notifications marked as read" })))
 }
 
@@ -131,6 +143,11 @@ pub async fn delete_notification(
     if result.rows_affected() == 0 {
         return Err(ApiError::NotFound("notification not found".into()));
     }
+
+    let _ = state.tx_presence.send(rust_core::dto::PresenceEvent::Notification {
+        workspace_id: Uuid::nil(),
+        notification: serde_json::json!({ "user_id": auth.user.id, "action": "delete", "id": id }),
+    });
 
     Ok(Json(serde_json::json!({ "message": "notification deleted" })))
 }
@@ -169,4 +186,20 @@ pub async fn create_system_notification(
         read: row.read,
         created_at: row.created_at,
     })
+}
+
+pub async fn dispatch_system_notification(
+    state: &SharedState,
+    user_id: Uuid,
+    workspace_id: Option<Uuid>,
+    title: &str,
+    message: &str,
+    category: &str,
+) -> Result<NotificationItem, ApiError> {
+    let item = create_system_notification(&state.pool, user_id, workspace_id, title, message, category).await?;
+    let _ = state.tx_presence.send(rust_core::dto::PresenceEvent::Notification {
+        workspace_id: workspace_id.unwrap_or_default(),
+        notification: serde_json::to_value(&item).unwrap_or_default(),
+    });
+    Ok(item)
 }

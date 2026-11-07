@@ -3,7 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../store/useAppStore';
 import { getWsBaseUrl } from '../api/client';
 import { computeCurrentLocation } from '../utils/presence';
-import type { WsSyncEvent, PresenceUser } from '@api-lab/api-types';
+import { mergeNotificationEvent } from '../utils/notifications';
+import type { WsSyncEvent, PresenceUser, NotificationItem } from '@api-lab/api-types';
 
 export function useWorkspaceSync() {
   const queryClient = useQueryClient();
@@ -159,6 +160,16 @@ export function useWorkspaceSync() {
           }
           if (data.type === 'presence_leave' && data.user_id) {
             removeOnlineUser(data.user_id);
+            return;
+          }
+
+          if (data.type === 'notification') {
+            if (data.notification && data.notification.id) {
+              queryClient.setQueryData<NotificationItem[]>(['notifications'], (prev = []) =>
+                mergeNotificationEvent(prev, data.notification as NotificationItem)
+              );
+            }
+            debouncedInvalidate(['notifications'], 150);
             return;
           }
 

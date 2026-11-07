@@ -5,8 +5,8 @@ use rust_core::crypto::{
     generate_token_hex, hash_password, hash_token_sha256, verify_password,
 };
 use rust_core::dto::{
-    AuthResponse, ForgotPasswordDto, LoginDto, RegisterDto, ResetPasswordDto, UpdateProfileDto,
-    UpdateThemeDto, UserSummary, WorkspaceSummary,
+    AuthResponse, ForgotPasswordDto, LoginDto, NotificationItem, PresenceEvent, RegisterDto,
+    ResetPasswordDto, UpdateProfileDto, UpdateThemeDto, UserSummary, WorkspaceSummary,
 };
 use rust_core::models::{Role, User};
 use serde::{Deserialize, Serialize};
@@ -244,18 +244,20 @@ pub async fn accept_invitation(
     // Create notification for inviter
     let notif_title = "Team member joined";
     let notif_message = format!("{} accepted your invitation to join {}", dto.name.trim(), ws.name);
-    let _ = sqlx::query!(
+    let notif_row = sqlx::query!(
         r#"
         INSERT INTO notifications (user_id, workspace_id, title, message, category)
         VALUES ($1, $2, $3, $4, 'direct')
+        RETURNING id, user_id, workspace_id, title, message, category, read, created_at
         "#,
         invite.inviter_id,
         invite.workspace_id,
         notif_title,
         notif_message
     )
-    .execute(&mut *tx)
-    .await;
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(ApiError::Database)?;
 
     // Create session
     let session_token = generate_token_hex();
@@ -276,6 +278,21 @@ pub async fn accept_invitation(
     .map_err(ApiError::Database)?;
 
     tx.commit().await.map_err(ApiError::Database)?;
+
+    let notif_item = NotificationItem {
+        id: notif_row.id,
+        user_id: notif_row.user_id,
+        workspace_id: notif_row.workspace_id,
+        title: notif_row.title,
+        message: notif_row.message,
+        category: notif_row.category,
+        read: notif_row.read,
+        created_at: notif_row.created_at,
+    };
+    let _ = state.tx_presence.send(PresenceEvent::Notification {
+        workspace_id: invite.workspace_id,
+        notification: serde_json::to_value(&notif_item).unwrap_or_default(),
+    });
 
     Ok(Json(AuthResponse {
         token: session_token,

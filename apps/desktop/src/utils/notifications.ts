@@ -47,3 +47,14 @@ export function formatNotificationTime(isoString: string): string {
     return '';
   }
 }
+
+export function mergeNotificationEvent(
+  notifications: NotificationItem[],
+  incoming: NotificationItem
+): NotificationItem[] {
+  const exists = notifications.some((n) => n.id === incoming.id);
+  if (exists) {
+    return notifications.map((n) => (n.id === incoming.id ? incoming : n));
+  }
+  return [incoming, ...notifications];
+}

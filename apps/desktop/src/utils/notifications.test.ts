@@ -4,6 +4,7 @@ import {
   filterNotifications,
   countUnreadNotifications,
   formatNotificationTime,
+  mergeNotificationEvent,
 } from './notifications.ts';
 import type { NotificationItem } from '@api-lab/api-types';
 
@@ -65,4 +66,33 @@ test('formatNotificationTime: formats relative times correctly', () => {
     formatNotificationTime(new Date(Date.now() - 3 * 3600 * 1000).toISOString()),
     '3h ago'
   );
+});
+
+test('mergeNotificationEvent: prepends new notification at index 0', () => {
+  const newNotif: NotificationItem = {
+    id: '4',
+    user_id: 'u1',
+    title: 'New Event',
+    message: 'Event arrived via websocket',
+    category: 'direct',
+    read: false,
+    created_at: new Date().toISOString(),
+  };
+
+  const merged = mergeNotificationEvent([notif1, notif2], newNotif);
+  assert.equal(merged.length, 3);
+  assert.equal(merged[0].id, '4');
+  assert.equal(merged[1].id, '1');
+});
+
+test('mergeNotificationEvent: updates existing notification in place', () => {
+  const updatedNotif1: NotificationItem = {
+    ...notif1,
+    read: true,
+  };
+
+  const merged = mergeNotificationEvent([notif1, notif2], updatedNotif1);
+  assert.equal(merged.length, 2);
+  assert.equal(merged[0].id, '1');
+  assert.equal(merged[0].read, true);
 });

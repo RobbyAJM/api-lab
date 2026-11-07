@@ -130,14 +130,21 @@ async fn handle_socket(
                                 break;
                             }
                         }
-                        PresenceEvent::Notification { workspace_id: ws_id, notification } if ws_id == workspace_id => {
-                            let msg = serde_json::json!({
-                                "type": "notification",
-                                "workspace_id": ws_id,
-                                "notification": notification
-                            });
-                            if sender.send(Message::Text(msg.to_string().into())).await.is_err() {
-                                break;
+                        PresenceEvent::Notification { workspace_id: ws_id, notification } => {
+                            // ponytail: route to target user or workspace broadcast; upgrade to dedicated user channel when rooms exceed 10k
+                            let target_uid = notification.get("user_id").and_then(|u| u.as_str());
+                            let is_for_user = target_uid.map_or(false, |uid| uid == presence_user.user_id.to_string());
+                            let is_workspace_broadcast = target_uid.is_none() && ws_id == workspace_id;
+
+                            if is_for_user || is_workspace_broadcast {
+                                let msg = serde_json::json!({
+                                    "type": "notification",
+                                    "workspace_id": ws_id,
+                                    "notification": notification
+                                });
+                                if sender.send(Message::Text(msg.to_string().into())).await.is_err() {
+                                    break;
+                                }
                             }
                         }
                         _ => {}

@@ -21,7 +21,6 @@ export const NotificationPopover: React.FC = () => {
     queryKey: ['notifications'],
     queryFn: () => apiRequest<NotificationItem[]>('/notifications'),
     enabled: !!token,
-    refetchInterval: 30000,
   });
 
   const markReadMutation = useMutation({
