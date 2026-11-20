@@ -29,6 +29,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { useFixSessionStore } from '../../store/useFixSessionStore';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { ConflictDiffModal } from './ConflictDiffModal';
+import { FixParsedMessage } from './FixParsedMessage';
 import { Select } from '../common/Select';
 import { VariableInput } from '../common/VariableInput';
 import {
@@ -1009,8 +1010,8 @@ function TranscriptRow({
       </div>
 
       {expanded && (
-        <div className="bg-zinc-900/30 border-t border-zinc-900 px-3 py-2">
-          <div className="flex items-center justify-between mb-2">
+        <div className="bg-zinc-900/30 border-t border-zinc-900">
+          <div className="flex items-center justify-between px-3 py-1.5">
             <div className="flex items-center gap-2 text-[10px] text-zinc-500">
               <span className="uppercase font-semibold text-zinc-400">
                 {getFixMessageTypeLabel(message.message_type)}
@@ -1043,18 +1044,7 @@ function TranscriptRow({
               )}
             </button>
           </div>
-          <div className="grid grid-cols-[42px_minmax(0,1fr)] border border-zinc-800/80 rounded-sm overflow-hidden max-h-64 overflow-y-auto">
-            {message.fields.map(([tag, value], index) => (
-              <React.Fragment key={`${tag}-${index}`}>
-                <span className="px-2 py-1 text-[10px] text-zinc-500 bg-zinc-900/60 border-b border-zinc-800/60 last:border-b-0">
-                  {tag}
-                </span>
-                <span className="px-2 py-1 text-[11px] text-zinc-300 bg-zinc-950/40 border-b border-zinc-800/60 whitespace-pre-wrap break-all select-text">
-                  {value || <span className="text-zinc-600">(empty)</span>}
-                </span>
-              </React.Fragment>
-            ))}
-          </div>
+          <FixParsedMessage message={message} />
         </div>
       )}
     </div>

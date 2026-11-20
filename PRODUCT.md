@@ -21,7 +21,7 @@ Tauri v2 desktop shell with React 18 and Rust core. Operates offline-first with 
 ## Capabilities and Constraints
 
 - HTTP & gRPC unary/streaming request execution.
-- FIX 4.2/4.4 initiator sessions with Logon, Heartbeat, Test Request, Logout, and live transcripts.
+- FIX 4.2/4.4 initiator sessions with Logon, Heartbeat, Test Request, Logout, and dictionary-backed grouped transcripts with clickable field and enum references.
 - Direct TCP and managed/external stunnel FIX transport.
 - gRPC Server Reflection inspection and automatic schema generation.
 - Environment variable cascading and dynamic scripting.

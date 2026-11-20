@@ -39,7 +39,7 @@
 |---|---|
 | **HTTP / REST** | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS · Path vars (`:id`) · Query editor · Bearer/Basic/Inherited auth · Multipart/Form/JSON payloads · Script hooks |
 | **gRPC** | Server Reflection v1alpha · Unary · Server/Client/Bidirectional streaming · Protobuf dynamic transcoding · Deadlines · Metadata · TLS detection |
-| **FIX** | FIX 4.2/4.4 initiator · Logon/heartbeat/Test Request/Logout · Raw + parsed transcript · Sequence validation · Direct TCP · Managed/external stunnel |
+| **FIX** | FIX 4.2/4.4 initiator · Logon/heartbeat/Test Request/Logout · Dictionary-backed grouped transcript with clickable tag/enum reference · Sequence validation · Direct TCP · Managed/external stunnel |
 
 Managed stunnel mode requires a `stunnel` executable on `PATH`, or an explicit executable path in the FIX transport settings. External stunnel mode connects to a local listener that you configure and run separately.
 
@@ -88,6 +88,10 @@ api-lab/
 <a href="https://github.com/RobbyAJM/api-lab/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=RobbyAJM/api-lab" alt="API Lab Contributors" />
 </a>
+
+## Third-party notices
+
+Bundled FIX 4.2 and FIX 4.4 dictionary data includes QuickFIX/FIX Repository structure and Apache-2.0 FIX Orchestra descriptions. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution and license details.
 
 ## License
 

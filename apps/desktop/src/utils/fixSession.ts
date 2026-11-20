@@ -365,6 +365,10 @@ export function getFixMessageTypeLabel(messageType: string): string {
     '9': 'Order Cancel Reject',
     R: 'Quote Request',
     S: 'Quote',
+    V: 'Market Data Request',
+    W: 'Market Data Snapshot',
+    X: 'Market Data Incremental Refresh',
+    Y: 'Market Data Request Reject',
     AE: 'Trade Capture Report',
   };
   return labels[messageType] || messageType;
