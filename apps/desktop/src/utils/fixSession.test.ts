@@ -5,14 +5,20 @@ import {
   applyFixTranscriptEvent,
   createDefaultFixEndpointConfig,
   createEmptyFixSessionState,
+  DEFAULT_FIX_TRANSCRIPT_ORDER,
+  FIX_MESSAGE_LIMIT,
+  FIX_TRANSCRIPT_ORDER_STORAGE_KEY,
   filterFixMessages,
   formatFixRaw,
   formatFixTimestamp,
   getFixMessageSummary,
   getFixStatusMeta,
+  getStoredFixTranscriptOrder,
   isFixSessionActive,
   normalizeFixEndpointConfig,
+  orderFixMessages,
   parseFixDraftFields,
+  setStoredFixTranscriptOrder,
   toFixConnectRequest,
   validateFixDraft,
 } from './fixSession.ts';
@@ -166,12 +172,17 @@ test('applyFixTranscriptEvent: tracks lifecycle, messages, and transport logs', 
   assert.equal(state.status, 'logged_on');
   assert.equal(state.connectedAt, '2026-11-20T12:00:00.000Z');
 
-  state = applyFixTranscriptEvent(state, {
-    kind: 'message',
-    timestamp: '2026-11-20T12:00:01.000Z',
-    message: message(),
-  });
+  state = applyFixTranscriptEvent(
+    state,
+    {
+      kind: 'message',
+      timestamp: '2026-11-20T12:00:01.000Z',
+      message: message(),
+    },
+    () => 'message-1'
+  );
   assert.equal(state.messages.length, 1);
+  assert.equal(state.messages[0].id, 'message-1');
 
   state = applyFixTranscriptEvent(state, {
     kind: 'transport',
@@ -180,6 +191,108 @@ test('applyFixTranscriptEvent: tracks lifecycle, messages, and transport logs', 
     detail: 'stunnel: handshake retry',
   });
   assert.equal(state.transportLogs[0].level, 'warn');
+});
+
+test('applyFixTranscriptEvent: prepends messages and keeps stable newest-first IDs', () => {
+  let state = createEmptyFixSessionState();
+  for (const id of ['first', 'second', 'third']) {
+    state = applyFixTranscriptEvent(
+      state,
+      {
+        kind: 'message',
+        timestamp: '2026-11-20T12:00:00.000Z',
+        message: message(),
+      },
+      () => id
+    );
+  }
+
+  assert.deepEqual(
+    state.messages.map((entry) => entry.id),
+    ['third', 'second', 'first']
+  );
+});
+
+test('applyFixTranscriptEvent: capped transcript keeps the newest messages', () => {
+  let state = createEmptyFixSessionState();
+  for (let index = 1; index <= FIX_MESSAGE_LIMIT + 2; index += 1) {
+    state = applyFixTranscriptEvent(
+      state,
+      {
+        kind: 'message',
+        timestamp: '2026-11-20T12:00:00.000Z',
+        message: message(),
+      },
+      () => `message-${index}`
+    );
+  }
+
+  assert.equal(state.messages.length, FIX_MESSAGE_LIMIT);
+  assert.equal(state.messages[0].id, `message-${FIX_MESSAGE_LIMIT + 2}`);
+  assert.equal(
+    state.messages[state.messages.length - 1].id,
+    'message-3'
+  );
+});
+
+test('orderFixMessages: reverses only for ascending display and keeps the source order', () => {
+  const newestFirst = [
+    { ...message(), id: 'third' },
+    { ...message(), id: 'second' },
+    { ...message(), id: 'first' },
+  ];
+
+  assert.equal(orderFixMessages(newestFirst, 'desc'), newestFirst);
+  assert.deepEqual(
+    orderFixMessages(newestFirst, 'asc').map((entry) => entry.id),
+    ['first', 'second', 'third']
+  );
+  assert.deepEqual(
+    newestFirst.map((entry) => entry.id),
+    ['third', 'second', 'first'],
+    'source transcript remains newest-first'
+  );
+});
+
+test('filterFixMessages: preserves stable transcript message order and IDs', () => {
+  const newestFirst = [
+    { ...message(), id: 'third' },
+    { ...message({ direction: 'out' }), id: 'second' },
+    { ...message(), id: 'first' },
+  ];
+  const filtered = filterFixMessages(newestFirst, {
+    direction: 'all',
+    query: '',
+    showAdmin: true,
+  });
+  assert.deepEqual(
+    filtered.map((entry) => entry.id),
+    ['third', 'second', 'first']
+  );
+});
+
+test('FIX transcript order: defaults to newest-first and persists both modes', () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+  };
+
+  assert.equal(DEFAULT_FIX_TRANSCRIPT_ORDER, 'desc');
+  assert.equal(getStoredFixTranscriptOrder(storage), 'desc');
+
+  setStoredFixTranscriptOrder('asc', storage);
+  assert.equal(values.get(FIX_TRANSCRIPT_ORDER_STORAGE_KEY), 'asc');
+  assert.equal(getStoredFixTranscriptOrder(storage), 'asc');
+
+  setStoredFixTranscriptOrder('desc', storage);
+  assert.equal(getStoredFixTranscriptOrder(storage), 'desc');
+
+  values.set(FIX_TRANSCRIPT_ORDER_STORAGE_KEY, 'sideways');
+  assert.equal(getStoredFixTranscriptOrder(storage), 'desc');
+  assert.equal(getStoredFixTranscriptOrder(null), 'desc');
 });
 
 test('applyFixTranscriptEvent: preserves a session error after final disconnect', () => {

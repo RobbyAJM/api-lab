@@ -38,10 +38,14 @@ import {
   getFixMessageSummary,
   getFixMessageTypeLabel,
   getFixStatusMeta,
+  getStoredFixTranscriptOrder,
   normalizeFixEndpointConfig,
+  orderFixMessages,
   parseFixDraftFields,
+  setStoredFixTranscriptOrder,
   toFixConnectRequest,
   validateFixDraft,
+  type FixTranscriptOrder,
 } from '../../utils/fixSession';
 import {
   disconnectFixSession,
@@ -86,20 +90,25 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   const [directionFilter, setDirectionFilter] = useState<'all' | 'in' | 'out'>('all');
   const [showAdmin, setShowAdmin] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [messageOrder, setMessageOrder] = useState<FixTranscriptOrder>(() =>
+    getStoredFixTranscriptOrder()
+  );
+  const [unseenNewMessages, setUnseenNewMessages] = useState(0);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [copiedMessage, setCopiedMessage] = useState<string | null>(null);
   const [conflictModalData, setConflictModalData] = useState<{
     localConfig: FixEndpointConfig;
     remoteEndpoint: Endpoint;
   } | null>(null);
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
   const followTranscriptRef = useRef(true);
+  const previousNewestMessageIdRef = useRef<string | null>(null);
 
   const statusMeta = getFixStatusMeta(session?.status);
   const isActive = statusMeta.active;
   const canSend = session?.status === 'logged_on';
   const messages = session?.messages || [];
+  const newestMessageId = messages[0]?.id || null;
   const transportLogs = session?.transportLogs || [];
 
   async function resolveVariables(): Promise<Record<string, string>> {
@@ -144,18 +153,50 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   }, [config, endpoint.config, endpoint.id, setEndpointDraft, clearEndpointDraft]);
 
   useEffect(() => {
-    if (!followTranscriptRef.current) return;
-    transcriptEndRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages.length]);
+    const previousNewestId = previousNewestMessageIdRef.current;
+    previousNewestMessageIdRef.current = newestMessageId;
+
+    if (!newestMessageId) {
+      setUnseenNewMessages(0);
+      return;
+    }
+    if (previousNewestId === newestMessageId) return;
+
+    if (followTranscriptRef.current || previousNewestId === null) {
+      setUnseenNewMessages(0);
+      requestAnimationFrame(() => scrollTranscriptToNewest(messageOrder));
+      return;
+    }
+
+    const previousMessageIndex = messages.findIndex(
+      (message) => message.id === previousNewestId
+    );
+    const newlyArrived =
+      previousMessageIndex > 0 ? previousMessageIndex : messages.length;
+    setUnseenNewMessages((current) => current + newlyArrived);
+  }, [messages, newestMessageId]);
+
+  useEffect(() => {
+    followTranscriptRef.current = true;
+    setUnseenNewMessages(0);
+    requestAnimationFrame(() => scrollTranscriptToNewest(messageOrder));
+  }, [messageOrder]);
+
+  useEffect(() => {
+    setUnseenNewMessages(0);
+  }, [directionFilter, searchQuery, showAdmin]);
 
   const filteredMessages = useMemo(
     () =>
-      filterFixMessages(messages, {
-        direction: directionFilter,
-        query: searchQuery,
-        showAdmin,
-      }),
-    [messages, directionFilter, searchQuery, showAdmin]
+      orderFixMessages(
+        filterFixMessages(messages, {
+          direction: directionFilter,
+          query: searchQuery,
+          showAdmin,
+        }),
+        messageOrder
+      ),
+    [messages, directionFilter, searchQuery, showAdmin, messageOrder]
   );
 
   const draftValidation = config.message_draft
@@ -342,11 +383,38 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     }
   }
 
+  function scrollTranscriptToNewest(order: FixTranscriptOrder = messageOrder) {
+    const element = transcriptScrollRef.current;
+    if (!element) return;
+    element.scrollTo({
+      top: order === 'desc' ? 0 : element.scrollHeight,
+      behavior: 'auto',
+    });
+  }
+
   function handleTranscriptScroll() {
     const element = transcriptScrollRef.current;
     if (!element) return;
-    followTranscriptRef.current =
-      element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+    const atNewest =
+      messageOrder === 'desc'
+        ? element.scrollTop <= 24
+        : element.scrollHeight - element.scrollTop - element.clientHeight < 48;
+    followTranscriptRef.current = atNewest;
+    if (atNewest && unseenNewMessages > 0) {
+      setUnseenNewMessages(0);
+    }
+  }
+
+  function handleToggleMessageOrder() {
+    const nextOrder: FixTranscriptOrder = messageOrder === 'desc' ? 'asc' : 'desc';
+    setMessageOrder(nextOrder);
+    setStoredFixTranscriptOrder(nextOrder);
+  }
+
+  function handleJumpToNewest() {
+    followTranscriptRef.current = true;
+    setUnseenNewMessages(0);
+    scrollTranscriptToNewest();
   }
 
   const latestTransportLog = transportLogs[transportLogs.length - 1];
@@ -836,15 +904,59 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => clearTranscript(endpoint.id)}
-            disabled={messages.length === 0 && transportLogs.length === 0}
-            className="ml-auto p-1 text-zinc-600 hover:text-zinc-300 disabled:opacity-30"
-            title="Clear local transcript"
-          >
-            <Trash2 size={11} />
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            {unseenNewMessages > 0 && (
+              <button
+                type="button"
+                onClick={handleJumpToNewest}
+                className="inline-flex h-5 items-center gap-1 rounded-sm border border-blue-800/60 bg-blue-950/30 px-1.5 text-[9px] font-medium text-blue-300 transition hover:bg-blue-950/60"
+                title={
+                  messageOrder === 'desc'
+                    ? 'New messages above. Jump to newest.'
+                    : 'New messages below. Jump to newest.'
+                }
+                aria-label={`Jump to newest messages, ${unseenNewMessages} new`}
+              >
+                {messageOrder === 'desc' ? (
+                  <ArrowUp size={9} />
+                ) : (
+                  <ArrowDown size={9} />
+                )}
+                {unseenNewMessages} new
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleToggleMessageOrder}
+              className="inline-flex h-5 items-center gap-1 rounded-sm border border-zinc-800 bg-zinc-900/60 px-1.5 text-[9px] font-mono text-zinc-400 transition hover:border-zinc-700 hover:text-zinc-200"
+              title={
+                messageOrder === 'desc'
+                  ? 'Newest messages first. Switch to oldest first.'
+                  : 'Oldest messages first. Switch to newest first.'
+              }
+              aria-label={
+                messageOrder === 'desc'
+                  ? 'Message order: newest first. Switch to oldest first.'
+                  : 'Message order: oldest first. Switch to newest first.'
+              }
+            >
+              {messageOrder === 'desc' ? (
+                <ArrowDown size={9} />
+              ) : (
+                <ArrowUp size={9} />
+              )}
+              {messageOrder === 'desc' ? 'Newest' : 'Oldest'}
+            </button>
+            <button
+              type="button"
+              onClick={() => clearTranscript(endpoint.id)}
+              disabled={messages.length === 0 && transportLogs.length === 0}
+              className="p-1 text-zinc-600 hover:text-zinc-300 disabled:opacity-30"
+              title="Clear local transcript"
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
         </div>
 
         <div
@@ -875,30 +987,17 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
               )}
             </div>
           ) : (
-            filteredMessages.map((message, index) => (
+            filteredMessages.map((message) => (
               <TranscriptRow
-                key={`${message.timestamp}-${message.sequence_number}-${index}`}
+                key={message.id}
                 message={message}
-                expanded={expandedMessages.has(
-                  `${message.timestamp}-${message.sequence_number}-${index}`
-                )}
-                copied={
-                  copiedMessage ===
-                  `${message.timestamp}-${message.sequence_number}-${index}`
-                }
-                onToggle={() =>
-                  toggleMessage(`${message.timestamp}-${message.sequence_number}-${index}`)
-                }
-                onCopy={() =>
-                  void copyMessage(
-                    `${message.timestamp}-${message.sequence_number}-${index}`,
-                    message.raw
-                  )
-                }
+                expanded={expandedMessages.has(message.id)}
+                copied={copiedMessage === message.id}
+                onToggle={() => toggleMessage(message.id)}
+                onCopy={() => void copyMessage(message.id, message.raw)}
               />
             ))
           )}
-          <div ref={transcriptEndRef} />
         </div>
       </section>
 
