@@ -12,6 +12,14 @@ import type {
 export const FIX_ADMIN_MESSAGE_TYPES = new Set(['0', '1', '2', '3', '4', '5', 'A']);
 export const FIX_MESSAGE_LIMIT = 2000;
 export const FIX_TRANSPORT_LOG_LIMIT = 200;
+export const FIX_TRANSCRIPT_ORDER_STORAGE_KEY = 'api_lab_fix_transcript_order';
+export const DEFAULT_FIX_TRANSCRIPT_ORDER: FixTranscriptOrder = 'desc';
+
+export type FixTranscriptOrder = 'desc' | 'asc';
+
+export interface FixTranscriptMessage extends FixMessageEvent {
+  id: string;
+}
 
 export interface FixStatusMeta {
   label: string;
@@ -31,7 +39,7 @@ export interface FixSessionRuntimeState {
   status?: FixSessionStatus;
   detail?: string;
   error?: string;
-  messages: FixMessageEvent[];
+  messages: FixTranscriptMessage[];
   transportLogs: FixTransportLogEntry[];
   connectedAt?: string;
 }
@@ -58,13 +66,18 @@ export function createEmptyFixSessionState(): FixSessionRuntimeState {
  */
 export function applyFixTranscriptEvent(
   current: FixSessionRuntimeState,
-  event: FixSessionEvent
+  event: FixSessionEvent,
+  idFactory: () => string = createFixMessageId
 ): FixSessionRuntimeState {
   if (event.kind === 'message' && event.message) {
+    const message: FixTranscriptMessage = {
+      ...event.message,
+      id: idFactory(),
+    };
     return {
       ...current,
       error: undefined,
-      messages: appendCapped(current.messages, event.message, FIX_MESSAGE_LIMIT),
+      messages: prependCapped(current.messages, message, FIX_MESSAGE_LIMIT),
     };
   }
 
@@ -330,10 +343,10 @@ export function isFixSessionActive(status: FixSessionStatus | undefined): boolea
 /**
  * Filters a FIX transcript by direction, admin visibility, and tag/value text.
  */
-export function filterFixMessages(
-  messages: FixMessageEvent[],
+export function filterFixMessages<T extends FixMessageEvent>(
+  messages: T[],
   filter: FixMessageFilter
-): FixMessageEvent[] {
+): T[] {
   const query = filter.query.trim().toLowerCase();
   return messages.filter((message) => {
     if (!filter.showAdmin && message.is_admin) return false;
@@ -344,6 +357,60 @@ export function filterFixMessages(
       .join(' ')}`.toLowerCase();
     return searchable.includes(query);
   });
+}
+
+/**
+ * Orders a newest-first transcript for display.
+ */
+export function orderFixMessages<T extends FixMessageEvent>(
+  messages: T[],
+  order: FixTranscriptOrder
+): T[] {
+  return order === 'desc' ? messages : [...messages].reverse();
+}
+
+/**
+ * Loads the persisted transcript order. Invalid or unavailable values default
+ * to newest-first.
+ */
+export function getStoredFixTranscriptOrder(
+  storage?: Pick<Storage, 'getItem'> | null
+): FixTranscriptOrder {
+  const target =
+    storage === undefined
+      ? typeof window !== 'undefined'
+        ? window.localStorage
+        : null
+      : storage;
+  if (!target) return DEFAULT_FIX_TRANSCRIPT_ORDER;
+  try {
+    return target.getItem(FIX_TRANSCRIPT_ORDER_STORAGE_KEY) === 'asc'
+      ? 'asc'
+      : DEFAULT_FIX_TRANSCRIPT_ORDER;
+  } catch {
+    return DEFAULT_FIX_TRANSCRIPT_ORDER;
+  }
+}
+
+/**
+ * Persists the transcript order for future FIX sessions.
+ */
+export function setStoredFixTranscriptOrder(
+  order: FixTranscriptOrder,
+  storage?: Pick<Storage, 'setItem'> | null
+): void {
+  const target =
+    storage === undefined
+      ? typeof window !== 'undefined'
+        ? window.localStorage
+        : null
+      : storage;
+  if (!target) return;
+  try {
+    target.setItem(FIX_TRANSCRIPT_ORDER_STORAGE_KEY, order);
+  } catch {
+    // A blocked storage backend should not prevent transcript interaction.
+  }
 }
 
 /**
@@ -411,6 +478,19 @@ export function formatFixTimestamp(raw?: string): string {
 function appendCapped<T>(items: T[], item: T, limit: number): T[] {
   if (items.length < limit) return [...items, item];
   return [...items.slice(items.length - limit + 1), item];
+}
+
+function prependCapped<T>(items: T[], item: T, limit: number): T[] {
+  if (limit <= 0) return [];
+  if (items.length < limit) return [item, ...items];
+  return [item, ...items.slice(0, limit - 1)];
+}
+
+let fixMessageSequence = 0;
+
+function createFixMessageId(): string {
+  fixMessageSequence += 1;
+  return `fix-${Date.now().toString(36)}-${fixMessageSequence.toString(36)}`;
 }
 
 function stringValue(value: unknown, fallback: string): string {
