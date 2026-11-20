@@ -11,6 +11,12 @@ import { getAuthToken, setAuthToken, apiRequest } from '../api/client';
 import { applyTheme, getThemeById, DEFAULT_THEME_ID } from '../utils/theme';
 import { cancelNativeGrpcStream } from '../api/native';
 import {
+  disconnectAllFixSessions,
+  disconnectFixSession,
+} from '../utils/fixSessionManager';
+import { useFixSessionStore } from './useFixSessionStore';
+import { isFixSessionActive } from '../utils/fixSession';
+import {
   openEndpointInTabs,
   closeEndpointInTabs,
   closeOtherEndpointsInTabs,
@@ -66,7 +72,10 @@ interface AppState {
   endpointDrafts: Record<string, Record<string, any>>;
   endpointResponses: Record<string, TabResponseData>;
   openEndpoint: (endpoint: Endpoint) => void;
-  closeEndpoint: (endpointId: string) => void;
+  closeEndpoint: (
+    endpointId: string,
+    options?: { skipFixConfirmation?: boolean }
+  ) => void;
   closeOtherEndpoints: (endpointId: string) => void;
   closeAllEndpoints: () => void;
   setEndpointDraft: (endpointId: string, draft: Record<string, any>) => void;
@@ -210,6 +219,18 @@ if (typeof window !== 'undefined') {
 
 const initialWorkspaceId = getStoredActiveWorkspaceId();
 const initialTabState = initialWorkspaceId ? getStoredWorkspaceTabs(initialWorkspaceId) : null;
+
+function confirmFixDisconnects(endpointIds: string[], action: string): boolean {
+  if (typeof window === 'undefined') return true;
+  const sessions = useFixSessionStore.getState().sessions;
+  const activeCount = endpointIds.filter((endpointId) =>
+    isFixSessionActive(sessions[endpointId]?.status)
+  ).length;
+  if (activeCount === 0) return true;
+  return window.confirm(
+    `${activeCount} active FIX session${activeCount === 1 ? '' : 's'} will disconnect if you ${action}. Continue?`
+  );
+}
 
 export const useAppStore = create<AppState>((set, get) => ({
   token: getAuthToken(),
@@ -382,6 +403,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   logout: () => {
+    void disconnectAllFixSessions();
+    useFixSessionStore.getState().resetSessions();
     setAuthToken(null);
     removeStoredActiveWorkspaceId();
     set({
@@ -598,7 +621,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  closeEndpoint: (endpointId) => {
+  closeEndpoint: (endpointId, options) => {
+    if (
+      !options?.skipFixConfirmation &&
+      !confirmFixDisconnects([endpointId], 'close this tab')
+    ) {
+      return;
+    }
+    void disconnectFixSession(endpointId);
     set((state) => {
       const tabState = closeEndpointInTabs(
         {
@@ -633,7 +663,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   closeOtherEndpoints: (endpointId) => {
+    const current = get();
+    const closingIds = current.openEndpoints
+      .filter((endpoint) => endpoint.id !== endpointId)
+      .map((endpoint) => endpoint.id);
+    if (!confirmFixDisconnects(closingIds, 'close the other tabs')) {
+      return;
+    }
     localStorage.setItem('api_lab_active_endpoint_id', endpointId);
+    for (const id of closingIds) {
+      void disconnectFixSession(id);
+    }
     set((state) => {
       const tabState = closeOtherEndpointsInTabs(
         {
@@ -661,7 +701,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   closeAllEndpoints: () => {
+    const closingIds = get().openEndpoints.map((endpoint) => endpoint.id);
+    if (!confirmFixDisconnects(closingIds, 'close all tabs')) {
+      return;
+    }
     localStorage.removeItem('api_lab_active_endpoint_id');
+    for (const id of closingIds) {
+      void disconnectFixSession(id);
+    }
     const tabState = closeAllEndpointsInTabs();
     const wsId = get().activeWorkspaceId;
     if (wsId) {

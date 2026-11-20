@@ -7,6 +7,7 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { EndpointTabBar } from './components/request/EndpointTabBar';
 import { HttpRequestEditor } from './components/request/HttpRequestEditor';
 import { GrpcRequestEditor } from './components/request/GrpcRequestEditor';
+import { FixSessionView } from './components/request/FixSessionView';
 import { ResponseViewer } from './components/response/ResponseViewer';
 import { AuthModal } from './components/auth/AuthModal';
 import { EnvironmentModal } from './components/environments/EnvironmentModal';
@@ -396,33 +397,37 @@ export const App: React.FC = () => {
           <EndpointTabBar />
 
           {activeEndpoint ? (
-            <div ref={mainContainerRef} className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {/* Top: Request Section */}
-              <section
-                style={{ height: `${requestHeightPercent}%` }}
-                className="flex flex-col min-h-[220px] overflow-hidden"
-              >
-                {activeEndpoint.protocol === 'http' ? (
-                  <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
-                ) : (
-                  <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
-                )}
-              </section>
+            activeEndpoint.protocol === 'fix' ? (
+              <FixSessionView key={activeEndpoint.id} endpoint={activeEndpoint} />
+            ) : (
+              <div ref={mainContainerRef} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                {/* Top: Request Section */}
+                <section
+                  style={{ height: `${requestHeightPercent}%` }}
+                  className="flex flex-col min-h-[220px] overflow-hidden"
+                >
+                  {activeEndpoint.protocol === 'http' ? (
+                    <HttpRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+                  ) : (
+                    <GrpcRequestEditor key={activeEndpoint.id} endpoint={activeEndpoint} />
+                  )}
+                </section>
 
-              {/* Vertical Resizable Split Handle */}
-              <div
-                onMouseDown={startVerticalResize}
-                className="h-1.5 bg-zinc-900/90 border-y border-zinc-800/80 hover:bg-zinc-800 cursor-row-resize transition flex items-center justify-center group flex-shrink-0 select-none"
-                title="Drag to resize Request and Response panels"
-              >
-                <div className="w-8 h-0.5 rounded-full bg-zinc-700 group-hover:bg-zinc-400 transition" />
+                {/* Vertical Resizable Split Handle */}
+                <div
+                  onMouseDown={startVerticalResize}
+                  className="h-1.5 bg-zinc-900/90 border-y border-zinc-800/80 hover:bg-zinc-800 cursor-row-resize transition flex items-center justify-center group flex-shrink-0 select-none"
+                  title="Drag to resize Request and Response panels"
+                >
+                  <div className="w-8 h-0.5 rounded-full bg-zinc-700 group-hover:bg-zinc-400 transition" />
+                </div>
+
+                {/* Bottom: Response Section */}
+                <section className="flex-1 min-h-[160px] flex flex-col overflow-hidden bg-zinc-950">
+                  <ResponseViewer key={activeEndpoint.id} endpoint={activeEndpoint} />
+                </section>
               </div>
-
-              {/* Bottom: Response Section */}
-              <section className="flex-1 min-h-[160px] flex flex-col overflow-hidden bg-zinc-950">
-                <ResponseViewer key={activeEndpoint.id} endpoint={activeEndpoint} />
-              </section>
-            </div>
+            )
           ) : (
             <EmptyWorkspaceView />
           )}

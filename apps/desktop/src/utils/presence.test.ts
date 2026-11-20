@@ -160,6 +160,19 @@ test('computeCurrentLocation: prioritizes modals over active endpoint and idle',
   assert.equal(locGrpc.endpoint_id, 'ep-2');
   assert.equal(locGrpc.method, 'gRPC');
 
+  // Active FIX endpoint
+  const mockFixEndpoint: Endpoint = {
+    ...mockHttpEndpoint,
+    id: 'ep-3',
+    name: 'Order Session',
+    protocol: 'fix',
+  };
+  const locFix = computeCurrentLocation({ activeEndpoint: mockFixEndpoint });
+  assert.equal(locFix.location_type, 'fix');
+  assert.equal(locFix.endpoint_id, 'ep-3');
+  assert.equal(locFix.method, 'FIX');
+  assert.equal(formatUserLocation(locFix).badge, 'FIX');
+
   // Idle when nothing open
   const locIdle = computeCurrentLocation({});
   assert.equal(locIdle.location_type, 'idle');

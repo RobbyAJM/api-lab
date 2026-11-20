@@ -39,6 +39,38 @@ const baseGrpcEndpoint: Endpoint = {
   },
 };
 
+test('computeConflictDiffs: detects FIX connection and credential differences', () => {
+  const localEndpoint: Endpoint = {
+    ...baseGrpcEndpoint,
+    id: 'ep-fix',
+    name: 'Order Session',
+    protocol: 'fix',
+    config: { host: 'fix.example.com', port: '9876' },
+  };
+  const remoteEndpoint: Endpoint = {
+    ...localEndpoint,
+    version: 3,
+    config: { host: 'fix2.example.com', port: '9876' },
+  };
+  const diffs = computeConflictDiffs(localEndpoint, remoteEndpoint, {
+    host: 'fix.example.com',
+    port: '9876',
+    username: 'client',
+    password: 'secret',
+    transport: 'stunnel_managed',
+  });
+  assert.equal(diffs.some((diff) => diff.field === 'FIX Host'), true);
+  assert.equal(
+    diffs.some((diff) => diff.field === 'FIX Password' && diff.localVal === 'configured'),
+    true
+  );
+  assert.equal(
+    JSON.stringify(diffs).includes('secret'),
+    false,
+    'raw passwords must not appear in conflict diffs'
+  );
+});
+
 test('computeConflictDiffs: detects HTTP method, url, body and script differences', () => {
   const remoteEndpoint: Endpoint = {
     ...baseHttpEndpoint,

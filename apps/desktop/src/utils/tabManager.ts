@@ -2,6 +2,7 @@ import type { Endpoint } from '@api-lab/api-types';
 import { splitUrlQuery } from './httpRequest.ts';
 import { convertSwaggerPathToApiPath } from './pathVariables.ts';
 import { shouldAutoDetectTls } from './grpcReflectionGenerator.ts';
+import { normalizeFixEndpointConfig } from './fixSession.ts';
 
 export interface TabResponseData {
   http?: any;
@@ -34,6 +35,19 @@ export function isConfigDirty(
 ): boolean {
   if (!draft) return false;
   const b = base || {};
+
+  const isFix = Boolean(
+    b.begin_string !== undefined ||
+    draft.begin_string !== undefined ||
+    b.host !== undefined ||
+    draft.host !== undefined
+  );
+  if (isFix) {
+    return (
+      JSON.stringify(normalizeFixEndpointConfig(b)) !==
+      JSON.stringify(normalizeFixEndpointConfig(draft))
+    );
+  }
 
   const isGrpc = Boolean(
     b.protocol === 'grpc' ||

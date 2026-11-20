@@ -7,6 +7,8 @@ import type {
   GrpcReflectionResponse,
   GrpcSamplePayloadRequest,
   GrpcSamplePayloadResponse,
+  FixConnectRequest,
+  FixSessionEvent,
 } from '@api-lab/api-types';
 
 async function isTauri(): Promise<boolean> {
@@ -148,6 +150,46 @@ export async function executeNativeGrpcStream(
     body: [],
     error: 'gRPC stream calls require native desktop runtime. Please run inside the Tauri desktop client.',
   };
+}
+
+export async function connectNativeFixSession(
+  req: FixConnectRequest,
+  variables: Record<string, string>,
+  sessionId: string,
+  onEvent: (event: FixSessionEvent) => void
+): Promise<void> {
+  if (!(await isTauri())) {
+    throw new Error('FIX sessions require the native desktop runtime.');
+  }
+  const { invoke, Channel } = await import('@tauri-apps/api/core');
+  const channel = new Channel<FixSessionEvent>();
+  channel.onmessage = (event) => onEvent(event);
+  return invoke<void>('connect_fix_session', {
+    req,
+    variables,
+    sessionId,
+    channel,
+  });
+}
+
+export async function sendNativeFixSessionMessage(
+  sessionId: string,
+  message: string,
+  variables: Record<string, string>
+): Promise<void> {
+  if (!(await isTauri())) {
+    throw new Error('FIX sessions require the native desktop runtime.');
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<void>('send_fix_session_message', { sessionId, message, variables });
+}
+
+export async function disconnectNativeFixSession(sessionId: string): Promise<boolean> {
+  if (!(await isTauri())) {
+    return false;
+  }
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<boolean>('disconnect_fix_session', { sessionId });
 }
 
 export async function cancelNativeGrpcStream(streamId: string): Promise<boolean> {

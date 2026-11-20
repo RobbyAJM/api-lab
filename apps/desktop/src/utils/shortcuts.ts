@@ -1,4 +1,4 @@
-import type { Endpoint, Collection } from '@api-lab/api-types';
+import type { Endpoint, Collection, Protocol } from '@api-lab/api-types';
 
 export interface ShortcutDefinition {
   id: string;
@@ -13,7 +13,7 @@ export const SHORTCUTS: ShortcutDefinition[] = [
     id: 'send_request',
     keyLabel: 'Ctrl + Enter',
     macKeyLabel: '⌘ + Enter',
-    description: 'Send HTTP request / Invoke gRPC method',
+    description: 'Send HTTP request / Invoke gRPC method / Send FIX message',
     category: 'Request',
   },
   {
@@ -217,7 +217,7 @@ export interface CommandPaletteItem {
   endpoint: Endpoint;
   collectionName: string;
   methodLabel: string;
-  protocol: 'http' | 'grpc';
+  protocol: Protocol;
   urlOrService: string;
 }
 
@@ -242,20 +242,29 @@ export function searchEndpointsForCommandPalette(
   const items: CommandPaletteItem[] = endpoints.map((ep) => {
     const collName = collMap.get(ep.collection_id) || 'Collection';
     const isHttp = ep.protocol === 'http';
+    const isFix = ep.protocol === 'fix';
     const methodLabel = isHttp
       ? ep.config?.method || 'GET'
+      : isFix
+      ? 'FIX'
       : ep.config?.stream_type === 'bidi_stream' || ep.config?.stream_type === 'omni_stream'
       ? 'STREAM'
       : 'gRPC';
     const urlOrService = isHttp
       ? ep.config?.url || ''
-      : ep.config?.service ? `${ep.config.service}/${ep.config.method || ''}` : ep.config?.server_address || '';
+      : isFix
+      ? `${ep.config?.sender_comp_id || 'CLIENT'} → ${
+          ep.config?.target_comp_id || 'SERVER'
+        } · ${ep.config?.host || ''}:${ep.config?.port || ''}`
+      : ep.config?.service
+      ? `${ep.config.service}/${ep.config.method || ''}`
+      : ep.config?.server_address || '';
 
     return {
       endpoint: ep,
       collectionName: collName,
       methodLabel,
-      protocol: ep.protocol as 'http' | 'grpc',
+      protocol: ep.protocol,
       urlOrService,
     };
   });

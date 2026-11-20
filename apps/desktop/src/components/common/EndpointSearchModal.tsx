@@ -168,6 +168,7 @@ export const EndpointSearchModal: React.FC = () => {
             items.map((item, idx) => {
               const isSelected = idx === selectedIndex;
               const isHttp = item.protocol === 'http';
+              const isFix = item.protocol === 'fix';
 
               return (
                 <div
@@ -182,7 +183,17 @@ export const EndpointSearchModal: React.FC = () => {
                 >
                   <div className="flex items-center gap-2.5 truncate">
                     {/* Method / Protocol Badge */}
-                    {isHttp ? (
+                    {isFix ? (
+                      <span
+                        className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded border select-none ${
+                          isSelected
+                            ? 'bg-blue-900/60 text-blue-200 border-blue-700/80'
+                            : 'bg-blue-950/40 text-blue-300 border-blue-900/50'
+                        }`}
+                      >
+                        FIX
+                      </span>
+                    ) : isHttp ? (
                       <span
                         className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded border select-none ${getHttpMethodBadgeClass(
                           item.methodLabel,

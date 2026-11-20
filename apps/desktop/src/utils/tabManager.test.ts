@@ -275,6 +275,31 @@ test('isConfigDirty: accurately detects HTTP and gRPC unsaved changes', () => {
     payload: { id: 1 },
   };
   assert.equal(isConfigDirty(baseGrpc, { ...baseGrpc, payload: { id: 2 } }), true);
+
+  const baseFix = {
+    host: 'fix.example.com',
+    port: '9876',
+    begin_string: 'FIX.4.4',
+    sender_comp_id: 'CLIENT',
+    target_comp_id: 'SERVER',
+    heartbeat_seconds: 30,
+    transport: 'direct',
+    stunnel: {
+      executable: '',
+      local_host: '127.0.0.1',
+      local_port: '',
+      ca_file: '',
+      client_cert_file: '',
+      client_key_file: '',
+      verify_peer: true,
+    },
+    message_draft: '35=D|11=ORDER-1',
+  };
+  assert.equal(isConfigDirty(baseFix, { ...baseFix }), false);
+  assert.equal(
+    isConfigDirty(baseFix, { ...baseFix, host: 'fix2.example.com' }),
+    true
+  );
 });
 
 test('isConfigDirty: prevents false positives on newly opened HTTP endpoints', () => {

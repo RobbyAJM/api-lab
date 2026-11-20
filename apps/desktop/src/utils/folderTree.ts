@@ -115,6 +115,19 @@ export function filterCollectionTree(
   function matchesEndpoint(ep: Endpoint): boolean {
     if (ep.name.toLowerCase().includes(q)) return true;
     if (ep.protocol.toLowerCase().includes(q)) return true;
+    if (ep.protocol === 'fix') {
+      const fixTarget = [
+        ep.config?.begin_string,
+        ep.config?.host,
+        ep.config?.port,
+        ep.config?.sender_comp_id,
+        ep.config?.target_comp_id,
+      ]
+        .filter((value) => typeof value === 'string')
+        .join(' ')
+        .toLowerCase();
+      if (fixTarget.includes(q)) return true;
+    }
     const method = ep.protocol === 'http' ? ep.config?.method : ep.config?.method;
     if (typeof method === 'string' && method.toLowerCase().includes(q)) return true;
     return false;

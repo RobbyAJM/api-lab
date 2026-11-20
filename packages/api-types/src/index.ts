@@ -1,5 +1,5 @@
 export type Role = 'admin' | 'developer';
-export type Protocol = 'http' | 'grpc';
+export type Protocol = 'http' | 'grpc' | 'fix';
 export type InvitationStatus = 'pending' | 'accepted' | 'revoked';
 
 export interface UserSummary {
@@ -48,6 +48,7 @@ export interface NotificationItem {
 export type UserLocationType =
   | 'http'
   | 'grpc'
+  | 'fix'
   | 'settings'
   | 'workspace_settings'
   | 'members'
@@ -278,6 +279,79 @@ export interface GrpcSamplePayloadResponse {
   payload: any;
   enums?: Record<string, string[]>;
   error?: string;
+}
+
+export type FixTransport = 'direct' | 'stunnel_managed' | 'stunnel_external';
+
+export interface FixStunnelOptions {
+  executable: string;
+  local_host: string;
+  local_port: string;
+  ca_file: string;
+  client_cert_file: string;
+  client_key_file: string;
+  verify_peer: boolean;
+}
+
+export interface FixConnectRequest {
+  host: string;
+  port: string;
+  begin_string: string;
+  sender_comp_id: string;
+  target_comp_id: string;
+  heartbeat_seconds: number;
+  username: string;
+  password: string;
+  reset_seq_num_on_logon: boolean;
+  transport: FixTransport;
+  stunnel: FixStunnelOptions;
+}
+
+export interface FixEndpointConfig extends FixConnectRequest {
+  message_draft?: string;
+}
+
+export type FixEventKind = 'state' | 'message' | 'transport' | 'error';
+
+export type FixSessionStatus =
+  | 'connecting'
+  | 'transport_ready'
+  | 'logon_sent'
+  | 'logged_on'
+  | 'disconnecting'
+  | 'disconnected'
+  | 'error';
+
+export type FixLogLevel = 'info' | 'warn' | 'error';
+
+export type FixDirection = 'in' | 'out';
+
+export type FixMessageField = [string, string];
+
+export interface FixSensitiveField {
+  field_index: number;
+  tag: string;
+  value: string;
+}
+
+export interface FixMessageEvent {
+  direction: FixDirection;
+  raw: string;
+  fields: FixMessageField[];
+  sensitive_fields?: FixSensitiveField[];
+  message_type: string;
+  sequence_number?: number;
+  is_admin: boolean;
+  timestamp: string;
+}
+
+export interface FixSessionEvent {
+  kind: FixEventKind;
+  timestamp: string;
+  status?: FixSessionStatus;
+  level?: FixLogLevel;
+  detail?: string;
+  message?: FixMessageEvent;
 }
 
 export interface WsSyncEvent {
