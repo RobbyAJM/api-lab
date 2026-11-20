@@ -8,19 +8,21 @@ web
 
 ## Users
 
-Backend engineers, systems architects, and API developers designing, inspecting, and testing HTTP and gRPC services locally and across environments.
+Backend engineers, systems architects, and API developers designing, inspecting, and testing HTTP, gRPC, and FIX services locally and across environments.
 
 ## Product Purpose
 
-API Lab is a fast, high-density, keyboard-driven desktop API and gRPC workbench. It replaces bulky SaaS API clients with an instant, distraction-free tool optimized for rapid debugging, schema reflection, and stream monitoring.
+API Lab is a fast, high-density, keyboard-driven desktop API, gRPC, and FIX workbench. It replaces bulky SaaS API clients with an instant, distraction-free tool optimized for rapid debugging, schema reflection, and live session monitoring.
 
 ## Operating Context
 
-Tauri v2 desktop shell with React 18 and Rust core. Operates offline-first with direct socket/HTTP/gRPC execution and syncs workspace collections to a local or remote server.
+Tauri v2 desktop shell with React 18 and Rust core. Operates offline-first with direct socket/HTTP/gRPC execution, native FIX sessions, optional managed stunnel transport, and syncs workspace collections to a local or remote server.
 
 ## Capabilities and Constraints
 
 - HTTP & gRPC unary/streaming request execution.
+- FIX 4.2/4.4 initiator sessions with Logon, Heartbeat, Test Request, Logout, and live transcripts.
+- Direct TCP and managed/external stunnel FIX transport.
 - gRPC Server Reflection inspection and automatic schema generation.
 - Environment variable cascading and dynamic scripting.
 - Monolithic, keyboard-focused interface with minimal modal interruptions.

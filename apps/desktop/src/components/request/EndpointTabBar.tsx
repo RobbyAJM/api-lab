@@ -8,6 +8,9 @@ import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/cont
 import { getHttpMethodColor } from '../../utils/httpMethodUtils';
 import { isTabConflicted } from '../../utils/conflictDetector';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
+import { useFixSessionStore } from '../../store/useFixSessionStore';
+import { disconnectFixSession } from '../../utils/fixSessionManager';
+import { isFixSessionActive } from '../../utils/fixSession';
 
 export const EndpointTabBar: React.FC = () => {
   const queryClient = useQueryClient();
@@ -30,6 +33,8 @@ export const EndpointTabBar: React.FC = () => {
   } | null>(null);
 
   const [confirmEndpoint, setConfirmEndpoint] = useState<Endpoint | null>(null);
+  const [confirmFixEndpoint, setConfirmFixEndpoint] = useState<Endpoint | null>(null);
+  const fixSessions = useFixSessionStore((state) => state.sessions);
 
   // Fetch environments for active workspace
   const { data: environments = [], isLoading: isEnvironmentsLoading } = useQuery<Environment[]>({
@@ -54,7 +59,12 @@ export const EndpointTabBar: React.FC = () => {
   }, []);
 
   function handleAttemptClose(ep: Endpoint) {
-    if (isEndpointDirty(ep.id)) {
+    if (
+      ep.protocol === 'fix' &&
+      isFixSessionActive(fixSessions[ep.id]?.status)
+    ) {
+      setConfirmFixEndpoint(ep);
+    } else if (isEndpointDirty(ep.id)) {
       setConfirmEndpoint(ep);
     } else {
       closeEndpoint(ep.id);
@@ -87,6 +97,17 @@ export const EndpointTabBar: React.FC = () => {
   }
 
   function renderMethodBadge(ep: Endpoint) {
+    if (ep.protocol === 'fix') {
+      return (
+        <span
+          title="FIX session"
+          className="text-[9px] font-mono font-bold tracking-tight text-blue-300 select-none"
+        >
+          FIX
+        </span>
+      );
+    }
+
     if (ep.protocol === 'http') {
       const method = ep.config?.method || 'GET';
       const colorCls = getHttpMethodColor(method);
@@ -246,8 +267,9 @@ export const EndpointTabBar: React.FC = () => {
           <button
             onClick={() => {
               const tid = contextMenu.tabId;
+              const endpoint = openEndpoints.find((item) => item.id === tid);
               setContextMenu(null);
-              closeEndpoint(tid);
+              if (endpoint) handleAttemptClose(endpoint);
             }}
             className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center justify-between"
           >
@@ -276,6 +298,58 @@ export const EndpointTabBar: React.FC = () => {
             <span>Close All Tabs</span>
             <kbd className="text-[10px] text-red-500/70 font-mono">Ctrl+Shift+W</kbd>
           </button>
+        </div>
+      )}
+
+      {/* Active FIX Session Close Confirmation */}
+      {confirmFixEndpoint && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans"
+          onClick={() => setConfirmFixEndpoint(null)}
+        >
+          <div
+            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded bg-red-950/60 border border-red-800/60 text-red-400 flex-shrink-0">
+                <AlertTriangle size={18} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm font-semibold text-zinc-100">Active FIX Session</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  FIX session{' '}
+                  <span className="text-zinc-200 font-medium">
+                    &quot;{confirmFixEndpoint.name}&quot;
+                  </span>{' '}
+                  is connected. Closing this tab sends Logout and disconnects it
+                  {isEndpointDirty(confirmFixEndpoint.id)
+                    ? ', discarding unsaved configuration changes.'
+                    : '.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-zinc-800/80">
+              <button
+                onClick={() => setConfirmFixEndpoint(null)}
+                className="px-3 py-1.5 rounded text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition"
+              >
+                Keep Open
+              </button>
+              <button
+                onClick={() => {
+                  const id = confirmFixEndpoint.id;
+                  setConfirmFixEndpoint(null);
+                  void disconnectFixSession(id).finally(() =>
+                    closeEndpoint(id, { skipFixConfirmation: true })
+                  );
+                }}
+                className="px-3 py-1.5 rounded text-xs bg-red-600 hover:bg-red-500 text-white font-medium transition"
+              >
+                Logout &amp; Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

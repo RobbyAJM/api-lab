@@ -9,6 +9,7 @@ import type {
   CollectionFolder,
   Endpoint,
   Environment,
+  Protocol,
 } from '@api-lab/api-types';
 import {
   Folder,
@@ -61,6 +62,30 @@ import {
   resolveWorkspaceEnvironment,
   NO_ENVIRONMENT_VALUE,
 } from '../../utils/environmentDropdown';
+import { createDefaultFixEndpointConfig } from '../../utils/fixSession';
+
+function buildEndpointConfig(protocol: Protocol): Record<string, any> {
+  if (protocol === 'http') {
+    return {
+      method: 'GET',
+      url: 'https://httpbin.org/get',
+      headers: {},
+      query_params: [],
+      body: '',
+    };
+  }
+  if (protocol === 'fix') {
+    return createDefaultFixEndpointConfig();
+  }
+  return {
+    server_address: 'localhost:50051',
+    service: '',
+    method: '',
+    stream_type: 'unary',
+    metadata: {},
+    payload: {},
+  };
+}
 
 export const Sidebar: React.FC = () => {
   const queryClient = useQueryClient();
@@ -458,7 +483,9 @@ const CollectionNode: React.FC<{
 
   const [folderName, setFolderName] = useState('');
   const [endpointName, setEndpointName] = useState('');
-  const [endpointProtocol, setEndpointProtocol] = useState<'http' | 'grpc' | 'grpc_reflection' | 'swagger'>('http');
+  const [endpointProtocol, setEndpointProtocol] = useState<
+    'http' | 'grpc' | 'fix' | 'grpc_reflection' | 'swagger'
+  >('http');
   const { activeEnvironmentId } = useAppStore();
 
   // Close context menu on outside click or global close event
@@ -534,17 +561,14 @@ const CollectionNode: React.FC<{
   });
 
   const createEndpointMutation = useMutation({
-    mutationFn: (payload: { name: string; protocol: 'http' | 'grpc' }) =>
+    mutationFn: (payload: { name: string; protocol: Protocol }) =>
       apiRequest(`/collections/${collection.id}/endpoints`, {
         method: 'POST',
         body: JSON.stringify({
           name: payload.name,
           protocol: payload.protocol,
           folder_id: null,
-          config:
-            payload.protocol === 'http'
-              ? { method: 'GET', url: 'https://httpbin.org/get', headers: {}, query_params: [], body: '' }
-              : { server_address: 'localhost:50051', service: '', method: '', stream_type: 'unary', metadata: {}, payload: {} },
+          config: buildEndpointConfig(payload.protocol),
         }),
       }),
     onSuccess: () => {
@@ -764,7 +788,7 @@ const CollectionNode: React.FC<{
             <Select
               value={endpointProtocol}
               onChange={(val) => {
-                const p = val as 'http' | 'grpc' | 'grpc_reflection' | 'swagger';
+                const p = val as 'http' | 'grpc' | 'fix' | 'grpc_reflection' | 'swagger';
                 setEndpointProtocol(p);
                 if (p === 'grpc_reflection') {
                   setShowGrpcModal(true);
@@ -775,6 +799,7 @@ const CollectionNode: React.FC<{
               options={[
                 { value: 'http', label: 'HTTP' },
                 { value: 'grpc', label: 'gRPC' },
+                { value: 'fix', label: 'FIX' },
                 { value: 'grpc_reflection', label: 'Generate gRPC' },
                 { value: 'swagger', label: 'Generate Swagger' },
               ]}
@@ -976,7 +1001,7 @@ const FolderTreeNodeComponent: React.FC<{
   const [showAddSubEndpoint, setShowAddSubEndpoint] = useState(false);
   const [subFolderName, setSubFolderName] = useState('');
   const [subEndpointName, setSubEndpointName] = useState('');
-  const [subEndpointProtocol, setSubEndpointProtocol] = useState<'http' | 'grpc'>('http');
+  const [subEndpointProtocol, setSubEndpointProtocol] = useState<Protocol>('http');
   const [folderContextMenuPos, setFolderContextMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   const isFolderHighlighted = Boolean(highlightedFolderIds?.has(node.folder.id));
@@ -1041,17 +1066,14 @@ const FolderTreeNodeComponent: React.FC<{
   });
 
   const createSubEndpointMutation = useMutation({
-    mutationFn: (payload: { name: string; protocol: 'http' | 'grpc' }) =>
+    mutationFn: (payload: { name: string; protocol: Protocol }) =>
       apiRequest(`/collections/${collectionId}/endpoints`, {
         method: 'POST',
         body: JSON.stringify({
           name: payload.name,
           protocol: payload.protocol,
           folder_id: node.folder.id,
-          config:
-            payload.protocol === 'http'
-              ? { method: 'GET', url: 'https://httpbin.org/get', headers: {}, query_params: [], body: '' }
-              : { server_address: 'localhost:50051', service: '', method: '', stream_type: 'unary', metadata: {}, payload: {} },
+          config: buildEndpointConfig(payload.protocol),
         }),
       }),
     onSuccess: () => {
@@ -1300,10 +1322,11 @@ const FolderTreeNodeComponent: React.FC<{
         <div className="p-1 pl-4 flex gap-1 items-center bg-zinc-900/60 border-t border-zinc-800 my-1 rounded">
           <Select
             value={subEndpointProtocol}
-            onChange={(val) => setSubEndpointProtocol(val as any)}
+            onChange={(val) => setSubEndpointProtocol(val as Protocol)}
             options={[
               { value: 'http', label: 'HTTP' },
               { value: 'grpc', label: 'gRPC' },
+              { value: 'fix', label: 'FIX' },
             ]}
             size="xs"
             fontMono
@@ -1405,7 +1428,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
     mutationFn: () => apiRequest(`/endpoints/${endpoint.id}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['endpoints', endpoint.collection_id] });
-      closeEndpoint(endpoint.id);
+      closeEndpoint(endpoint.id, { skipFixConfirmation: true });
       setShowDeleteModal(false);
     },
   });
@@ -1413,6 +1436,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const isActive = activeEndpointId === endpoint.id;
   const method = endpoint.protocol === 'http' ? endpoint.config?.method || 'GET' : 'gRPC';
   const streamType = endpoint.config?.stream_type || 'unary';
+  const isFix = endpoint.protocol === 'fix';
 
   // Do not display summary in sidebar; show clean operation name or path
   const summary = endpoint.config?.summary || endpoint.config?.specification?.summary;
@@ -1452,7 +1476,14 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
         }`}
       >
         <div className="flex items-center gap-2 truncate flex-1 min-w-0">
-          {endpoint.protocol === 'http' ? (
+          {isFix ? (
+            <span
+              title={`FIX session (${endpoint.config?.begin_string || 'FIX.4.4'})`}
+              className="w-7 flex-shrink-0 text-[9px] font-mono font-bold text-blue-300 text-left"
+            >
+              FIX
+            </span>
+          ) : endpoint.protocol === 'http' ? (
             <span
               className={`w-7 text-[9px] font-mono font-bold flex-shrink-0 text-left ${getHttpMethodColor(
                 method

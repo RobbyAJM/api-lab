@@ -16,6 +16,7 @@ interface VariableInputProps {
   className?: string;
   inputClassName?: string;
   disabled?: boolean;
+  maskValue?: boolean;
 }
 
 export const VariableInput: React.FC<VariableInputProps> = ({
@@ -27,6 +28,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
   className = '',
   inputClassName = '',
   disabled = false,
+  maskValue = false,
 }) => {
   const backdropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -212,7 +214,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
             if (!token.isVariable) {
               return (
                 <span key={idx} className="text-zinc-200">
-                  {token.text}
+                  {maskValue ? '•'.repeat(Math.min(token.text.length, 48)) : token.text}
                 </span>
               );
             }
@@ -233,9 +235,10 @@ export const VariableInput: React.FC<VariableInputProps> = ({
       {/* Actual Input */}
       <input
         ref={inputRef}
-        type="text"
+        type={maskValue ? 'password' : 'text'}
         value={value}
         disabled={disabled}
+        autoComplete={maskValue ? 'off' : undefined}
         onChange={(e) => {
           onChange(e.target.value);
           updateCompletion(e.target.value, e.target.selectionStart ?? e.target.value.length);

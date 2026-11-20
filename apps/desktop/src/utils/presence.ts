@@ -89,6 +89,14 @@ export function computeCurrentLocation(params: ComputeLocationParams): PresenceU
   if (params.activeEndpoint) {
     const ep = params.activeEndpoint;
     const cfg = ep.config || {};
+    if (ep.protocol === 'fix') {
+      return {
+        location_type: 'fix',
+        endpoint_id: ep.id,
+        name: ep.name,
+        method: 'FIX',
+      };
+    }
     if (ep.protocol === 'grpc') {
       const methodName = cfg.method_name || cfg.method || ep.name;
       return {
@@ -114,7 +122,7 @@ export interface FormattedUserLocation {
   badge: string;
   isEditingEndpoint: boolean;
   badgeClass: string;
-  iconType: 'http' | 'grpc' | 'settings' | 'idle';
+  iconType: 'http' | 'grpc' | 'fix' | 'settings' | 'idle';
 }
 
 export function formatUserLocation(location?: PresenceUserLocation | null): FormattedUserLocation {
@@ -155,6 +163,16 @@ export function formatUserLocation(location?: PresenceUserLocation | null): Form
       isEditingEndpoint: true,
       badgeClass: 'text-indigo-400 bg-indigo-950/60 border-indigo-800/60',
       iconType: 'grpc',
+    };
+  }
+
+  if (location.location_type === 'fix') {
+    return {
+      label: location.name || 'FIX Session',
+      badge: 'FIX',
+      isEditingEndpoint: true,
+      badgeClass: 'text-blue-300 bg-blue-950/60 border-blue-800/60',
+      iconType: 'fix',
     };
   }
 

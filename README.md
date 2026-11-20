@@ -5,8 +5,8 @@
 <h1 align="center">API Lab</h1>
 
 <p align="center">
-  <b>High-density, keyboard-driven API & gRPC workbench for desktop.</b><br>
-  Native Rust direct sockets, dynamic reflection gRPC, and encrypted workspace sync.
+  <b>High-density, keyboard-driven API, gRPC & FIX workbench for desktop.</b><br>
+  Native Rust direct sockets, dynamic reflection gRPC, live FIX sessions, and encrypted workspace sync.
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 |---|---|
 | 🪶 **Ultra-lightweight footprint** | Client idles at **5–7 MB RAM** (vs 300 MB+ in Electron-based tools). Minimal installer size with zero bundled Chromium or Node.js bloat. |
 | ⚡ **Built for fast-paced work** | Zero delayed transition animations, instant tab and collection switches, and rapid response parsing. Never waits on UI sluggishness. |
-| 🦀 **Direct native sockets** | HTTP and gRPC execute over native Rust sockets (`reqwest` & `tonic`). No browser sandbox constraints, no CORS limits, and minimal overhead. |
+| 🦀 **Direct native sockets** | HTTP, gRPC, and FIX execute over native Rust sockets (`reqwest`, `tonic`, and a dedicated FIX engine). No browser sandbox constraints, no CORS limits, and minimal overhead. |
 | 📡 **Dynamic gRPC reflection** | Auto-discovers services via `grpc.reflection.v1alpha`. Protobuf transcoding happens on the wire with zero manual `.proto` files needed. |
 | 📑 **Swagger & OpenAPI sync folders** | Dedicated sync folders mirror OpenAPI 3.x and Swagger schemas like gRPC reflection. Auto-generates sample payloads and reconciles endpoint changes on demand. |
 | 🔒 **Encrypted & local-first** | Multi-tier environment variables encrypted at rest with AES-256-GCM. 100% functional offline with optional self-hosted realtime sync. |
@@ -39,6 +39,9 @@
 |---|---|
 | **HTTP / REST** | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS · Path vars (`:id`) · Query editor · Bearer/Basic/Inherited auth · Multipart/Form/JSON payloads · Script hooks |
 | **gRPC** | Server Reflection v1alpha · Unary · Server/Client/Bidirectional streaming · Protobuf dynamic transcoding · Deadlines · Metadata · TLS detection |
+| **FIX** | FIX 4.2/4.4 initiator · Logon/heartbeat/Test Request/Logout · Raw + parsed transcript · Sequence validation · Direct TCP · Managed/external stunnel |
+
+Managed stunnel mode requires a `stunnel` executable on `PATH`, or an explicit executable path in the FIX transport settings. External stunnel mode connects to a local listener that you configure and run separately.
 
 ## Quick Start
 
@@ -47,10 +50,7 @@
    cp .env.example .env
    ```
 
-2. **Run database migrations (PostgreSQL 14+):**
-   ```bash
-   psql "postgres://root:root@localhost:5432/api_lab?sslmode=disable" -f migrations/20260101000000_init_schema.sql
-   ```
+2. **Prepare PostgreSQL 14+** (`DATABASE_URL` in `.env`). The sync server applies migrations automatically on startup.
 
 3. **Install dependencies:**
    ```bash
@@ -73,11 +73,12 @@
 api-lab/
 ├── apps/
 │   ├── desktop/                 # Tauri v2 frontend (React 18, Vite, Tailwind CSS)
-│   │   └── src-tauri/           # Native request runner (reqwest HTTP + tonic gRPC)
+│   │   └── src-tauri/           # Native request runner (HTTP, gRPC, FIX + stunnel lifecycle)
 │   └── server/                  # Axum sync server + WebSocket rooms + PostgreSQL
 ├── packages/
 │   ├── rust-core/               # Shared Rust models, AES-256-GCM crypto, variable engine
 │   ├── grpc-client/             # Tonic reflection gRPC caller
+│   ├── fix-client/              # FIX framing, initiator session state, stunnel config
 │   └── api-types/               # Generated TypeScript definitions
 └── docs/                        # Static docs & assets
 ```

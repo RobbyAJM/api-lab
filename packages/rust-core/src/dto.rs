@@ -217,6 +217,136 @@ pub struct UpdateEndpointDto {
     pub version: Option<i32>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FixTransport {
+    #[default]
+    Direct,
+    StunnelManaged,
+    StunnelExternal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct FixStunnelOptions {
+    pub executable: String,
+    pub local_host: String,
+    pub local_port: String,
+    pub ca_file: String,
+    pub client_cert_file: String,
+    pub client_key_file: String,
+    pub verify_peer: bool,
+}
+
+impl Default for FixStunnelOptions {
+    fn default() -> Self {
+        Self {
+            executable: String::new(),
+            local_host: "127.0.0.1".to_string(),
+            local_port: String::new(),
+            ca_file: String::new(),
+            client_cert_file: String::new(),
+            client_key_file: String::new(),
+            verify_peer: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(default)]
+pub struct FixConnectRequest {
+    pub host: String,
+    pub port: String,
+    pub begin_string: String,
+    pub sender_comp_id: String,
+    pub target_comp_id: String,
+    pub heartbeat_seconds: u32,
+    pub username: String,
+    pub password: String,
+    pub reset_seq_num_on_logon: bool,
+    pub transport: FixTransport,
+    pub stunnel: FixStunnelOptions,
+}
+
+impl Default for FixConnectRequest {
+    fn default() -> Self {
+        Self {
+            host: "127.0.0.1".to_string(),
+            port: "9876".to_string(),
+            begin_string: "FIX.4.4".to_string(),
+            sender_comp_id: "CLIENT".to_string(),
+            target_comp_id: "SERVER".to_string(),
+            heartbeat_seconds: 30,
+            username: String::new(),
+            password: String::new(),
+            reset_seq_num_on_logon: true,
+            transport: FixTransport::Direct,
+            stunnel: FixStunnelOptions::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixEventKind {
+    State,
+    Message,
+    Transport,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixSessionStatus {
+    Connecting,
+    TransportReady,
+    LogonSent,
+    LoggedOn,
+    Disconnecting,
+    Disconnected,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixLogLevel {
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FixDirection {
+    In,
+    Out,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FixMessageEvent {
+    pub direction: FixDirection,
+    pub raw: String,
+    pub fields: Vec<(String, String)>,
+    pub message_type: String,
+    pub sequence_number: Option<u64>,
+    pub is_admin: bool,
+    pub timestamp: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FixSessionEvent {
+    pub kind: FixEventKind,
+    pub timestamp: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<FixSessionStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub level: Option<FixLogLevel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<FixMessageEvent>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateEnvironmentDto {
     pub name: String,

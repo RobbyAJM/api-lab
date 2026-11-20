@@ -1,0 +1,10 @@
+[package]
+name = "fix-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+chrono = { workspace = true }
+rust-core = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }

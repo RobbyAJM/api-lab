@@ -5,6 +5,7 @@ members = [
     "apps/desktop/src-tauri",
     "packages/rust-core",
     "packages/grpc-client",
+    "packages/fix-client",
 ]
 
 [workspace.dependencies]
@@ -39,3 +40,4 @@ http-body-util = "0.1"
 regex = "1.11"
 rust-core = { path = "packages/rust-core" }
 grpc-client = { path = "packages/grpc-client" }
+fix-client = { path = "packages/fix-client" }

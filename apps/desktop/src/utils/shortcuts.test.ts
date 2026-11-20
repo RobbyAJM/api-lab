@@ -218,6 +218,31 @@ test('searchEndpointsForCommandPalette: searches across names, methods, services
   assert.equal(all[2].collectionName, 'Billing gRPC');
   assert.equal(all[3].methodLabel, 'STREAM');
 
+  const fixEndpoint: Endpoint = {
+    id: 'e5',
+    collection_id: 'c2',
+    name: 'Order Session',
+    protocol: 'fix',
+    config: {
+      host: 'fix.example.com',
+      port: '9876',
+      sender_comp_id: 'CLIENT',
+      target_comp_id: 'BROKER',
+    },
+    sort_order: 2,
+    version: 1,
+    created_at: '',
+    updated_at: '',
+  };
+  const fixItems = searchEndpointsForCommandPalette(
+    [fixEndpoint],
+    collections,
+    'BROKER'
+  );
+  assert.equal(fixItems.length, 1);
+  assert.equal(fixItems[0].methodLabel, 'FIX');
+  assert.match(fixItems[0].urlOrService, /fix\.example\.com:9876/);
+
   // 2. Search by endpoint name substring
   const byName = searchEndpointsForCommandPalette(endpoints, collections, 'Profile');
   assert.equal(byName.length, 1);

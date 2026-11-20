@@ -1,6 +1,6 @@
 ---
 name: API Lab Workbench
-description: High-density, mineral dark workbench for HTTP and gRPC engineering. Edge-to-edge chrome, crisp 1px hairlines, zero decorative slop.
+description: High-density, mineral dark workbench for HTTP, gRPC, and FIX engineering. Edge-to-edge chrome, crisp 1px hairlines, zero decorative slop.
 
 colors:
   ground: "oklch(15% 0.01 260)"           # #0f1117 - page background
@@ -40,4 +40,4 @@ radii:
 1. **High Information Density:** Desktop tool for professional engineers. Minimize whitespace padding; maximize lines of code and payload visible.
 2. **Monolithic Workbench:** Request and response areas are flat edge-to-edge panes separated by thin 1px dividers, never nested floating cards.
 3. **No Decorative Slop:** No gradient overlays, no glowing halos, no side-tab borders (`border-l-4` is strictly refused), no drop-shadows on flat chrome.
-4. **Instant Affordances:** Primary action (Send) is locked directly into the address bar as a monolithic command pill.
+4. **Instant Affordances:** Primary action (Send) is locked directly into the address bar as a monolithic command pill. FIX sessions use the same flat command-bar discipline for connection controls and message dispatch.

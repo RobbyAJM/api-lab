@@ -31,6 +31,7 @@ impl Role {
 pub enum Protocol {
     Http,
     Grpc,
+    Fix,
 }
 
 impl Protocol {
@@ -38,6 +39,7 @@ impl Protocol {
         match self {
             Protocol::Http => "http",
             Protocol::Grpc => "grpc",
+            Protocol::Fix => "fix",
         }
     }
 
@@ -45,6 +47,7 @@ impl Protocol {
         match s.to_lowercase().as_str() {
             "http" => Some(Protocol::Http),
             "grpc" => Some(Protocol::Grpc),
+            "fix" => Some(Protocol::Fix),
             _ => None,
         }
     }

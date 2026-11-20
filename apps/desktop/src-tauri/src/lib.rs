@@ -1,11 +1,12 @@
+pub mod fix_runner;
 pub mod grpc_runner;
 pub mod http_runner;
 
 use std::collections::HashMap;
 use rust_core::dto::{
-    GrpcExecutionRequest, GrpcExecutionResponse, GrpcReflectionRequest, GrpcReflectionResponse,
-    GrpcSamplePayloadRequest, GrpcSamplePayloadResponse, HttpExecutionRequest,
-    HttpExecutionResponse,
+    FixConnectRequest, GrpcExecutionRequest, GrpcExecutionResponse, GrpcReflectionRequest,
+    GrpcReflectionResponse, GrpcSamplePayloadRequest, GrpcSamplePayloadResponse,
+    HttpExecutionRequest, HttpExecutionResponse,
 };
 
 #[cfg(feature = "desktop")]
@@ -68,6 +69,50 @@ mod commands {
         payload: serde_json::Value,
     ) -> Result<(), String> {
         grpc_runner::send_stream_message(&stream_id, payload).await
+    }
+
+    #[tauri::command]
+    pub async fn connect_fix_session(
+        req: FixConnectRequest,
+        variables: HashMap<String, String>,
+        session_id: String,
+        channel: tauri::ipc::Channel<serde_json::Value>,
+    ) -> Result<(), String> {
+        let (event_tx, mut event_rx) =
+            tokio::sync::mpsc::unbounded_channel::<rust_core::dto::FixSessionEvent>();
+        let forward = tokio::spawn(async move {
+            while let Some(event) = event_rx.recv().await {
+                match serde_json::to_value(event) {
+                    Ok(value) => {
+                        if channel.send(value).is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        tracing::error!(%error, "failed to serialize FIX session event");
+                        break;
+                    }
+                }
+            }
+        });
+        let result =
+            fix_runner::connect_fix_session(req, variables, session_id, event_tx).await;
+        let _ = forward.await;
+        result
+    }
+
+    #[tauri::command]
+    pub async fn send_fix_session_message(
+        session_id: String,
+        message: String,
+        variables: HashMap<String, String>,
+    ) -> Result<(), String> {
+        fix_runner::send_fix_message(&session_id, message, &variables).await
+    }
+
+    #[tauri::command]
+    pub fn disconnect_fix_session(session_id: String) -> bool {
+        fix_runner::disconnect_fix_session(&session_id)
     }
 
     #[tauri::command]
@@ -170,6 +215,26 @@ mod commands {
         grpc_runner::send_stream_message(&stream_id, payload).await
     }
 
+    pub async fn connect_fix_session(
+        _req: FixConnectRequest,
+        _variables: HashMap<String, String>,
+        _session_id: String,
+    ) -> Result<(), String> {
+        Err("FIX sessions require the native desktop runtime".to_string())
+    }
+
+    pub async fn send_fix_session_message(
+        _session_id: String,
+        _message: String,
+        _variables: HashMap<String, String>,
+    ) -> Result<(), String> {
+        Err("FIX sessions require the native desktop runtime".to_string())
+    }
+
+    pub fn disconnect_fix_session(_session_id: String) -> bool {
+        false
+    }
+
     pub fn minimize_window() {}
     pub fn toggle_maximize_window() {}
     pub fn close_window() {}
@@ -196,6 +261,9 @@ pub fn run() {
             execute_grpc_stream,
             cancel_grpc_stream,
             send_grpc_stream_message,
+            connect_fix_session,
+            send_fix_session_message,
+            disconnect_fix_session,
             minimize_window,
             toggle_maximize_window,
             close_window,

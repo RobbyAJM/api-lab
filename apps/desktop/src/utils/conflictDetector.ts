@@ -16,8 +16,33 @@ export function computeConflictDiffs(
   localConfig: any
 ): ConflictDiffRow[] {
   const isHttp = localEndpoint.protocol === 'http';
+  const isFix = localEndpoint.protocol === 'fix';
   const remoteConfig = remoteEndpoint.config || {};
   const diffs: ConflictDiffRow[] = [];
+
+  if (isFix) {
+    for (const [field, label] of [
+      ['host', 'FIX Host'],
+      ['port', 'FIX Port'],
+      ['begin_string', 'BeginString'],
+      ['sender_comp_id', 'SenderCompID'],
+      ['target_comp_id', 'TargetCompID'],
+      ['username', 'Username'],
+      ['transport', 'Transport'],
+    ] as const) {
+      const localValue = String(localConfig[field] || '');
+      const remoteValue = String(remoteConfig[field] || '');
+      if (localValue !== remoteValue) {
+        diffs.push({ field: label, localVal: localValue, remoteVal: remoteValue });
+      }
+    }
+    const localSecret = localConfig.password ? 'configured' : 'empty';
+    const remoteSecret = remoteConfig.password ? 'configured' : 'empty';
+    if (localSecret !== remoteSecret) {
+      diffs.push({ field: 'FIX Password', localVal: localSecret, remoteVal: remoteSecret });
+    }
+    return diffs;
+  }
 
   if (isHttp) {
     const localMethod = String(localConfig.method || 'GET').toUpperCase();

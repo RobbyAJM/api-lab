@@ -6,6 +6,9 @@ edition = "2021"
 [dependencies]
 rust-core = { workspace = true }
 grpc-client = { workspace = true }
+fix-client = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
