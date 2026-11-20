@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 
 use chrono::{DateTime, Utc};
-use rust_core::dto::{FixDirection, FixMessageEvent};
+use rust_core::dto::{FixDirection, FixMessageEvent, FixSensitiveField};
 
 use crate::error::FixError;
 
@@ -39,14 +39,28 @@ impl FixMessage {
     }
 
     pub fn event(&self, direction: FixDirection, timestamp: DateTime<Utc>) -> FixMessageEvent {
+        let sensitive_fields = self
+            .fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| is_sensitive_tag(&field.tag))
+            .map(|(field_index, field)| FixSensitiveField {
+                field_index,
+                tag: field.tag.clone(),
+                value: field.value.clone(),
+            })
+            .collect();
+        let fields = self
+            .fields
+            .iter()
+            .map(|field| (field.tag.clone(), redact_field(&field.tag, &field.value)))
+            .collect();
+
         FixMessageEvent {
             direction,
             raw: redact_for_display(&self.raw),
-            fields: self
-                .fields
-                .iter()
-                .map(|field| (field.tag.clone(), redact_field(&field.tag, &field.value)))
-                .collect(),
+            fields,
+            sensitive_fields,
             message_type: self.message_type.clone(),
             sequence_number: self.sequence_number,
             is_admin: self.is_admin(),
@@ -344,11 +358,15 @@ pub fn redact_for_display(raw: &str) -> String {
 }
 
 fn redact_field(tag: &str, value: &str) -> String {
-    if matches!(tag, "554" | "925") {
+    if is_sensitive_tag(tag) {
         "********".to_string()
     } else {
         value.to_string()
     }
+}
+
+fn is_sensitive_tag(tag: &str) -> bool {
+    matches!(tag, "554" | "925")
 }
 
 fn is_admin_message_type(message_type: &str) -> bool {
@@ -512,10 +530,37 @@ mod tests {
             sample_time(),
             &[
                 ("35".to_string(), "A".to_string()),
+                ("553".to_string(), "alice".to_string()),
                 ("554".to_string(), "super-secret".to_string()),
+                ("925".to_string(), "new-secret".to_string()),
             ],
         )
         .expect("encode logon");
-        assert!(!redact_for_display(&raw).contains("super-secret"));
+        let message = parse_message(&raw).expect("parse logon");
+        let event = message.event(FixDirection::In, sample_time());
+
+        assert!(!event.raw.contains("super-secret"));
+        assert!(!event.raw.contains("new-secret"));
+        assert!(event
+            .fields
+            .iter()
+            .all(|(_, value)| value != "super-secret" && value != "new-secret"));
+
+        for (tag, expected) in [("554", "super-secret"), ("925", "new-secret")] {
+            let sensitive = event
+                .sensitive_fields
+                .iter()
+                .find(|field| field.tag == tag)
+                .expect("sensitive field metadata");
+            assert_eq!(sensitive.value, expected);
+            assert_eq!(event.fields[sensitive.field_index].0, tag);
+        }
+        assert!(
+            event
+                .sensitive_fields
+                .iter()
+                .all(|field| field.tag != "553"),
+            "username is not treated as a credential"
+        );
     }
 }

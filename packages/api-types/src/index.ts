@@ -328,10 +328,17 @@ export type FixDirection = 'in' | 'out';
 
 export type FixMessageField = [string, string];
 
+export interface FixSensitiveField {
+  field_index: number;
+  tag: string;
+  value: string;
+}
+
 export interface FixMessageEvent {
   direction: FixDirection;
   raw: string;
   fields: FixMessageField[];
+  sensitive_fields?: FixSensitiveField[];
   message_type: string;
   sequence_number?: number;
   is_admin: boolean;

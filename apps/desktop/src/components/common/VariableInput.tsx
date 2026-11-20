@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
@@ -35,6 +36,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
   const hoverTimer = useRef(createHoverTimerController()).current;
 
   const { activeWorkspaceId, activeEnvironmentId } = useAppStore();
+  const [isRevealed, setIsRevealed] = useState(false);
 
   const [hoverState, setHoverState] = useState<{
     varName: string;
@@ -195,6 +197,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
   }, [hoverTimer]);
 
   const tokens = tokenizeVariables(value, effectiveVars);
+  const masked = maskValue && !isRevealed;
 
   return (
     <div
@@ -205,7 +208,9 @@ export const VariableInput: React.FC<VariableInputProps> = ({
       <div
         ref={backdropRef}
         aria-hidden="true"
-        className="absolute inset-0 flex items-center px-3 py-1.5 whitespace-pre pointer-events-none overflow-hidden select-none"
+        className={`absolute inset-0 flex items-center px-3 py-1.5 whitespace-pre pointer-events-none overflow-hidden select-none ${
+          maskValue ? 'pr-9' : ''
+        }`}
       >
         {tokens.length === 0 ? (
           <span className="text-zinc-500">{placeholder || ''}</span>
@@ -214,7 +219,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
             if (!token.isVariable) {
               return (
                 <span key={idx} className="text-zinc-200">
-                  {maskValue ? '•'.repeat(Math.min(token.text.length, 48)) : token.text}
+                  {masked ? '•'.repeat(Math.min(token.text.length, 48)) : token.text}
                 </span>
               );
             }
@@ -235,7 +240,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
       {/* Actual Input */}
       <input
         ref={inputRef}
-        type={maskValue ? 'password' : 'text'}
+        type={masked ? 'password' : 'text'}
         value={value}
         disabled={disabled}
         autoComplete={maskValue ? 'off' : undefined}
@@ -274,8 +279,28 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         onScroll={handleScroll}
         placeholder={placeholder}
         spellCheck={false}
-        className={`absolute inset-0 w-full h-full px-3 py-1.5 font-mono text-xs bg-transparent text-transparent caret-zinc-100 focus:outline-none placeholder-transparent selection:bg-primary/40 ${inputClassName}`}
+        className={`absolute inset-0 w-full h-full px-3 py-1.5 font-mono text-xs bg-transparent text-transparent caret-zinc-100 focus:outline-none placeholder-transparent selection:bg-primary/40 ${
+          maskValue ? 'pr-9' : ''
+        } ${inputClassName}`}
       />
+
+      {maskValue && (
+        <button
+          type="button"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            event.stopPropagation();
+            setIsRevealed((current) => !current);
+          }}
+          disabled={disabled}
+          aria-label={isRevealed ? 'Hide password' : 'Show password'}
+          aria-pressed={isRevealed}
+          title={isRevealed ? 'Hide password' : 'Show password'}
+          className="absolute right-1.5 top-1/2 z-10 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-sm text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
+        </button>
+      )}
 
       {completionState && (
         <div className="absolute z-30 left-0 top-full mt-1 min-w-48 max-w-80 border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden">

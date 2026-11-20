@@ -1,4 +1,4 @@
-import type { FixMessageField } from '@api-lab/api-types';
+import type { FixMessageField, FixSensitiveField } from '@api-lab/api-types';
 import type {
   FixDictionary,
   FixEnumValue,
@@ -19,6 +19,7 @@ export interface FixParsedFieldNode {
   section: FixFieldSection;
   groupName?: string;
   entryIndex?: number;
+  sourceIndex: number;
   warnings: string[];
 }
 
@@ -148,13 +149,12 @@ export function parseFixMessageForDisplay(
 
   const root: RootFrame = { kind: 'root', scope, nodes: [] };
   const stack: ParseFrame[] = [root];
-  let occurrenceCount = 0;
 
-  for (const [tagText, value] of fields) {
+  for (const [sourceIndex, [tagText, value]] of fields.entries()) {
     const tag = Number(tagText);
     if (!Number.isInteger(tag) || tag <= 0) {
       warnings.push(`Invalid FIX tag "${tagText}".`);
-      root.nodes.push(makeUnknownField(tagText, value));
+      root.nodes.push(makeUnknownField(tagText, value, sourceIndex));
       continue;
     }
 
@@ -172,7 +172,7 @@ export function parseFixMessageForDisplay(
             value,
             dictionary,
             warnings,
-            occurrenceCount++
+            sourceIndex
           );
           if (childFrame) stack.push(childFrame);
           handled = true;
@@ -194,7 +194,7 @@ export function parseFixMessageForDisplay(
             value,
             dictionary,
             warnings,
-            occurrenceCount++
+            sourceIndex
           );
           if (childFrame) stack.push(childFrame);
           handled = true;
@@ -225,7 +225,7 @@ export function parseFixMessageForDisplay(
           value,
           dictionary,
           warnings,
-          occurrenceCount++,
+          sourceIndex,
           undefined
         )
       );
@@ -330,6 +330,39 @@ export function getFixFieldReference(
     groupContext,
     messageName,
   };
+}
+
+/**
+ * Indexes locally available sensitive field values by their wire position.
+ */
+export function indexFixSensitiveFields(
+  fields: FixSensitiveField[] | undefined
+): Map<number, FixSensitiveField> {
+  const indexed = new Map<number, FixSensitiveField>();
+  for (const field of fields || []) {
+    if (
+      Number.isSafeInteger(field.field_index) &&
+      field.field_index >= 0 &&
+      typeof field.value === 'string'
+    ) {
+      indexed.set(field.field_index, field);
+    }
+  }
+  return indexed;
+}
+
+/**
+ * Returns a sensitive value only when the entry's tag still matches the parsed
+ * field at the same wire position.
+ */
+export function resolveSensitiveFieldValue(
+  indexed: Map<number, FixSensitiveField>,
+  node: Pick<FixParsedFieldNode, 'sourceIndex' | 'tagText'>
+): string | undefined {
+  const sensitive = indexed.get(node.sourceIndex);
+  return sensitive && sensitive.tag === node.tagText
+    ? sensitive.value
+    : undefined;
 }
 
 /**
@@ -449,7 +482,7 @@ function handleGroupMember(
   value: string,
   dictionary: FixDictionary,
   warnings: string[],
-  occurrence: number
+  sourceIndex: number
 ): GroupFrame | null {
   const tag = Number(tagText);
   const childScope = frame.scope.groups.get(tag);
@@ -475,7 +508,7 @@ function handleGroupMember(
       value,
       dictionary,
       warnings,
-      occurrence,
+      sourceIndex,
       frame.group.name,
       frame.entry?.index
     )
@@ -520,7 +553,7 @@ function makeFieldNode(
   value: string,
   dictionary: FixDictionary,
   warnings: string[],
-  _occurrence: number,
+  sourceIndex: number,
   groupName?: string,
   entryIndex?: number
 ): FixParsedFieldNode {
@@ -539,11 +572,16 @@ function makeFieldNode(
     section: sectionForTag(dictionary, tag),
     groupName,
     entryIndex,
+    sourceIndex,
     warnings: [],
   };
 }
 
-function makeUnknownField(tagText: string, value: string): FixParsedFieldNode {
+function makeUnknownField(
+  tagText: string,
+  value: string,
+  sourceIndex: number
+): FixParsedFieldNode {
   return {
     kind: 'field',
     tag: 0,
@@ -552,6 +590,7 @@ function makeUnknownField(tagText: string, value: string): FixParsedFieldNode {
     section: 'body',
     warnings: [],
     definition: undefined,
+    sourceIndex,
   };
 }
 

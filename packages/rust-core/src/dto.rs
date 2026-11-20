@@ -323,10 +323,19 @@ pub enum FixDirection {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FixSensitiveField {
+    pub field_index: usize,
+    pub tag: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FixMessageEvent {
     pub direction: FixDirection,
     pub raw: String,
     pub fields: Vec<(String, String)>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sensitive_fields: Vec<FixSensitiveField>,
     pub message_type: String,
     pub sequence_number: Option<u64>,
     pub is_admin: bool,

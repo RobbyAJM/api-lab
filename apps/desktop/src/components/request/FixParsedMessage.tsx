@@ -6,16 +6,21 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Eye,
+  EyeOff,
   Info,
   Search,
   X,
 } from 'lucide-react';
+import type { FixSensitiveField } from '@api-lab/api-types';
 import { loadFixDictionary, type FixDictionary } from '../../utils/fixDictionary';
 import {
   calculateFixPopoverPosition,
   formatFixFieldValue,
   getFixFieldReference,
+  indexFixSensitiveFields,
   parseFixMessageForDisplay,
+  resolveSensitiveFieldValue,
   type FixFieldReference,
   type FixParsedFieldNode,
   type FixParsedGroupNode,
@@ -40,14 +45,22 @@ export const FixParsedMessage: React.FC<{ message: FixMessageEvent }> = ({
   );
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [collapsedEntries, setCollapsedEntries] = useState<Set<string>>(new Set());
+  const [revealedSensitive, setRevealedSensitive] = useState<Set<number>>(
+    new Set()
+  );
   const [selectedReference, setSelectedReference] =
     useState<SelectedReference | null>(null);
+  const sensitiveFields = useMemo(
+    () => indexFixSensitiveFields(message.sensitive_fields),
+    [message.sensitive_fields]
+  );
 
   useEffect(() => {
     let active = true;
     setDictionary(undefined);
     setCollapsedGroups(new Set());
     setCollapsedEntries(new Set());
+    setRevealedSensitive(new Set());
     setSelectedReference(null);
 
     void loadFixDictionary(beginString).then((loaded) => {
@@ -100,6 +113,15 @@ export const FixParsedMessage: React.FC<{ message: FixMessageEvent }> = ({
     setCollapsedEntries((current) => toggleSetValue(current, key));
   }
 
+  function toggleSensitive(sourceIndex: number) {
+    setRevealedSensitive((current) => {
+      const next = new Set(current);
+      if (next.has(sourceIndex)) next.delete(sourceIndex);
+      else next.add(sourceIndex);
+      return next;
+    });
+  }
+
   if (!dictionary || !parsed) {
     return (
       <div className="border-t border-zinc-900 bg-zinc-950/40 px-3 py-2">
@@ -111,7 +133,12 @@ export const FixParsedMessage: React.FC<{ message: FixMessageEvent }> = ({
           <span className="text-zinc-600">·</span>
           <span>Raw fields remain available below.</span>
         </div>
-        <RawFieldTable fields={message.fields} />
+        <RawFieldTable
+          fields={message.fields}
+          sensitiveFields={sensitiveFields}
+          revealedSensitive={revealedSensitive}
+          onToggleSensitive={toggleSensitive}
+        />
       </div>
     );
   }
@@ -203,6 +230,9 @@ export const FixParsedMessage: React.FC<{ message: FixMessageEvent }> = ({
               );
             },
             dictionary,
+            sensitiveFields,
+            revealedSensitive,
+            onToggleSensitive: toggleSensitive,
           })}
         </tbody>
       </table>
@@ -225,6 +255,9 @@ interface RenderNodesOptions {
   collapsedGroups: Set<string>;
   collapsedEntries: Set<string>;
   dictionary: FixDictionary;
+  sensitiveFields: Map<number, FixSensitiveField>;
+  revealedSensitive: Set<number>;
+  onToggleSensitive: (sourceIndex: number) => void;
   onToggleGroup: (key: string) => void;
   onToggleEntry: (key: string) => void;
   onOpenReference: (
@@ -248,6 +281,9 @@ function renderNodes(options: RenderNodesOptions): React.ReactNode[] {
     collapsedGroups,
     collapsedEntries,
     dictionary,
+    sensitiveFields,
+    revealedSensitive,
+    onToggleSensitive,
     onToggleGroup,
     onToggleEntry,
     onOpenReference,
@@ -257,12 +293,16 @@ function renderNodes(options: RenderNodesOptions): React.ReactNode[] {
   return nodes.flatMap((node, index) => {
     const key = `${keyPrefix}/${node.kind}-${node.kind === 'field' ? node.tagText : node.counterTag}-${index}`;
     if (node.kind === 'field') {
+      const sensitiveValue = resolveSensitiveFieldValue(sensitiveFields, node);
       return (
         <FieldRow
           key={key}
           node={node}
           depth={depth}
           dictionary={dictionary}
+          sensitiveValue={sensitiveValue}
+          sensitiveRevealed={revealedSensitive.has(node.sourceIndex)}
+          onToggleSensitive={() => onToggleSensitive(node.sourceIndex)}
           onOpenReference={(event) =>
             onOpenReference(
               event,
@@ -324,14 +364,23 @@ function FieldRow({
   node,
   depth,
   dictionary,
+  sensitiveValue,
+  sensitiveRevealed,
+  onToggleSensitive,
   onOpenReference,
 }: {
   node: FixParsedFieldNode;
   depth: number;
   dictionary: FixDictionary;
+  sensitiveValue?: string;
+  sensitiveRevealed: boolean;
+  onToggleSensitive: () => void;
   onOpenReference: (event: React.MouseEvent<HTMLElement>) => void;
 }) {
-  const value = formatFixFieldValue(dictionary, node.definition, node.value);
+  const isSensitive = sensitiveValue !== undefined;
+  const effectiveValue =
+    isSensitive && sensitiveRevealed ? sensitiveValue : node.value;
+  const value = formatFixFieldValue(dictionary, node.definition, effectiveValue);
   const isMessageType = node.tag === 35 && Boolean(value.label);
   const nameClass =
     node.section === 'header'
@@ -357,32 +406,56 @@ function FieldRow({
         />
       </td>
       <td className="align-top px-2 py-1.5 text-[11px] text-zinc-200 select-text">
-        {value.raw === '' ? (
-          <span className="text-zinc-600">(empty)</span>
-        ) : isMessageType ? (
-          <span className="inline-flex flex-wrap items-center gap-1.5">
-            <span className="inline-flex rounded-sm border border-blue-800/70 bg-blue-950/40 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-blue-200">
-              {value.raw}
-            </span>
-            <span className="text-zinc-200">{value.label}</span>
-          </span>
-        ) : (
-          <span className="break-all">
-            <span className="font-mono">{value.raw}</span>
-            {value.label && (
-              <span className="text-zinc-400">
-                {' · '}
-                {value.label}
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            {value.raw === '' ? (
+              <span className="text-zinc-600">(empty)</span>
+            ) : isMessageType ? (
+              <span className="inline-flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex rounded-sm border border-blue-800/70 bg-blue-950/40 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-blue-200">
+                  {value.raw}
+                </span>
+                <span className="text-zinc-200">{value.label}</span>
+              </span>
+            ) : (
+              <span className="break-all">
+                <span className="font-mono">{value.raw}</span>
+                {value.label && (
+                  <span className="text-zinc-400">
+                    {' · '}
+                    {value.label}
+                  </span>
+                )}
+                {!value.label && value.secondary && (
+                  <span className="text-zinc-500">
+                    {' · '}
+                    {value.secondary}
+                  </span>
+                )}
               </span>
             )}
-            {!value.label && value.secondary && (
-              <span className="text-zinc-500">
-                {' · '}
-                {value.secondary}
-              </span>
-            )}
-          </span>
-        )}
+          </div>
+          {isSensitive && (
+            <button
+              type="button"
+              onClick={onToggleSensitive}
+              aria-label={
+                sensitiveRevealed
+                  ? 'Hide sensitive value'
+                  : 'Show sensitive value'
+              }
+              aria-pressed={sensitiveRevealed}
+              title={
+                sensitiveRevealed
+                  ? 'Hide sensitive value'
+                  : 'Show sensitive value'
+              }
+              className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500"
+            >
+              {sensitiveRevealed ? <EyeOff size={11} /> : <Eye size={11} />}
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -528,22 +601,56 @@ function FieldReferenceButton({
   );
 }
 
-function RawFieldTable({ fields }: { fields: FixMessageEvent['fields'] }) {
+function RawFieldTable({
+  fields,
+  sensitiveFields,
+  revealedSensitive,
+  onToggleSensitive,
+}: {
+  fields: FixMessageEvent['fields'];
+  sensitiveFields: Map<number, FixSensitiveField>;
+  revealedSensitive: Set<number>;
+  onToggleSensitive: (sourceIndex: number) => void;
+}) {
   return (
     <div className="mt-1.5 border border-zinc-800/70">
-      {fields.map(([tag, value], index) => (
-        <div
-          key={`${tag}-${index}`}
-          className="grid grid-cols-[48px_minmax(0,1fr)] border-b border-zinc-900/70 last:border-b-0"
-        >
-          <span className="px-2 py-1 border-r border-zinc-900/70 text-[10px] font-mono text-zinc-500">
-            {tag}
-          </span>
-          <span className="px-2 py-1 text-[11px] font-mono text-zinc-300 break-all select-text">
-            {value || <span className="text-zinc-600">(empty)</span>}
-          </span>
-        </div>
-      ))}
+      {fields.map(([tag, value], index) => {
+        const sensitive = sensitiveFields.get(index);
+        const isSensitive = sensitive?.tag === tag;
+        const revealed = isSensitive && revealedSensitive.has(index);
+        const displayValue = revealed ? sensitive.value : value;
+        return (
+          <div
+            key={`${tag}-${index}`}
+            className="grid grid-cols-[48px_minmax(0,1fr)] border-b border-zinc-900/70 last:border-b-0"
+          >
+            <span className="px-2 py-1 border-r border-zinc-900/70 text-[10px] font-mono text-zinc-500">
+              {tag}
+            </span>
+            <div className="flex items-start gap-2 px-2 py-1">
+              <span className="min-w-0 flex-1 text-[11px] font-mono text-zinc-300 break-all select-text">
+                {displayValue || <span className="text-zinc-600">(empty)</span>}
+              </span>
+              {isSensitive && (
+                <button
+                  type="button"
+                  onClick={() => onToggleSensitive(index)}
+                  aria-label={
+                    revealed ? 'Hide sensitive value' : 'Show sensitive value'
+                  }
+                  aria-pressed={revealed}
+                  title={
+                    revealed ? 'Hide sensitive value' : 'Show sensitive value'
+                  }
+                  className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-sm text-zinc-500 hover:bg-zinc-900 hover:text-zinc-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-zinc-500"
+                >
+                  {revealed ? <EyeOff size={11} /> : <Eye size={11} />}
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

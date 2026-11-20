@@ -9,7 +9,9 @@ import {
   calculateFixPopoverPosition,
   formatFixFieldValue,
   getFixFieldReference,
+  indexFixSensitiveFields,
   parseFixMessageForDisplay,
+  resolveSensitiveFieldValue,
   type FixParsedFieldNode,
   type FixParsedGroupNode,
 } from './fixParsedMessage.ts';
@@ -162,6 +164,36 @@ test('parseFixMessageForDisplay: reports count mismatch and unknown tags without
   assert.equal(parsed.warnings.some((warning) => warning.includes('Unknown tag 9999')), true);
 });
 
+test('source indexes and sensitive-field lookup stay aligned with the wire', () => {
+  const raw =
+    '8=FIX.4.4|9=90|35=A|34=1|49=CLIENT|52=20261120-13:33:18.487|56=SERVER|98=0|108=30|553=user|554=********|10=000|';
+  const fields = fieldsFromRaw(raw);
+  const parsed = parseFixMessageForDisplay(fields, fix44);
+  const passwordIndex = fields.findIndex(([tag]) => tag === '554');
+  const password = parsed.nodes.find(
+    (node): node is FixParsedFieldNode =>
+      node.kind === 'field' && node.tag === 554
+  );
+  assert.ok(password, 'password field is present');
+  assert.equal(password.sourceIndex, passwordIndex);
+  assert.equal(password.value, '********');
+
+  const indexed = indexFixSensitiveFields([
+    { field_index: passwordIndex, tag: '554', value: 'secret' },
+  ]);
+  assert.equal(resolveSensitiveFieldValue(indexed, password), 'secret');
+
+  const wrongTag = indexFixSensitiveFields([
+    { field_index: passwordIndex, tag: '553', value: 'not-the-password-field' },
+  ]);
+  assert.equal(resolveSensitiveFieldValue(wrongTag, password), undefined);
+
+  const wrongIndex = indexFixSensitiveFields([
+    { field_index: passwordIndex + 1, tag: '554', value: 'shifted-secret' },
+  ]);
+  assert.equal(resolveSensitiveFieldValue(wrongIndex, password), undefined);
+});
+
 test('parseFixMessageForDisplay: loads FIX 4.2 names independently', () => {
   const dictionary = fix42;
   assert.equal(dictionary.version, 'FIX.4.2');
@@ -233,6 +265,7 @@ function field(
           : undefined,
     },
     section: 'body',
+    sourceIndex: tag,
     warnings: [],
   };
 }
