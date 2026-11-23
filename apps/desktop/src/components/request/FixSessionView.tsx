@@ -9,6 +9,7 @@ import type {
 } from '@api-lab/api-types';
 import {
   AlertTriangle,
+  AlignLeft,
   ArrowDown,
   ArrowUp,
   Check,
@@ -25,6 +26,7 @@ import {
   SlidersHorizontal,
   Square,
   Trash2,
+  WrapText,
   X,
 } from 'lucide-react';
 import { apiRequest } from '../../api/client';
@@ -34,9 +36,15 @@ import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { ConflictDiffModal } from './ConflictDiffModal';
 import { FixMessageBuilder } from './FixMessageBuilder';
 import { FixParsedMessage } from './FixParsedMessage';
+import { FixRawEditor } from './FixRawEditor';
 import { Select } from '../common/Select';
 import { VariableInput } from '../common/VariableInput';
 import { loadFixDictionary, type FixDictionary } from '../../utils/fixDictionary';
+import {
+  formatFixRawAsMultiline,
+  formatFixRawAsSingleLine,
+  isFixRawMultiline,
+} from '../../utils/fixHighlight';
 import {
   clampComposerHeightPct,
   getStoredFixComposerHeightPct,
@@ -498,6 +506,7 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   const latestTransportLog = transportLogs[transportLogs.length - 1];
   const isStunnel = config.transport !== 'direct';
   const draftHasRawSoh = hasRawSohDelimiter(config.message_draft || '');
+  const draftIsMultiline = isFixRawMultiline(config.message_draft || '');
   const draftMessageLabel = draftMessageType
     ? resolveFixMessageTypeLabel(draftMessageType, dictionary)
     : '';
@@ -968,7 +977,7 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
               <span className="text-[10px] font-mono text-zinc-500 truncate">
                 header + checksum generated · {'{{VARIABLE}}'} resolved on send
               </span>
-              <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+              <div className="ml-auto flex items-center gap-1.5 flex-shrink-0">
                 {draftHasRawSoh && (
                   <button
                     type="button"
@@ -983,6 +992,36 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                     Format |
                   </button>
                 )}
+                {(config.message_draft || '').trim() !== '' && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateConfig({
+                        message_draft: draftIsMultiline
+                          ? formatFixRawAsSingleLine(config.message_draft || '')
+                          : formatFixRawAsMultiline(config.message_draft || ''),
+                      })
+                    }
+                    className="h-5 px-1.5 inline-flex items-center gap-1 rounded-sm border border-zinc-800 bg-zinc-900/70 hover:border-zinc-700 text-[9px] font-mono text-zinc-300 transition"
+                    title={
+                      draftIsMultiline
+                        ? "Collapse into a single '|'-delimited line"
+                        : 'Format as one tag=value field per line'
+                    }
+                  >
+                    {draftIsMultiline ? (
+                      <>
+                        <AlignLeft size={9} />
+                        One-line
+                      </>
+                    ) : (
+                      <>
+                        <WrapText size={9} />
+                        Multiline
+                      </>
+                    )}
+                  </button>
+                )}
                 <span className="text-[10px] font-mono text-zinc-400">
                   {draftMessageType
                     ? `${draftMessageType} · ${draftMessageLabel}`
@@ -991,14 +1030,13 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
               </div>
             </div>
             <div className="flex items-stretch min-h-[58px] border-l border-blue-800/40">
-              <textarea
+              <FixRawEditor
                 value={config.message_draft || ''}
-                onChange={(event) => updateConfig({ message_draft: event.target.value })}
-                spellCheck={false}
+                onChange={(message_draft) => updateConfig({ message_draft })}
+                dictionary={dictionary}
+                variables={activeVariables}
                 placeholder="35=D|11=ORDER-1|55=AAPL|54=1|38=10|40=2"
-                className="flex-1 min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-xs leading-5 text-zinc-200 placeholder-zinc-600 focus:outline-none select-text"
-                rows={2}
-                aria-label="FIX application message"
+                ariaLabel="FIX application message"
               />
               <div className="w-[164px] flex-shrink-0 border-l border-zinc-900 px-2 py-1.5 flex flex-col justify-between">
                 <div className="text-[10px] text-zinc-500 font-mono">
