@@ -8,6 +8,7 @@ import type {
   FixSessionStatus,
   FixTransport,
 } from '@api-lab/api-types';
+import type { FixDictionary } from './fixDictionary';
 
 export const FIX_ADMIN_MESSAGE_TYPES = new Set(['0', '1', '2', '3', '4', '5', 'A']);
 export const FIX_MESSAGE_LIMIT = 2000;
@@ -223,9 +224,22 @@ export function formatFixRaw(raw: string, delimiter = '|'): string {
 }
 
 /**
- * Parses tag/value fields for a draft preview. Credential fields are masked.
+ * Returns true when raw FIX text contains literal SOH (0x01) bytes.
  */
-export function parseFixDraftFields(raw: string): [string, string][] {
+export function hasRawSohDelimiter(raw: string): boolean {
+  return raw.includes('\u0001');
+}
+
+/**
+ * Parses tag/value fields for a draft preview or structured builder.
+ * Credential fields (554, 925) are masked by default for preview safety;
+ * pass `{ maskSensitive: false }` when round-tripping editable drafts.
+ */
+export function parseFixDraftFields(
+  raw: string,
+  options?: { maskSensitive?: boolean }
+): [string, string][] {
+  const maskSensitive = options?.maskSensitive !== false;
   const normalized = raw
     .replace(/\u0001/g, '|')
     .replace(/\\x01/g, '|')
@@ -244,7 +258,8 @@ export function parseFixDraftFields(raw: string): [string, string][] {
       throw new Error(`Tag "${tag}" must be numeric.`);
     }
     const value = trimmed.slice(separator + 1);
-    fields.push([tag, tag === '554' || tag === '925' ? '********' : value]);
+    const isSensitive = tag === '554' || tag === '925';
+    fields.push([tag, maskSensitive && isSensitive ? '********' : value]);
   }
   return fields;
 }
@@ -439,6 +454,33 @@ export function getFixMessageTypeLabel(messageType: string): string {
     AE: 'Trade Capture Report',
   };
   return labels[messageType] || messageType;
+}
+
+/**
+ * Formats a PascalCase FIX dictionary message name as readable words
+ * (e.g. `MarketDataRequest` -> `Market Data Request`, `IOI` -> `IOI`).
+ */
+export function formatFixMessageName(name: string): string {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .trim();
+}
+
+/**
+ * Resolves a human-readable MsgType label using the active FIX dictionary first,
+ * falling back to the built-in common MsgType label map.
+ */
+export function resolveFixMessageTypeLabel(
+  messageType: string,
+  dictionary?: FixDictionary | null
+): string {
+  if (!messageType) return '';
+  const dictMessage = dictionary?.messageByMsgType(messageType);
+  if (dictMessage) {
+    return formatFixMessageName(dictMessage.name);
+  }
+  return getFixMessageTypeLabel(messageType);
 }
 
 /**
