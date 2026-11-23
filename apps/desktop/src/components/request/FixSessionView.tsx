@@ -14,12 +14,15 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  ChevronUp,
+  Code2,
   Copy,
   Play,
   Radio,
   Save,
   Search,
   Shield,
+  SlidersHorizontal,
   Square,
   Trash2,
   X,
@@ -29,19 +32,32 @@ import { useAppStore } from '../../store/useAppStore';
 import { useFixSessionStore } from '../../store/useFixSessionStore';
 import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { ConflictDiffModal } from './ConflictDiffModal';
+import { FixMessageBuilder } from './FixMessageBuilder';
 import { FixParsedMessage } from './FixParsedMessage';
 import { Select } from '../common/Select';
 import { VariableInput } from '../common/VariableInput';
+import { loadFixDictionary, type FixDictionary } from '../../utils/fixDictionary';
+import {
+  clampComposerHeightPct,
+  getStoredFixComposerHeightPct,
+  getStoredFixEditorMode,
+  setStoredFixComposerHeightPct,
+  setStoredFixEditorMode,
+  type FixMessageEditorMode,
+} from '../../utils/fixMessageBuilder';
 import {
   filterFixMessages,
+  formatFixRaw,
   formatFixTimestamp,
   getFixMessageSummary,
   getFixMessageTypeLabel,
   getFixStatusMeta,
   getStoredFixTranscriptOrder,
+  hasRawSohDelimiter,
   normalizeFixEndpointConfig,
   orderFixMessages,
   parseFixDraftFields,
+  resolveFixMessageTypeLabel,
   setStoredFixTranscriptOrder,
   toFixConnectRequest,
   validateFixDraft,
@@ -85,7 +101,17 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [configExpanded, setConfigExpanded] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(config.transport !== 'direct');
+  const [editorMode, setEditorMode] = useState<FixMessageEditorMode>(() =>
+    getStoredFixEditorMode()
+  );
+  const [composerHeightPct, setComposerHeightPct] = useState<number>(() =>
+    getStoredFixComposerHeightPct()
+  );
+  const [dictionary, setDictionary] = useState<FixDictionary | null | undefined>(
+    undefined
+  );
   const [showTransportLogs, setShowTransportLogs] = useState(false);
   const [directionFilter, setDirectionFilter] = useState<'all' | 'in' | 'out'>('all');
   const [showAdmin, setShowAdmin] = useState(true);
@@ -101,6 +127,8 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     remoteEndpoint: Endpoint;
   } | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement>(null);
+  const workspaceSplitRef = useRef<HTMLDivElement>(null);
+  const isResizingComposerRef = useRef(false);
   const followTranscriptRef = useRef(true);
   const previousNewestMessageIdRef = useRef<string | null>(null);
 
@@ -143,6 +171,17 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
       cancelled = true;
     };
   }, [activeEnvironmentId]);
+
+  useEffect(() => {
+    let active = true;
+    setDictionary(undefined);
+    void loadFixDictionary(config.begin_string).then((loaded) => {
+      if (active) setDictionary(loaded);
+    });
+    return () => {
+      active = false;
+    };
+  }, [config.begin_string]);
 
   useEffect(() => {
     if (isConfigDirty(endpoint.config, config)) {
@@ -417,8 +456,93 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
     scrollTranscriptToNewest();
   }
 
+  function handleEditorModeChange(mode: FixMessageEditorMode) {
+    setEditorMode(mode);
+    setStoredFixEditorMode(mode);
+  }
+
+  function startComposerResize(event: React.MouseEvent) {
+    event.preventDefault();
+    isResizingComposerRef.current = true;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      if (!isResizingComposerRef.current) return;
+      const container = workspaceSplitRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      if (rect.height <= 0) return;
+      const nextPct = clampComposerHeightPct(
+        ((moveEvent.clientY - rect.top) / rect.height) * 100
+      );
+      setComposerHeightPct(nextPct);
+    };
+
+    const onMouseUp = () => {
+      isResizingComposerRef.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      setComposerHeightPct((current) => {
+        setStoredFixComposerHeightPct(current);
+        return current;
+      });
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
   const latestTransportLog = transportLogs[transportLogs.length - 1];
   const isStunnel = config.transport !== 'direct';
+  const draftHasRawSoh = hasRawSohDelimiter(config.message_draft || '');
+  const draftMessageLabel = draftMessageType
+    ? resolveFixMessageTypeLabel(draftMessageType, dictionary)
+    : '';
+
+  const editorModeToggle = (
+    <div className="flex items-center gap-2 flex-shrink-0">
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+        Application Message
+      </span>
+      <div
+        role="group"
+        aria-label="FIX message editor mode"
+        className="flex items-center h-5 border border-zinc-800 rounded-sm overflow-hidden"
+      >
+        <button
+          type="button"
+          onClick={() => handleEditorModeChange('raw')}
+          aria-pressed={editorMode === 'raw'}
+          title="Raw FIX wire / pipe-delimited text editor"
+          className={`h-full px-2 inline-flex items-center gap-1 text-[9px] font-mono uppercase transition ${
+            editorMode === 'raw'
+              ? 'bg-zinc-800 text-zinc-100'
+              : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <Code2 size={9} />
+          Raw
+        </button>
+        <button
+          type="button"
+          onClick={() => handleEditorModeChange('advanced')}
+          aria-pressed={editorMode === 'advanced'}
+          title="Dictionary-driven structured FIX message builder"
+          className={`h-full px-2 inline-flex items-center gap-1 text-[9px] font-mono uppercase transition ${
+            editorMode === 'advanced'
+              ? 'bg-zinc-800 text-zinc-100'
+              : 'text-zinc-500 hover:text-zinc-300'
+          }`}
+        >
+          <SlidersHorizontal size={9} />
+          Advanced
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-zinc-950">
@@ -459,6 +583,20 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           <div className="ml-auto flex flex-shrink-0 items-center gap-1.5">
             <button
               type="button"
+              onClick={() => setConfigExpanded((open) => !open)}
+              aria-expanded={configExpanded}
+              className="h-6 px-2 inline-flex items-center gap-1 rounded-sm border border-zinc-800 bg-zinc-900/70 hover:border-zinc-700 text-[10px] font-medium text-zinc-400 hover:text-zinc-200 transition"
+              title={
+                configExpanded
+                  ? 'Collapse session configuration to maximize message workspace'
+                  : 'Expand session configuration'
+              }
+            >
+              {configExpanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+              Config
+            </button>
+            <button
+              type="button"
               onClick={() => void saveChanges()}
               disabled={saving}
               className="h-6 px-2 inline-flex items-center gap-1 rounded-sm border border-zinc-700 bg-zinc-900 hover:bg-zinc-850 text-[10px] font-medium text-zinc-300 disabled:opacity-50 transition"
@@ -491,7 +629,9 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           </div>
         </div>
 
-        <div className="grid grid-cols-[minmax(0,1.5fr)_64px_100px_minmax(0,1fr)_minmax(0,1fr)_68px] gap-x-2 gap-y-1.5 px-3 pt-2">
+        {configExpanded ? (
+          <>
+            <div className="grid grid-cols-[minmax(0,1.5fr)_64px_100px_minmax(0,1fr)_minmax(0,1fr)_68px] gap-x-2 gap-y-1.5 px-3 pt-2">
           <ConfigField label="Host">
             <VariableInput
               value={config.host}
@@ -745,6 +885,25 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
             Direct TCP is unencrypted. Use stunnel transport for TLS.
           </div>
         )}
+          </>
+        ) : (
+          <div className="flex items-center gap-2 px-3 h-7 bg-zinc-900/25 text-[10px] font-mono text-zinc-400">
+            <span className="truncate">
+              {config.host || '127.0.0.1'}:{config.port || '—'}
+            </span>
+            <span className="text-zinc-600">·</span>
+            <span className="text-zinc-300 flex-shrink-0">{config.begin_string}</span>
+            <span className="text-zinc-600">·</span>
+            <span className="truncate text-zinc-300">
+              {config.sender_comp_id || '—'} → {config.target_comp_id || '—'}
+            </span>
+            <span className="text-zinc-600">·</span>
+            <span className="text-zinc-500 flex-shrink-0">
+              {TRANSPORT_OPTIONS.find((opt) => opt.value === config.transport)?.label ||
+                config.transport}
+            </span>
+          </div>
+        )}
 
         {session?.error && (
           <div className="flex items-start gap-2 border-t border-red-900/50 bg-red-950/25 px-3 py-1.5 text-[11px] text-red-200">
@@ -798,54 +957,106 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
         )}
       </header>
 
-      <section className="border-b border-zinc-800/80 bg-zinc-900/20 flex-shrink-0">
-        <div className="flex items-center h-8 px-3 border-b border-zinc-900">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-            Application Message
-          </span>
-          <span className="ml-2 text-[10px] font-mono text-zinc-600 truncate">
-            header + checksum generated · {'{{VARIABLE}}'} resolved on send
-          </span>
-          <span className="ml-auto text-[10px] font-mono text-zinc-500">
-            {draftMessageType
-              ? `${draftMessageType} · ${getFixMessageTypeLabel(draftMessageType)}`
-              : '35= required'}
-          </span>
-        </div>
-        <div className="flex items-stretch min-h-[58px] border-l border-blue-800/40">
-          <textarea
-            value={config.message_draft || ''}
-            onChange={(event) => updateConfig({ message_draft: event.target.value })}
-            spellCheck={false}
-            placeholder="35=D|11=ORDER-1|55=AAPL|54=1|38=10|40=2"
-            className="flex-1 min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-xs leading-5 text-zinc-200 placeholder-zinc-600 focus:outline-none select-text"
-            rows={2}
-            aria-label="FIX application message"
-          />
-          <div className="w-[164px] flex-shrink-0 border-l border-zinc-900 px-2 py-1.5 flex flex-col justify-between">
-            <div className="text-[10px] text-zinc-500 font-mono">
-              {draftFields.length} field{draftFields.length === 1 ? '' : 's'}
-              {draftValidation && (
-                <span className="block text-amber-400/80 truncate" title={draftValidation}>
-                  {draftValidation}
+      <div
+        ref={workspaceSplitRef}
+        className="flex-1 flex flex-col min-h-0 overflow-hidden"
+      >
+        {editorMode === 'raw' ? (
+          <section className="border-b border-zinc-800/80 bg-zinc-900/20 flex-shrink-0">
+            <div className="flex items-center gap-2 h-8 px-3 border-b border-zinc-900">
+              {editorModeToggle}
+              <span className="text-[10px] font-mono text-zinc-500 truncate">
+                header + checksum generated · {'{{VARIABLE}}'} resolved on send
+              </span>
+              <div className="ml-auto flex items-center gap-2 flex-shrink-0">
+                {draftHasRawSoh && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateConfig({
+                        message_draft: formatFixRaw(config.message_draft || '', '|'),
+                      })
+                    }
+                    className="h-5 px-1.5 rounded-sm border border-zinc-800 bg-zinc-900/70 hover:border-zinc-700 text-[9px] font-mono text-zinc-300 transition"
+                    title="Replace raw SOH (0x01) bytes with readable '|' delimiters"
+                  >
+                    Format |
+                  </button>
+                )}
+                <span className="text-[10px] font-mono text-zinc-400">
+                  {draftMessageType
+                    ? `${draftMessageType} · ${draftMessageLabel}`
+                    : '35= required'}
                 </span>
-              )}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => void handleSend()}
-              disabled={!canSend || Boolean(draftValidation)}
-              className="h-7 mt-1 inline-flex items-center justify-center gap-1.5 rounded-sm border border-blue-700/60 bg-blue-950/50 hover:bg-blue-900/60 text-[10px] font-semibold text-blue-200 disabled:opacity-35 disabled:cursor-not-allowed transition"
-              title={canSend ? 'Send message (Ctrl+Enter)' : 'Log on to send'}
+            <div className="flex items-stretch min-h-[58px] border-l border-blue-800/40">
+              <textarea
+                value={config.message_draft || ''}
+                onChange={(event) => updateConfig({ message_draft: event.target.value })}
+                spellCheck={false}
+                placeholder="35=D|11=ORDER-1|55=AAPL|54=1|38=10|40=2"
+                className="flex-1 min-w-0 resize-none bg-transparent px-3 py-2 font-mono text-xs leading-5 text-zinc-200 placeholder-zinc-600 focus:outline-none select-text"
+                rows={2}
+                aria-label="FIX application message"
+              />
+              <div className="w-[164px] flex-shrink-0 border-l border-zinc-900 px-2 py-1.5 flex flex-col justify-between">
+                <div className="text-[10px] text-zinc-500 font-mono">
+                  {draftFields.length} field{draftFields.length === 1 ? '' : 's'}
+                  {draftValidation && (
+                    <span
+                      className="block text-amber-400/80 truncate"
+                      title={draftValidation}
+                    >
+                      {draftValidation}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleSend()}
+                  disabled={!canSend || Boolean(draftValidation)}
+                  className="h-7 mt-1 inline-flex items-center justify-center gap-1.5 rounded-sm border border-blue-700/60 bg-blue-950/50 hover:bg-blue-900/60 text-[10px] font-semibold text-blue-200 disabled:opacity-35 disabled:cursor-not-allowed transition"
+                  title={canSend ? 'Send message (Ctrl+Enter)' : 'Log on to send'}
+                >
+                  <ArrowUp size={11} />
+                  Send
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <>
+            <section
+              style={{ height: `${composerHeightPct}%` }}
+              className="flex flex-col min-h-[170px] overflow-hidden bg-zinc-900/20 flex-shrink-0"
             >
-              <ArrowUp size={11} />
-              Send
-            </button>
-          </div>
-        </div>
-      </section>
+              <FixMessageBuilder
+                rawDraft={config.message_draft || ''}
+                onDraftChange={(message_draft) => updateConfig({ message_draft })}
+                config={config}
+                dictionary={dictionary}
+                activeVariables={activeVariables}
+                canSend={canSend}
+                onSend={() => void handleSend()}
+                onSwitchToRaw={() => handleEditorModeChange('raw')}
+                modeToggle={editorModeToggle}
+              />
+            </section>
+            <div
+              onMouseDown={startComposerResize}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize message builder and session transcript"
+              className="h-1.5 bg-zinc-900/90 border-y border-zinc-800/80 hover:bg-zinc-800 cursor-row-resize transition flex items-center justify-center group flex-shrink-0 select-none"
+              title="Drag to resize Application Message and Session Transcript panels"
+            >
+              <div className="w-8 h-0.5 rounded-full bg-zinc-700 group-hover:bg-zinc-400 transition" />
+            </div>
+          </>
+        )}
 
-      <section className="flex-1 flex flex-col min-h-0 bg-zinc-950">
+        <section className="flex-1 flex flex-col min-h-[140px] bg-zinc-950">
         <div className="h-8 flex items-center gap-2 px-3 border-b border-zinc-800/80 bg-zinc-950 flex-shrink-0">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
             Session Transcript
@@ -1000,6 +1211,7 @@ export const FixSessionView: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
           )}
         </div>
       </section>
+      </div>
 
       <ConflictDiffModal
         isOpen={Boolean(conflictModalData)}
