@@ -1,11 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { VariableInput } from '../common/VariableInput';
-import { getFolderSwaggerUrl } from '../../utils/folderTree';
-import { DEFAULT_SWAGGER_URL } from '../../utils/swaggerGenerator';
-import type { Collection, CollectionFolder, VariableResponse } from '@api-lab/api-types';
+import {
+  getFolderSwaggerConfig,
+  cascadeUpdateFolderSwaggerBaseUrl,
+  getDescendantFolderIds,
+} from '../../utils/folderTree';
+import {
+  combineSwaggerUrl,
+  normalizeSwaggerUrl,
+  DEFAULT_SWAGGER_BASE_URL,
+  DEFAULT_SWAGGER_PATH,
+} from '../../utils/swaggerGenerator';
+import type { Collection, CollectionFolder, Endpoint, VariableResponse } from '@api-lab/api-types';
 import { X, Settings, Save, Info } from 'lucide-react';
 
 export const SwaggerFolderSettingsModal: React.FC = () => {
@@ -14,6 +23,8 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
     swaggerSettingsModal,
     closeSwaggerSettingsModal,
     activeEnvironmentId,
+    clearEndpointDraft,
+    syncOpenEndpoints,
   } = useAppStore();
 
   const folderId = swaggerSettingsModal?.folderId;
@@ -24,6 +35,13 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
   const { data: folders = [] } = useQuery<CollectionFolder[]>({
     queryKey: ['folders', collectionId],
     queryFn: () => apiRequest<CollectionFolder[]>(`/collections/${collectionId}/folders`),
+    enabled: isOpen,
+  });
+
+  // Fetch endpoints of collection to cascade Base URL template updates
+  const { data: endpoints = [] } = useQuery<Endpoint[]>({
+    queryKey: ['endpoints', collectionId],
+    queryFn: () => apiRequest<Endpoint[]>(`/collections/${collectionId}/endpoints`),
     enabled: isOpen,
   });
 
@@ -44,38 +62,63 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
     enabled: !!activeEnvironmentId && isOpen,
   });
 
+  const previewVariables = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of envVars) {
+      map[v.key] = v.is_sensitive ? '••••••' : v.value;
+    }
+    return map;
+  }, [envVars]);
+
   const folder = folders.find((f) => f.id === folderId);
 
   const [folderName, setFolderName] = useState('');
-  const [swaggerUrl, setSwaggerUrl] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [swaggerPath, setSwaggerPath] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (folder) {
       setFolderName(folder.name || '');
-      const url = getFolderSwaggerUrl(folder, collection?.settings) || '';
-      setSwaggerUrl(url);
+      const cfg = getFolderSwaggerConfig(folder, collection?.settings);
+      setBaseUrl(cfg?.baseUrl || '');
+      setSwaggerPath(cfg?.swaggerPath || '');
       setError(null);
     }
   }, [folder, collection]);
 
+  const fullSwaggerUrl = combineSwaggerUrl(baseUrl, swaggerPath);
+  const resolvedPreviewUrl = normalizeSwaggerUrl(fullSwaggerUrl, previewVariables);
+
   const saveMutation = useMutation({
     mutationFn: async () => {
       const trimmedName = folderName.trim();
-      const trimmedUrl = swaggerUrl.trim();
+      const trimmedBaseUrl = baseUrl.trim();
+      const trimmedPath = swaggerPath.trim();
       if (!trimmedName) {
         throw new Error('Folder name cannot be empty');
       }
-      if (!trimmedUrl) {
-        throw new Error('Swagger URL cannot be empty');
+      if (!trimmedBaseUrl) {
+        throw new Error('Base URL cannot be empty');
+      }
+      if (!trimmedPath) {
+        throw new Error('Swagger JSON Path cannot be empty');
       }
 
-      // 1. Update folder direct swagger_url and name
+      const combinedUrl = combineSwaggerUrl(trimmedBaseUrl, trimmedPath);
+      const existingSettings = (folder?.settings as Record<string, any>) || {};
+
+      // 1. Update folder name, combined swagger_url, and separated settings
       await apiRequest<CollectionFolder>(`/folders/${folderId}`, {
         method: 'PATCH',
         body: JSON.stringify({
           name: trimmedName,
-          swagger_url: trimmedUrl,
+          swagger_url: combinedUrl,
+          settings: {
+            ...existingSettings,
+            swagger_base_url: trimmedBaseUrl,
+            swagger_path: trimmedPath,
+          },
         }),
       });
 
@@ -85,7 +128,9 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
         const sources = { ...(currentSettings.swagger_sources || {}) };
         sources[folderId!] = {
           ...sources[folderId!],
-          swagger_url: trimmedUrl,
+          swagger_url: combinedUrl,
+          base_url: trimmedBaseUrl,
+          swagger_path: trimmedPath,
         };
         await apiRequest(`/collections/${collectionId}`, {
           method: 'PATCH',
@@ -97,9 +142,34 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
           }),
         });
       }
+
+      // 3. Cascade Base URL template to all descendant HTTP endpoints
+      const apiCaller = {
+        patch: (path: string, body: any) =>
+          apiRequest(path, { method: 'PATCH', body: JSON.stringify(body) }),
+      };
+      return cascadeUpdateFolderSwaggerBaseUrl(
+        folderId!,
+        trimmedBaseUrl,
+        folders,
+        endpoints,
+        apiCaller
+      );
     },
-    onSuccess: () => {
+    onSuccess: (cascadeResult) => {
+      if (folderId) {
+        const descendantIds = getDescendantFolderIds(folders, folderId);
+        for (const ep of endpoints) {
+          if (ep.folder_id && descendantIds.has(ep.folder_id)) {
+            clearEndpointDraft(ep.id);
+          }
+        }
+      }
+      if (cascadeResult?.updatedEndpoints?.length) {
+        syncOpenEndpoints(cascadeResult.updatedEndpoints);
+      }
       queryClient.invalidateQueries({ queryKey: ['folders', collectionId] });
+      queryClient.invalidateQueries({ queryKey: ['endpoints', collectionId] });
       queryClient.invalidateQueries({ queryKey: ['collection', collectionId] });
       queryClient.invalidateQueries({ queryKey: ['collections'] });
       closeSwaggerSettingsModal();
@@ -158,25 +228,51 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-[11px] font-medium text-zinc-400">
-                Swagger URL
-              </label>
-            </div>
+            <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+              Base URL
+            </label>
             <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-600 transition h-8 flex items-center">
               <VariableInput
-                value={swaggerUrl}
-                onChange={setSwaggerUrl}
+                value={baseUrl}
+                onChange={setBaseUrl}
                 variables={envVars}
                 disabled={saveMutation.isPending}
-                placeholder={`e.g. ${DEFAULT_SWAGGER_URL}`}
+                placeholder={`e.g. ${DEFAULT_SWAGGER_BASE_URL} or localhost:8080 or {{BASE_URL}}`}
                 className="w-full h-full"
               />
             </div>
-            <p className="mt-1 text-[10px] text-zinc-500 flex items-center gap-1">
-              <Info size={11} className="flex-shrink-0" />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+              Swagger JSON Path
+            </label>
+            <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-600 transition h-8 flex items-center">
+              <VariableInput
+                value={swaggerPath}
+                onChange={setSwaggerPath}
+                variables={envVars}
+                disabled={saveMutation.isPending}
+                placeholder={`e.g. ${DEFAULT_SWAGGER_PATH} or swagger/doc.json`}
+                className="w-full h-full"
+              />
+            </div>
+            <div className="mt-1.5 text-[10px] text-zinc-500 font-mono space-y-0.5">
+              <div className="truncate">
+                <span className="font-sans text-zinc-400 mr-1">Spec URL:</span>
+                <span className="text-zinc-300">{fullSwaggerUrl || '—'}</span>
+              </div>
+              {fullSwaggerUrl.includes('{{') && resolvedPreviewUrl && resolvedPreviewUrl !== fullSwaggerUrl && (
+                <div className="truncate">
+                  <span className="font-sans text-zinc-400 mr-1">Active Env:</span>
+                  <span className="text-emerald-400/90">{resolvedPreviewUrl}</span>
+                </div>
+              )}
+            </div>
+            <p className="mt-1.5 text-[10px] text-zinc-500 flex items-start gap-1">
+              <Info size={11} className="flex-shrink-0 mt-0.5" />
               <span>
-                Endpoints in this folder sync from this Swagger/OpenAPI URL. Supports variables like <code className="text-zinc-400 font-mono">&#123;&#123;SWAGGER_URL&#125;&#125;</code>.
+                All endpoints in this folder inherit the Base URL on-the-fly. Variables like <code className="text-zinc-400 font-mono">&#123;&#123;BASE_URL&#125;&#125;</code> update automatically when switching environments.
               </span>
             </p>
           </div>

@@ -9,6 +9,7 @@ import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { ConflictDiffModal } from './ConflictDiffModal';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
+import { LockedVariableText } from '../common/LockedVariableText';
 import { Select } from '../common/Select';
 import { HttpMethodDropdown } from './HttpMethodDropdown';
 import { KeyValueTable } from '../common/KeyValueTable';
@@ -36,13 +37,19 @@ import {
   resolveInheritedAuth,
   getInheritedAuthHeader,
 } from '../../utils/folderSettings';
-import { findSwaggerFolderForEndpoint, getFolderPath } from '../../utils/folderTree';
+import {
+  resolveInheritedSwaggerConfig,
+  buildEffectiveSwaggerEndpointUrl,
+  getFolderPath,
+} from '../../utils/folderTree';
 import { fetchSwaggerSpec } from '../../utils/swaggerGenerator';
 import {
   parseSwaggerSpec,
   findMatchingSwaggerEndpoint,
   resolveSwaggerSampleResult,
   resolveSwaggerSampleParams,
+  extractUrlPathname,
+  normalizeSubstitutedHttpUrl,
 } from '../../utils/swaggerParser';
 import { getHttpMethodBadgeClass } from '../../utils/httpMethodUtils';
 import { EndpointSpecificationView } from '../common/EndpointSpecificationView';
@@ -164,13 +171,31 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   const [hookScriptTab, setHookScriptTab] = useState<'pre' | 'post'>('pre');
   const [hookTests, setHookTests] = useState<HookTestResult[]>([]);
   const [hookLogs, setHookLogs] = useState<string[]>([]);
-  // Synchronize path variables when URL changes
-  useEffect(() => {
-    const keys = extractPathVariables(url);
-    setPathVariables((prev) => syncPathVariablesWithKeys(prev, keys));
-  }, [url]);
 
-  const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
+  // Subscribe reactively to active environment variables so switching environments or editing variables updates live
+  const { data: envVars = [] } = useQuery<VariableResponse[]>({
+    queryKey: ['variables', activeEnvironmentId],
+    queryFn: () =>
+      activeEnvironmentId
+        ? apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`)
+        : Promise.resolve([]),
+    enabled: !!activeEnvironmentId,
+  });
+
+  const [hookVariableOverrides, setHookVariableOverrides] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setHookVariableOverrides({});
+  }, [activeEnvironmentId, envVars]);
+
+  const activeVariables = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of envVars) {
+      map[v.key] = v.value;
+    }
+    Object.assign(map, hookVariableOverrides);
+    return map;
+  }, [envVars, hookVariableOverrides]);
+
   const [sending, setSending] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [conflictModalData, setConflictModalData] = useState<{ localConfig: any; remoteEndpoint: Endpoint } | null>(null);
@@ -212,36 +237,66 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
   }, [resolvedInheritedAuth, endpoint.folder_id, endpoint.collection_id, openFolderSettingsModal, openCollectionSettingsModal]);
 
-  const swaggerFolderInfo = React.useMemo(() => {
-    return findSwaggerFolderForEndpoint(endpoint.folder_id, folders, collection?.settings);
+  const inheritedSwagger = React.useMemo(() => {
+    return resolveInheritedSwaggerConfig(endpoint, folders, collection?.settings);
   }, [endpoint.folder_id, folders, collection?.settings]);
 
-  const isSwaggerFolderEndpoint = Boolean(swaggerFolderInfo);
-  const isSwaggerEndpoint = Boolean(swaggerFolderInfo || endpoint.config?.specification);
+  const isSwaggerFolderEndpoint = inheritedSwagger.isInherited;
+  const isSwaggerEndpoint = Boolean(inheritedSwagger.isInherited || endpoint.config?.specification);
+
+  // Dynamically combine ancestor Swagger folder's Base URL template with the endpoint path (on-the-fly)
+  const effectiveUrl = React.useMemo(() => {
+    if (!inheritedSwagger.isInherited || !inheritedSwagger.baseUrl) {
+      return url;
+    }
+    return buildEffectiveSwaggerEndpointUrl(
+      url,
+      inheritedSwagger.baseUrl,
+      endpoint.config?.swagger_path
+    );
+  }, [url, inheritedSwagger.isInherited, inheritedSwagger.baseUrl, endpoint.config?.swagger_path]);
+
+  // Synchronize path variables when effective URL changes
+  useEffect(() => {
+    const keys = extractPathVariables(effectiveUrl);
+    setPathVariables((prev) => syncPathVariablesWithKeys(prev, keys));
+  }, [effectiveUrl]);
 
   const [swaggerBaseAndPath, swaggerQueryString] = React.useMemo(() => {
-    const qIdx = url.indexOf('?');
+    const qIdx = effectiveUrl.indexOf('?');
     if (qIdx === -1) {
-      return [url, ''];
+      return [effectiveUrl, ''];
     }
-    return [url.slice(0, qIdx), url.slice(qIdx)];
-  }, [url]);
+    return [effectiveUrl.slice(0, qIdx), effectiveUrl.slice(qIdx)];
+  }, [effectiveUrl]);
 
   const { data: swaggerDoc } = useQuery({
-    queryKey: ['swaggerSpec', swaggerFolderInfo?.swaggerUrl],
+    queryKey: ['swaggerSpec', inheritedSwagger.swaggerUrl, activeEnvironmentId],
     queryFn: async () => {
-      if (!swaggerFolderInfo?.swaggerUrl) return null;
-      return await fetchSwaggerSpec(swaggerFolderInfo.swaggerUrl);
+      if (!inheritedSwagger.swaggerUrl) return null;
+      const vars = await resolveVariables();
+      return await fetchSwaggerSpec(inheritedSwagger.swaggerUrl, { variables: vars });
     },
-    enabled: !!swaggerFolderInfo?.swaggerUrl,
+    enabled: !!inheritedSwagger.swaggerUrl,
     staleTime: 5 * 60 * 1000,
   });
 
   const matchedSwaggerEndpoint = React.useMemo(() => {
-    if (!swaggerDoc || !swaggerFolderInfo?.swaggerUrl) return null;
-    const parsed = parseSwaggerSpec(swaggerDoc, swaggerFolderInfo.swaggerUrl);
-    return findMatchingSwaggerEndpoint(parsed, method, url, endpoint.name);
-  }, [swaggerDoc, swaggerFolderInfo?.swaggerUrl, method, url, endpoint.name]);
+    if (!swaggerDoc || !inheritedSwagger.swaggerUrl) return null;
+    const parsed = parseSwaggerSpec(
+      swaggerDoc,
+      inheritedSwagger.swaggerUrl,
+      inheritedSwagger.baseUrl || undefined
+    );
+    return findMatchingSwaggerEndpoint(parsed, method, effectiveUrl, endpoint.name);
+  }, [
+    swaggerDoc,
+    inheritedSwagger.swaggerUrl,
+    inheritedSwagger.baseUrl,
+    method,
+    effectiveUrl,
+    endpoint.name,
+  ]);
 
   const endpointSpec = React.useMemo(() => {
     let spec = endpoint.config?.specification || null;
@@ -289,11 +344,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       (isSwaggerEndpoint && endpoint.name.includes(' ') && endpoint.config?.url)
     ) {
       if (endpoint.config?.url) {
-        try {
-          return new URL(endpoint.config.url).pathname;
-        } catch {
-          return endpoint.config.url.split('?')[0].replace(/^https?:\/\/[^\/]+/, '') || endpoint.name;
-        }
+        return extractUrlPathname(endpoint.config.url) || endpoint.name;
       }
     }
     return endpoint.name;
@@ -338,10 +389,10 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     if (activeTab === 'params' || method.toUpperCase() === 'GET') {
       const paramRes = resolveSwaggerSampleParams(
         method,
-        url,
+        effectiveUrl,
         endpoint.name,
         swaggerDoc,
-        swaggerFolderInfo?.swaggerUrl,
+        inheritedSwagger.swaggerUrl || undefined,
         matchedSwaggerEndpoint,
         queryParams,
         pathVariables,
@@ -372,10 +423,10 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     const currentTarget = bodyType === 'none' ? undefined : bodyType;
     const result = resolveSwaggerSampleResult(
       method,
-      url,
+      effectiveUrl,
       endpoint.name,
       swaggerDoc,
-      swaggerFolderInfo?.swaggerUrl,
+      inheritedSwagger.swaggerUrl || undefined,
       matchedSwaggerEndpoint,
       currentTarget,
       endpointSpec
@@ -419,13 +470,13 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     }
   }, [activeTab, isSwaggerEndpoint]);
 
-  // Resolve active environment variables
+  // Resolve active environment variables (guaranteed fresh on send)
   async function resolveVariables(): Promise<Record<string, string>> {
     const vars: Record<string, string> = {};
     if (activeEnvironmentId) {
-      const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
-      if (envVars) {
-        for (const v of envVars) {
+      const cachedVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
+      if (cachedVars) {
+        for (const v of cachedVars) {
           vars[v.key] = v.value;
         }
       } else {
@@ -439,15 +490,64 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         }
       }
     }
+    Object.assign(vars, hookVariableOverrides);
     return vars;
   }
 
-  useEffect(() => {
-    resolveVariables().then(setActiveVariables);
-  }, [activeEnvironmentId]);
-
   // Track previous endpoint id to only reinitialize state when switching to a different endpoint without remount
   const prevEndpointIdRef = useRef(endpoint.id);
+
+  // Refresh local editor state when endpoint is updated externally (e.g. Swagger sync or folder settings)
+  useEffect(() => {
+    if (
+      prevEndpointIdRef.current === endpoint.id &&
+      endpoint.version !== currentVersionRef.current &&
+      !useAppStore.getState().endpointDrafts[endpoint.id]
+    ) {
+      setCurrentVersion(endpoint.version);
+      currentVersionRef.current = endpoint.version;
+      const cfg = endpoint.config || {};
+      setMethod(cfg.method || 'GET');
+      const rawUrl = cfg.url !== undefined ? cfg.url : 'https://httpbin.org/get';
+      const normalizedUrl = convertSwaggerPathToApiPath(rawUrl);
+      const rawParams = (cfg.query_params || []) as QueryParamRow[];
+      const resolvedParams: QueryParamRow[] = normalizedUrl.includes('?')
+        ? parseUrlQueryParams(normalizedUrl, rawParams)
+        : rawParams.map(([k, v, d, en]) => [k, v, d ?? '', en !== false]);
+      const resolvedUrl =
+        rawParams.length > 0 && !normalizedUrl.includes('?')
+          ? serializeQueryParamsToUrl(normalizedUrl, rawParams)
+          : normalizedUrl;
+      setUrl(resolvedUrl);
+      setQueryParams(resolvedParams);
+      if (Array.isArray(cfg.headers_list)) {
+        setHeaders(
+          cfg.headers_list.map((item: any) => [
+            String(item[0] || ''),
+            String(item[1] || ''),
+            String(item[2] || ''),
+            item[3] !== false,
+          ])
+        );
+      } else {
+        const rawHeaders = cfg.headers || {};
+        const descs = cfg.header_descriptions || {};
+        const disabled = cfg.header_disabled || {};
+        setHeaders(
+          Object.entries(rawHeaders).map(([k, v]) => [
+            k,
+            v as string,
+            descs[k] || '',
+            !disabled[k],
+          ])
+        );
+      }
+      setBodyType(cfg.body_type || 'json');
+      setBody(cfg.body || '');
+      setAuth(cfg.auth || { auth_type: 'none' });
+    }
+  }, [endpoint.id, endpoint.version, endpoint.config]);
+
   useEffect(() => {
     if (prevEndpointIdRef.current !== endpoint.id) {
       prevEndpointIdRef.current = endpoint.id;
@@ -522,7 +622,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     return {
       ...(endpoint.config || {}),
       method,
-      url,
+      url: effectiveUrl,
       query_params: queryParams.filter(([k]) => k && k.trim()),
       path_variables: pathVariables.filter(([k]) => k.trim()),
       headers: headerMap,
@@ -647,7 +747,18 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   // Keep working draft synchronized in store so tab switches retain unsaved edits
   useEffect(() => {
     const cfg = buildConfig();
-    if (isConfigDirty(endpoint.config, cfg)) {
+    const baseConfigForDirtyCheck =
+      inheritedSwagger.isInherited && inheritedSwagger.baseUrl && endpoint.config?.url
+        ? {
+            ...endpoint.config,
+            url: buildEffectiveSwaggerEndpointUrl(
+              endpoint.config.url,
+              inheritedSwagger.baseUrl,
+              endpoint.config.swagger_path
+            ),
+          }
+        : endpoint.config;
+    if (isConfigDirty(baseConfigForDirtyCheck, cfg)) {
       setEndpointDraft(endpoint.id, cfg);
     } else {
       clearEndpointDraft(endpoint.id);
@@ -655,6 +766,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
   }, [
     method,
     url,
+    effectiveUrl,
+    inheritedSwagger.isInherited,
+    inheritedSwagger.baseUrl,
     queryParams,
     pathVariables,
     headers,
@@ -679,7 +793,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentVersion, preRequestScript, postResponseScript, method, url, queryParams, pathVariables, headers, bodyType, body, auth]);
+  }, [currentVersion, preRequestScript, postResponseScript, method, url, effectiveUrl, queryParams, pathVariables, headers, bodyType, body, auth]);
 
   async function handleSend() {
     setSending(true);
@@ -695,7 +809,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       ? JSON.stringify(multipartFields.filter((f) => f.enabled !== false && f.name.trim()))
       : bodyType === 'json' && body ? stripJsonComments(body) : body;
 
-    const resolvedUrl = interpolatePathVariables(url, pathVariables);
+    const resolvedUrl = interpolatePathVariables(effectiveUrl, pathVariables);
 
     const execReq: HttpExecutionRequest = {
       url: resolvedUrl,
@@ -752,7 +866,9 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         beforeResult.variables
       );
 
-      const resolvedUrl = substituteVariables(finalReq.url, beforeResult.variables);
+      const resolvedUrl = normalizeSubstitutedHttpUrl(
+        substituteVariables(finalReq.url, beforeResult.variables)
+      );
       const resolvedHeaders: Record<string, string> = {};
       for (const [k, v] of Object.entries(finalReq.headers)) {
         resolvedHeaders[substituteVariables(k, beforeResult.variables)] = substituteVariables(v, beforeResult.variables);
@@ -787,7 +903,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       );
       setHookTests(afterResult.tests);
       setHookLogs((prev) => [...prev, ...afterResult.logs]);
-      setActiveVariables(afterResult.variables);
+      setHookVariableOverrides(afterResult.variables);
 
       // Sync variables modified by pm.environment.set to the active environment (Bug 2 Fix)
       const syncRes = await syncEnvironmentVariables(
@@ -802,7 +918,6 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       );
       if (syncRes.syncedCount > 0) {
         queryClient.invalidateQueries({ queryKey: ['variables', activeEnvironmentId] });
-        resolveVariables().then(setActiveVariables);
         setStatusMessage(`Saved ${syncRes.syncedKeys.join(', ')} to environment`);
       } else if (afterResult.error) {
         setStatusMessage(afterResult.error);
@@ -930,11 +1045,19 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           {isSwaggerFolderEndpoint ? (
             <div className="flex-1 h-full flex items-center px-1 min-w-0 gap-1.5 overflow-hidden">
               <div
-                className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-950/80 border border-zinc-800 rounded text-xs font-mono text-zinc-300 max-w-[60%] flex-shrink-0 select-all cursor-default"
-                title="Hostname and path are locked by Swagger specification"
+                className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-950/80 border border-zinc-800 rounded text-xs font-mono text-zinc-300 max-w-[65%] flex-shrink-0 cursor-default"
+                title={
+                  inheritedSwagger.folderName
+                    ? `Base URL and path are inherited from Swagger folder "${inheritedSwagger.folderName}"`
+                    : 'Hostname and path are locked by Swagger specification'
+                }
               >
                 <Lock size={11} className="text-emerald-400 flex-shrink-0" />
-                <span className="truncate">{swaggerBaseAndPath}</span>
+                <LockedVariableText
+                  value={swaggerBaseAndPath}
+                  variables={envVars.length > 0 ? envVars : activeVariables}
+                  className="truncate"
+                />
               </div>
               <div className="flex-1 h-full min-w-0 flex items-center">
                 <VariableInput
@@ -1619,7 +1742,7 @@ export const HttpRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
         {/* Specification Panel (for Swagger Folder endpoints) */}
         {activeTab === 'specification' && (
           <EndpointSpecificationView
-            serviceName={swaggerFolderInfo?.folder.name || 'Swagger'}
+            serviceName={inheritedSwagger.folderName || 'Swagger'}
             methodName={endpoint.name}
             badge={{
               label: method,

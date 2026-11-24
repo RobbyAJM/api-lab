@@ -6,7 +6,10 @@ import {
 } from '../../utils/swaggerParser';
 import {
   fetchSwaggerSpec,
-  DEFAULT_SWAGGER_URL,
+  combineSwaggerUrl,
+  normalizeSwaggerUrl,
+  DEFAULT_SWAGGER_BASE_URL,
+  DEFAULT_SWAGGER_PATH,
 } from '../../utils/swaggerGenerator';
 import {
   planSwaggerSync,
@@ -14,7 +17,11 @@ import {
   type SwaggerSyncPlan,
   type SwaggerSyncProgressInfo,
 } from '../../utils/swaggerSync';
-import { resolveRootFolderId, getFolderSwaggerUrl } from '../../utils/folderTree';
+import {
+  resolveRootFolderId,
+  getFolderSwaggerConfig,
+  getDescendantFolderIds,
+} from '../../utils/folderTree';
 import { VariableInput } from '../common/VariableInput';
 import { Select } from '../common/Select';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
@@ -53,7 +60,13 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
   initialFolderId,
 }) => {
   const queryClient = useQueryClient();
-  const { activeWorkspaceId, activeEnvironmentId, setActiveEnvironmentId } = useAppStore();
+  const {
+    activeWorkspaceId,
+    activeEnvironmentId,
+    setActiveEnvironmentId,
+    clearEndpointDraft,
+    syncOpenEndpoints,
+  } = useAppStore();
 
   // Root folders in this collection
   const rootFolders = useMemo(() => folders.filter((f) => !f.parent_folder_id), [folders]);
@@ -94,10 +107,24 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
     return map;
   }, [envVars, activeVariables]);
 
+  const previewVariables = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of envVars) {
+      map[v.key] = v.is_sensitive ? '••••••' : v.value;
+    }
+    if (activeVariables) {
+      for (const [k, val] of Object.entries(activeVariables)) {
+        if (!(k in map)) map[k] = val;
+      }
+    }
+    return map;
+  }, [envVars, activeVariables]);
+
   const [selectedRootFolderId, setSelectedRootFolderId] = useState<string>(
     rootFolders[0]?.id || ''
   );
-  const [swaggerUrl, setSwaggerUrl] = useState<string>('');
+  const [baseUrl, setBaseUrl] = useState<string>('');
+  const [swaggerPath, setSwaggerPath] = useState<string>('');
 
   const [scanning, setScanning] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -142,10 +169,26 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
     if (!selectedRootFolderId) return;
     const rootFolder = folders.find((f) => f.id === selectedRootFolderId);
     if (rootFolder) {
-      const url = getFolderSwaggerUrl(rootFolder, collection?.settings) || '';
-      setSwaggerUrl(url);
+      const cfg = getFolderSwaggerConfig(rootFolder, collection?.settings);
+      setBaseUrl(cfg?.baseUrl || '');
+      setSwaggerPath(cfg?.swaggerPath || '');
     }
   }, [selectedRootFolderId, collection.settings, folders]);
+
+  const fullSwaggerUrl = combineSwaggerUrl(baseUrl, swaggerPath);
+  const resolvedPreviewUrl = normalizeSwaggerUrl(fullSwaggerUrl, previewVariables);
+
+  const savedFolderConfig = useMemo(() => {
+    const rootFolder = folders.find((f) => f.id === selectedRootFolderId);
+    return rootFolder ? getFolderSwaggerConfig(rootFolder, collection?.settings) : null;
+  }, [folders, selectedRootFolderId, collection?.settings]);
+
+  const folderConfigChanged = Boolean(
+    savedFolderConfig
+      ? savedFolderConfig.baseUrl !== baseUrl.trim() ||
+        savedFolderConfig.swaggerPath !== swaggerPath.trim()
+      : Boolean(baseUrl.trim() || swaggerPath.trim())
+  );
 
   if (!isOpen) return null;
 
@@ -158,8 +201,8 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
   }
 
   async function handleScanAndCompare() {
-    if (!swaggerUrl.trim() || !selectedRootFolderId) {
-      setErrorMessage('Please specify Swagger URL and select a root folder');
+    if (!baseUrl.trim() || !swaggerPath.trim() || !selectedRootFolderId) {
+      setErrorMessage('Please specify Base URL, Swagger JSON Path, and select a root folder');
       return;
     }
 
@@ -171,14 +214,15 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
     setExpandedIds(new Set());
 
     try {
-      const doc = await fetchSwaggerSpec(swaggerUrl.trim(), {
+      const doc = await fetchSwaggerSpec(fullSwaggerUrl, {
         variables: effectiveVariables,
       });
 
       if (abortRef.current.aborted) return;
 
       setProgressInfo({ message: 'Parsing endpoints and schemas...', percent: 25 });
-      const spec = parseSwaggerSpec(doc, swaggerUrl.trim());
+      // Pass raw Base URL template (never resolved variable values) so endpoint URLs resolve on-the-fly
+      const spec = parseSwaggerSpec(doc, fullSwaggerUrl, baseUrl.trim());
 
       if (spec.services.length === 0 || spec.totalEndpoints === 0) {
         throw new Error('No endpoints discovered in Swagger specification.');
@@ -233,24 +277,76 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
 
       if (abortRef.current.aborted) return;
 
-      // Also persist swagger_url on root folder
+      // Persist swagger_url and separated swagger_base_url / swagger_path on root folder
+      const trimmedBaseUrl = baseUrl.trim();
+      const trimmedSwaggerPath = swaggerPath.trim();
+      const rootFolder = folders.find((f) => f.id === selectedRootFolderId);
+      const existingFolderSettings = (rootFolder?.settings as Record<string, any>) || {};
       try {
         await apiRequest(`/folders/${selectedRootFolderId}`, {
           method: 'PATCH',
-          body: JSON.stringify({ swagger_url: swaggerUrl.trim() }),
+          body: JSON.stringify({
+            swagger_url: fullSwaggerUrl,
+            settings: {
+              ...existingFolderSettings,
+              swagger_base_url: trimmedBaseUrl,
+              swagger_path: trimmedSwaggerPath,
+            },
+          }),
         });
       } catch {
         // ignore
       }
 
+      // Also keep collection.settings.swagger_sources synced for backward compatibility
+      try {
+        const currentSettings = (collection.settings as Record<string, any>) || {};
+        const sources = { ...(currentSettings.swagger_sources || {}) };
+        sources[selectedRootFolderId] = {
+          ...(sources[selectedRootFolderId] || {}),
+          swagger_url: fullSwaggerUrl,
+          base_url: trimmedBaseUrl,
+          swagger_path: trimmedSwaggerPath,
+        };
+        await apiRequest(`/collections/${collection.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            settings: {
+              ...currentSettings,
+              swagger_sources: sources,
+            },
+          }),
+        });
+      } catch {
+        // ignore
+      }
+
+      // Clear stale drafts & refresh open tabs for updated endpoints
+      if (result.updatedEndpoints.length > 0) {
+        for (const ep of result.updatedEndpoints) {
+          clearEndpointDraft(ep.id);
+        }
+        syncOpenEndpoints(result.updatedEndpoints);
+      } else if (folderConfigChanged) {
+        const descendantIds = getDescendantFolderIds(folders, selectedRootFolderId);
+        for (const ep of endpoints) {
+          if (ep.folder_id && descendantIds.has(ep.folder_id)) {
+            clearEndpointDraft(ep.id);
+          }
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ['folders', collection.id] });
       queryClient.invalidateQueries({ queryKey: ['endpoints', collection.id] });
+      queryClient.invalidateQueries({ queryKey: ['collection', collection.id] });
       queryClient.invalidateQueries({ queryKey: ['collections'] });
 
       setSuccessInfo(
-        `Sync completed: +${result.createdServicesCount} services, +${result.createdEndpointsCount} endpoints, ` +
-          `-${result.deletedServicesCount} services, -${result.deletedEndpointsCount} endpoints, ` +
-          `~${result.updatedEndpointsCount} modified.`
+        hasChanges
+          ? `Sync completed: +${result.createdServicesCount} services, +${result.createdEndpointsCount} endpoints, ` +
+            `-${result.deletedServicesCount} services, -${result.deletedEndpointsCount} endpoints, ` +
+            `~${result.updatedEndpointsCount} modified.`
+          : 'Updated Swagger folder Base URL and JSON path settings.'
       );
 
       setTimeout(() => {
@@ -354,29 +450,66 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label className="block text-[11px] font-medium text-zinc-400">
-                  Swagger URL
+                  Base URL
                 </label>
               </div>
               <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-700 transition h-8 flex items-center">
                 <VariableInput
-                  value={swaggerUrl}
+                  value={baseUrl}
                   onChange={(val) => {
-                    setSwaggerUrl(val);
+                    setBaseUrl(val);
                     setPlan(null);
                     setExpandedIds(new Set());
                   }}
                   variables={envVars}
                   disabled={scanning || syncing}
-                  placeholder={DEFAULT_SWAGGER_URL}
+                  placeholder={`${DEFAULT_SWAGGER_BASE_URL} or localhost:8080 or {{BASE_URL}}`}
                   className="w-full h-full"
                 />
+              </div>
+              <p className="mt-1 text-[10px] text-zinc-500">
+                Supports ports (e.g. localhost:8080) and variables like <code className="font-mono text-zinc-400">{'{{BASE_URL}}'}</code> resolved on-the-fly per environment.
+              </p>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-[11px] font-medium text-zinc-400">
+                  Swagger JSON Path
+                </label>
+              </div>
+              <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-700 transition h-8 flex items-center">
+                <VariableInput
+                  value={swaggerPath}
+                  onChange={(val) => {
+                    setSwaggerPath(val);
+                    setPlan(null);
+                    setExpandedIds(new Set());
+                  }}
+                  variables={envVars}
+                  disabled={scanning || syncing}
+                  placeholder={`${DEFAULT_SWAGGER_PATH} or swagger/doc.json`}
+                  className="w-full h-full"
+                />
+              </div>
+              <div className="mt-1 text-[10px] text-zinc-500 font-mono space-y-0.5">
+                <div className="truncate">
+                  <span className="font-sans text-zinc-400 mr-1">Spec URL:</span>
+                  <span className="text-zinc-300">{fullSwaggerUrl || '—'}</span>
+                </div>
+                {fullSwaggerUrl.includes('{{') && resolvedPreviewUrl && resolvedPreviewUrl !== fullSwaggerUrl && (
+                  <div className="truncate">
+                    <span className="font-sans text-zinc-400 mr-1">Active Env:</span>
+                    <span className="text-emerald-400/90">{resolvedPreviewUrl}</span>
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="pt-1">
               <button
                 type="button"
-                disabled={scanning || syncing || !swaggerUrl.trim() || !selectedRootFolderId}
+                disabled={scanning || syncing || !baseUrl.trim() || !swaggerPath.trim() || !selectedRootFolderId}
                 onClick={handleScanAndCompare}
                 className="w-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 py-1.5 px-3 rounded text-xs font-medium flex items-center justify-center gap-2 transition"
               >
@@ -399,7 +532,9 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
               {!hasChanges ? (
                 <div className="p-4 text-center text-xs text-zinc-400 bg-zinc-950/30 rounded border border-zinc-800">
                   <CheckCircle2 size={16} className="mx-auto mb-1 text-emerald-400" />
-                  Your local Swagger folder endpoints are identical to the Swagger specification.
+                  {folderConfigChanged
+                    ? 'Endpoints match the Swagger specification. Apply to save your updated Base URL / Swagger JSON Path settings.'
+                    : 'Your local Swagger folder endpoints are identical to the Swagger specification.'}
                 </div>
               ) : (
                 <div className="space-y-1.5 text-xs">
@@ -828,12 +963,18 @@ export const SyncSwaggerModal: React.FC<SyncSwaggerModalProps> = ({
           </button>
           <button
             type="button"
-            disabled={!hasChanges || syncing || scanning}
+            disabled={(!hasChanges && !(plan && folderConfigChanged)) || syncing || scanning}
             onClick={handleApplySync}
             className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs font-medium flex items-center gap-1.5"
           >
             <ArrowRight size={13} />
-            <span>{syncing ? 'Applying Sync...' : 'Apply Reconciliation'}</span>
+            <span>
+              {syncing
+                ? 'Applying Sync...'
+                : hasChanges
+                ? 'Apply Reconciliation'
+                : 'Save Folder Settings'}
+            </span>
           </button>
         </div>
       </div>

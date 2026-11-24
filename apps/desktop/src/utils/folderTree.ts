@@ -1,4 +1,10 @@
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
+import {
+  combineSwaggerUrl,
+  splitSwaggerUrl,
+  normalizeBaseUrlTemplate,
+  extractUrlPathname,
+} from './swaggerParser.ts';
 
 export interface FolderTreeNode {
   folder: CollectionFolder;
@@ -278,9 +284,15 @@ export function getFolderGrpcUrl(
   return null;
 }
 
+export interface SwaggerFolderConfig {
+  baseUrl: string;
+  swaggerPath: string;
+  swaggerUrl: string;
+}
+
 /**
  * Checks whether a folder is an HTTP Swagger Folder.
- * Checks folder.swagger_url first, then falls back to collection.settings.swagger_sources.
+ * Checks folder.swagger_url, folder.settings.swagger_base_url, and collection.settings.swagger_sources.
  */
 export function isSwaggerFolder(
   folder: CollectionFolder,
@@ -289,10 +301,19 @@ export function isSwaggerFolder(
   if (folder.swagger_url && folder.swagger_url.trim().length > 0) {
     return true;
   }
+  const folderBase = (folder.settings as Record<string, any> | undefined)?.swagger_base_url;
+  if (typeof folderBase === 'string' && folderBase.trim().length > 0) {
+    return true;
+  }
   const sources = collectionSettings?.swagger_sources;
-  if (sources && typeof sources === 'object' && sources[folder.id]?.swagger_url) {
-    const url = sources[folder.id].swagger_url;
-    return typeof url === 'string' && url.trim().length > 0;
+  if (sources && typeof sources === 'object') {
+    const src = sources[folder.id];
+    if (typeof src?.swagger_url === 'string' && src.swagger_url.trim().length > 0) {
+      return true;
+    }
+    if (typeof src?.base_url === 'string' && src.base_url.trim().length > 0) {
+      return true;
+    }
   }
   return false;
 }
@@ -307,13 +328,75 @@ export function getFolderSwaggerUrl(
   if (folder.swagger_url && folder.swagger_url.trim().length > 0) {
     return folder.swagger_url.trim();
   }
+  const folderSettings = (folder.settings as Record<string, any> | undefined) || {};
+  if (typeof folderSettings.swagger_base_url === 'string' && folderSettings.swagger_base_url.trim().length > 0) {
+    return combineSwaggerUrl(folderSettings.swagger_base_url, String(folderSettings.swagger_path || ''));
+  }
   const sources = collectionSettings?.swagger_sources;
-  if (sources && typeof sources === 'object' && sources[folder.id]?.swagger_url) {
-    const url = sources[folder.id].swagger_url;
-    if (typeof url === 'string' && url.trim().length > 0) {
-      return url.trim();
+  if (sources && typeof sources === 'object' && sources[folder.id]) {
+    const src = sources[folder.id];
+    if (typeof src.swagger_url === 'string' && src.swagger_url.trim().length > 0) {
+      return src.swagger_url.trim();
+    }
+    if (typeof src.base_url === 'string' && src.base_url.trim().length > 0) {
+      return combineSwaggerUrl(src.base_url, String(src.swagger_path || ''));
     }
   }
+  return null;
+}
+
+/**
+ * Returns the separated Base URL, Swagger JSON Path, and combined Swagger URL for a Swagger folder.
+ * Prefers explicit folder.settings.swagger_base_url / swagger_path, then collection.settings.swagger_sources,
+ * and falls back to splitting legacy folder.swagger_url.
+ */
+export function getFolderSwaggerConfig(
+  folder: CollectionFolder,
+  collectionSettings?: Record<string, any>
+): SwaggerFolderConfig | null {
+  const folderSettings = (folder.settings as Record<string, any> | undefined) || {};
+  const legacySource = collectionSettings?.swagger_sources?.[folder.id];
+  const directSwaggerUrl = getFolderSwaggerUrl(folder, collectionSettings) || '';
+
+  const explicitBase =
+    (typeof folderSettings.swagger_base_url === 'string' && folderSettings.swagger_base_url.trim()) ||
+    (typeof legacySource?.base_url === 'string' && legacySource.base_url.trim()) ||
+    '';
+
+  const hasExplicitPath =
+    typeof folderSettings.swagger_path === 'string' ||
+    typeof legacySource?.swagger_path === 'string';
+  const explicitPath =
+    typeof folderSettings.swagger_path === 'string'
+      ? folderSettings.swagger_path.trim()
+      : typeof legacySource?.swagger_path === 'string'
+      ? legacySource.swagger_path.trim()
+      : '';
+
+  if (explicitBase) {
+    const pathVal = hasExplicitPath
+      ? explicitPath
+      : directSwaggerUrl
+      ? splitSwaggerUrl(directSwaggerUrl).swaggerPath
+      : '';
+    const swaggerUrl = combineSwaggerUrl(explicitBase, pathVal) || directSwaggerUrl;
+    return {
+      baseUrl: explicitBase,
+      swaggerPath: pathVal,
+      swaggerUrl,
+    };
+  }
+
+  if (directSwaggerUrl) {
+    const split = splitSwaggerUrl(directSwaggerUrl);
+    const pathVal = hasExplicitPath ? explicitPath : split.swaggerPath;
+    return {
+      baseUrl: split.baseUrl,
+      swaggerPath: pathVal,
+      swaggerUrl: directSwaggerUrl,
+    };
+  }
+
   return null;
 }
 
@@ -348,6 +431,163 @@ export function canAddEndpointToFolder(
   return true;
 }
 
+export interface InheritedSwaggerInfo {
+  isInherited: boolean;
+  baseUrl: string | null;
+  swaggerPath: string | null;
+  swaggerUrl: string | null;
+  folderId: string | null;
+  folderName: string | null;
+  folder: CollectionFolder | null;
+}
+
+/**
+ * Traverses folder ancestry to find if an endpoint belongs to a Swagger folder
+ * and resolves its live inherited Base URL, Swagger JSON Path, and combined Swagger URL.
+ */
+export function resolveInheritedSwaggerConfig(
+  endpoint: { folder_id?: string | null },
+  folders: CollectionFolder[],
+  collectionSettings?: Record<string, any>
+): InheritedSwaggerInfo {
+  if (!endpoint.folder_id || !folders || folders.length === 0) {
+    return {
+      isInherited: false,
+      baseUrl: null,
+      swaggerPath: null,
+      swaggerUrl: null,
+      folderId: null,
+      folderName: null,
+      folder: null,
+    };
+  }
+
+  const folderMap = new Map<string, CollectionFolder>(folders.map((f) => [f.id, f]));
+  let currentId: string | null = endpoint.folder_id;
+  const visited = new Set<string>();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const folder = folderMap.get(currentId);
+    if (!folder) break;
+    const cfg = getFolderSwaggerConfig(folder, collectionSettings);
+    if (cfg) {
+      return {
+        isInherited: true,
+        baseUrl: cfg.baseUrl || null,
+        swaggerPath: cfg.swaggerPath,
+        swaggerUrl: cfg.swaggerUrl || null,
+        folderId: folder.id,
+        folderName: folder.name,
+        folder,
+      };
+    }
+    currentId = folder.parent_folder_id ?? null;
+  }
+
+  return {
+    isInherited: false,
+    baseUrl: null,
+    swaggerPath: null,
+    swaggerUrl: null,
+    folderId: null,
+    folderName: null,
+    folder: null,
+  };
+}
+
+/**
+ * Combines a Swagger folder's live Base URL template (e.g. "{{BASE_URL}}" or "localhost:8080")
+ * with an endpoint's route path while preserving query strings and hashes.
+ * Never resolves {{VAR}} templates so environment switching works on-the-fly.
+ */
+export function buildEffectiveSwaggerEndpointUrl(
+  storedUrl: string,
+  inheritedBaseUrl: string | null | undefined,
+  storedSwaggerPath?: string | null
+): string {
+  const rawUrl = (storedUrl || '').trim();
+  const cleanBase = inheritedBaseUrl ? normalizeBaseUrlTemplate(inheritedBaseUrl) : '';
+  if (!cleanBase) return rawUrl;
+
+  const qhIdx = rawUrl.search(/[?#]/);
+  const baseAndPath = qhIdx === -1 ? rawUrl : rawUrl.slice(0, qhIdx);
+  const suffix = qhIdx === -1 ? '' : rawUrl.slice(qhIdx);
+
+  if (storedSwaggerPath && storedSwaggerPath.trim()) {
+    const trimmedPath = storedSwaggerPath.trim();
+    const normPath = trimmedPath.startsWith('/') ? trimmedPath : `/${trimmedPath}`;
+    return `${cleanBase}${normPath}${suffix}`;
+  }
+
+  if (baseAndPath === cleanBase || baseAndPath.startsWith(`${cleanBase}/`)) {
+    return `${baseAndPath}${suffix}`;
+  }
+
+  const extractedPath = extractUrlPathname(baseAndPath);
+  const basePathPrefix = extractUrlPathname(cleanBase);
+  if (
+    basePathPrefix !== '/' &&
+    (extractedPath === basePathPrefix || extractedPath.startsWith(`${basePathPrefix}/`))
+  ) {
+    const remainder = extractedPath.slice(basePathPrefix.length);
+    return `${cleanBase}${remainder}${suffix}`;
+  }
+
+  const normPath = extractedPath.startsWith('/') ? extractedPath : `/${extractedPath}`;
+  return `${cleanBase}${normPath}${suffix}`;
+}
+
+/**
+ * Cascades an updated Swagger Base URL template to all descendant HTTP endpoints under a Swagger folder.
+ * Preserves each endpoint's route path and query string, and returns the count and updated endpoint records.
+ */
+export async function cascadeUpdateFolderSwaggerBaseUrl(
+  folderId: string,
+  newBaseUrl: string,
+  folders: CollectionFolder[],
+  endpoints: Endpoint[],
+  api: EndpointPatchCaller
+): Promise<{ updatedCount: number; updatedEndpoints: Endpoint[] }> {
+  const cleanBase = normalizeBaseUrlTemplate(newBaseUrl);
+  if (!cleanBase) return { updatedCount: 0, updatedEndpoints: [] };
+
+  const targetFolderIds = getDescendantFolderIds(folders, folderId);
+  const matchingEndpoints = endpoints.filter(
+    (ep) =>
+      ep.protocol === 'http' &&
+      ep.folder_id &&
+      targetFolderIds.has(ep.folder_id)
+  );
+
+  let updatedCount = 0;
+  const updatedEndpoints: Endpoint[] = [];
+
+  for (const ep of matchingEndpoints) {
+    const currentUrl = ep.config?.url || '';
+    const nextUrl = buildEffectiveSwaggerEndpointUrl(
+      currentUrl,
+      cleanBase,
+      ep.config?.swagger_path
+    );
+    if (nextUrl === currentUrl) continue;
+
+    const updated = await api.patch(`/endpoints/${ep.id}`, {
+      version: ep.version,
+      config: {
+        ...ep.config,
+        url: nextUrl,
+      },
+    });
+    if (updated && typeof updated === 'object' && updated.id) {
+      updatedEndpoints.push(updated as Endpoint);
+    }
+    updatedCount++;
+  }
+
+  return { updatedCount, updatedEndpoints };
+}
+
 /**
  * Traverses folder ancestry to find if the endpoint belongs to a Swagger folder.
  */
@@ -355,23 +595,21 @@ export function findSwaggerFolderForEndpoint(
   endpointFolderId: string | undefined | null,
   folders: CollectionFolder[],
   collectionSettings?: Record<string, any>
-): { folder: CollectionFolder; swaggerUrl: string } | null {
-  if (!endpointFolderId || !folders.length) return null;
-  const folderMap = new Map<string, CollectionFolder>(folders.map((f) => [f.id, f]));
-  let currentId: string | null = endpointFolderId;
-  const visited = new Set<string>();
-
-  while (currentId && !visited.has(currentId)) {
-    visited.add(currentId);
-    const folder = folderMap.get(currentId);
-    if (!folder) break;
-    const swaggerUrl = getFolderSwaggerUrl(folder, collectionSettings);
-    if (swaggerUrl) {
-      return { folder, swaggerUrl };
-    }
-    currentId = folder.parent_folder_id ?? null;
+): { folder: CollectionFolder; swaggerUrl: string; baseUrl?: string; swaggerPath?: string } | null {
+  const inherited = resolveInheritedSwaggerConfig(
+    { folder_id: endpointFolderId },
+    folders,
+    collectionSettings
+  );
+  if (!inherited.isInherited || !inherited.folder || !inherited.swaggerUrl) {
+    return null;
   }
-  return null;
+  return {
+    folder: inherited.folder,
+    swaggerUrl: inherited.swaggerUrl,
+    baseUrl: inherited.baseUrl ?? undefined,
+    swaggerPath: inherited.swaggerPath ?? undefined,
+  };
 }
 
 export type SidebarItemType =

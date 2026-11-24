@@ -8,13 +8,18 @@ import {
   isReflectionFolder,
   getFolderGrpcUrl,
   isSwaggerFolder,
-  getFolderSwaggerUrl,
+  getFolderSwaggerConfig,
   cascadeUpdateFolderGrpcAddress,
+  cascadeUpdateFolderSwaggerBaseUrl,
   getDescendantFolderIds,
 } from '../../utils/folderTree';
 import { resolveInheritedAuth } from '../../utils/folderSettings';
 import { DEFAULT_GRPC_SERVER_ADDRESS } from '../../utils/grpcReflectionGenerator';
-import { DEFAULT_SWAGGER_URL } from '../../utils/swaggerGenerator';
+import {
+  combineSwaggerUrl,
+  DEFAULT_SWAGGER_BASE_URL,
+  DEFAULT_SWAGGER_PATH,
+} from '../../utils/swaggerGenerator';
 import type {
   Collection,
   CollectionFolder,
@@ -31,6 +36,7 @@ export const FolderSettingsModal: React.FC = () => {
     closeFolderSettingsModal,
     activeEnvironmentId,
     clearEndpointDraft,
+    syncOpenEndpoints,
   } = useAppStore();
 
   const folderId = folderSettingsModal?.folderId;
@@ -81,7 +87,8 @@ export const FolderSettingsModal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'general' | 'auth'>('general');
   const [folderName, setFolderName] = useState('');
   const [serverAddress, setServerAddress] = useState('');
-  const [swaggerUrl, setSwaggerUrl] = useState('');
+  const [swaggerBaseUrl, setSwaggerBaseUrl] = useState('');
+  const [swaggerPath, setSwaggerPath] = useState('');
 
   // Auth state
   const [authType, setAuthType] = useState<CollectionAuthSettings['auth_type']>('inherit');
@@ -107,7 +114,9 @@ export const FolderSettingsModal: React.FC = () => {
     if (folder) {
       setFolderName(folder.name || '');
       setServerAddress(getFolderGrpcUrl(folder, collection?.settings) || '');
-      setSwaggerUrl(getFolderSwaggerUrl(folder, collection?.settings) || '');
+      const swaggerCfg = getFolderSwaggerConfig(folder, collection?.settings);
+      setSwaggerBaseUrl(swaggerCfg?.baseUrl || '');
+      setSwaggerPath(swaggerCfg?.swaggerPath || '');
 
       const existingAuth = folder.settings?.auth as CollectionAuthSettings | undefined;
       setAuthType(existingAuth?.auth_type || 'inherit');
@@ -136,9 +145,13 @@ export const FolderSettingsModal: React.FC = () => {
       if (isReflection && !serverAddress.trim()) {
         throw new Error('gRPC server address cannot be empty');
       }
-      if (isSwagger && !swaggerUrl.trim()) {
-        throw new Error('Swagger URL cannot be empty');
+      if (isSwagger && (!swaggerBaseUrl.trim() || !swaggerPath.trim())) {
+        throw new Error('Base URL and Swagger JSON Path cannot be empty');
       }
+
+      const combinedSwaggerUrl = isSwagger
+        ? combineSwaggerUrl(swaggerBaseUrl.trim(), swaggerPath.trim())
+        : '';
 
       // Build auth payload
       const authPayload: CollectionAuthSettings = {
@@ -151,10 +164,14 @@ export const FolderSettingsModal: React.FC = () => {
       };
 
       const existingSettings = (folder?.settings as Record<string, any>) || {};
-      const newSettings = {
+      const newSettings: Record<string, any> = {
         ...existingSettings,
         auth: authPayload,
       };
+      if (isSwagger) {
+        newSettings.swagger_base_url = swaggerBaseUrl.trim();
+        newSettings.swagger_path = swaggerPath.trim();
+      }
 
       const patchBody: Record<string, any> = {
         name: trimmedName,
@@ -165,7 +182,7 @@ export const FolderSettingsModal: React.FC = () => {
         patchBody.grpc_url = serverAddress.trim();
       }
       if (isSwagger) {
-        patchBody.swagger_url = swaggerUrl.trim();
+        patchBody.swagger_url = combinedSwaggerUrl;
       }
 
       const updated = await apiRequest<CollectionFolder>(`/folders/${folderId}`, {
@@ -200,7 +217,9 @@ export const FolderSettingsModal: React.FC = () => {
         if (sources[folderId!]) {
           sources[folderId!] = {
             ...sources[folderId!],
-            swagger_url: swaggerUrl.trim(),
+            swagger_url: combinedSwaggerUrl,
+            base_url: swaggerBaseUrl.trim(),
+            swagger_path: swaggerPath.trim(),
           };
           await apiRequest(`/collections/${collectionId}`, {
             method: 'PATCH',
@@ -214,6 +233,8 @@ export const FolderSettingsModal: React.FC = () => {
         }
       }
 
+      let updatedEndpoints: Endpoint[] = [];
+
       // Cascade gRPC address to all child endpoints under this reflection folder
       if (isReflection && folderId) {
         const apiCaller = {
@@ -223,17 +244,36 @@ export const FolderSettingsModal: React.FC = () => {
         await cascadeUpdateFolderGrpcAddress(folderId, serverAddress.trim(), folders, endpoints, apiCaller);
       }
 
-      return updated;
+      // Cascade Swagger Base URL template to all descendant HTTP endpoints
+      if (isSwagger && folderId) {
+        const apiCaller = {
+          patch: (path: string, body: any) =>
+            apiRequest(path, { method: 'PATCH', body: JSON.stringify(body) }),
+        };
+        const cascadeRes = await cascadeUpdateFolderSwaggerBaseUrl(
+          folderId,
+          swaggerBaseUrl.trim(),
+          folders,
+          endpoints,
+          apiCaller
+        );
+        updatedEndpoints = cascadeRes.updatedEndpoints;
+      }
+
+      return { updated, updatedEndpoints };
     },
-    onSuccess: () => {
-      // Clear stale drafts for endpoints in this reflection folder hierarchy
-      if (isReflection && folderId) {
+    onSuccess: (res) => {
+      // Clear stale drafts for endpoints in reflection/swagger folder hierarchy
+      if ((isReflection || isSwagger) && folderId) {
         const descendantIds = getDescendantFolderIds(folders, folderId);
         for (const ep of endpoints) {
           if (ep.folder_id && descendantIds.has(ep.folder_id)) {
             clearEndpointDraft(ep.id);
           }
         }
+      }
+      if (res?.updatedEndpoints?.length) {
+        syncOpenEndpoints(res.updatedEndpoints);
       }
       queryClient.invalidateQueries({ queryKey: ['folders', collectionId] });
       queryClient.invalidateQueries({ queryKey: ['collection', collectionId] });
@@ -360,22 +400,38 @@ export const FolderSettingsModal: React.FC = () => {
                 </div>
               )}
 
-              {/* Swagger URL (if swagger) */}
+              {/* Swagger Base URL + JSON Path (if swagger) */}
               {isSwagger && (
-                <div>
-                  <label className="block text-zinc-400 font-medium mb-1 text-[11px]">
-                    Swagger / OpenAPI Spec URL
-                  </label>
-                  <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition h-8 flex items-center">
-                    <VariableInput
-                      value={swaggerUrl}
-                      onChange={setSwaggerUrl}
-                      placeholder={DEFAULT_SWAGGER_URL}
-                      variables={activeVariables}
-                      className="w-full h-full"
-                    />
+                <>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1 text-[11px]">
+                      Base URL
+                    </label>
+                    <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition h-8 flex items-center">
+                      <VariableInput
+                        value={swaggerBaseUrl}
+                        onChange={setSwaggerBaseUrl}
+                        placeholder={`${DEFAULT_SWAGGER_BASE_URL} or localhost:8080 or {{BASE_URL}}`}
+                        variables={activeVariables}
+                        className="w-full h-full"
+                      />
+                    </div>
                   </div>
-                </div>
+                  <div>
+                    <label className="block text-zinc-400 font-medium mb-1 text-[11px]">
+                      Swagger JSON Path
+                    </label>
+                    <div className="rounded border border-zinc-800 bg-zinc-900 focus-within:border-primary transition h-8 flex items-center">
+                      <VariableInput
+                        value={swaggerPath}
+                        onChange={setSwaggerPath}
+                        placeholder={`${DEFAULT_SWAGGER_PATH} or swagger/doc.json`}
+                        variables={activeVariables}
+                        className="w-full h-full"
+                      />
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           )}

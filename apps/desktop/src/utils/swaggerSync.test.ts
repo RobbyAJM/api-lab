@@ -815,3 +815,87 @@ test('planSwaggerSync: does not report false diff when user customizes payload v
   const plan = planSwaggerSync(rootFolderId, existingFolders, existingEndpoints, freshSpec);
   assert.equal(plan.endpointsToUpdate.length, 0, 'Editing payload values must not trigger false diff');
 });
+
+test('planSwaggerSync: reconciles broken http://localhost URLs to {{BASE_URL}} as updates without deleting user data', () => {
+  const rootFolderId = 'root-nutrade';
+  const existingFolders: CollectionFolder[] = [
+    {
+      id: rootFolderId,
+      collection_id: 'coll-1',
+      name: 'NuTrade',
+      swagger_url: 'http://localhost:8080/swagger.json',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'folder-client-auth',
+      collection_id: 'coll-1',
+      parent_folder_id: rootFolderId,
+      name: 'ClientAuthAPI',
+      sort_order: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const existingEndpoints: Endpoint[] = [
+    {
+      id: 'ep-login',
+      collection_id: 'coll-1',
+      folder_id: 'folder-client-auth',
+      name: 'Renamed Login Endpoint', // Name differs from spec to test pathname matching across Base URL change
+      protocol: 'http',
+      config: {
+        method: 'POST',
+        url: 'http://localhost/client/api/v1/login?source=web',
+        query_params: [['source', 'web']],
+        body: JSON.stringify({ email: 'saved@nutrade.com', password: 'secret' }),
+      },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const freshSpec: ParsedSwaggerSpec = {
+    title: 'NuTrade',
+    version: '1.0',
+    baseUrl: '{{BASE_URL}}',
+    totalEndpoints: 1,
+    services: [
+      {
+        name: 'ClientAuthAPI',
+        endpoints: [
+          {
+            name: 'Login',
+            method: 'POST',
+            path: '/client/api/v1/login',
+            routePath: '/client/api/v1/login',
+            fullUrl: '{{BASE_URL}}/client/api/v1/login',
+            serviceTag: 'ClientAuthAPI',
+            queryParams: [],
+            headers: {},
+            bodyType: 'json',
+            body: JSON.stringify({ email: '', password: '' }),
+          },
+        ],
+      },
+    ],
+  };
+
+  const plan = planSwaggerSync(rootFolderId, existingFolders, existingEndpoints, freshSpec);
+  assert.equal(plan.endpointsToDelete.length, 0);
+  assert.equal(plan.endpointsToCreate.length, 0);
+  assert.equal(plan.endpointsToUpdate.length, 1);
+
+  const upd = plan.endpointsToUpdate[0];
+  assert.equal(upd.newConfig.url, '{{BASE_URL}}/client/api/v1/login?source=web');
+  assert.equal(upd.newConfig.swagger_path, '/client/api/v1/login');
+  assert.equal(JSON.parse(upd.newConfig.body).email, 'saved@nutrade.com');
+  assert.deepEqual(upd.diffSummary?.urlChange, {
+    old: 'http://localhost/client/api/v1/login',
+    new: '{{BASE_URL}}/client/api/v1/login',
+  });
+});

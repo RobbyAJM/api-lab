@@ -6,6 +6,7 @@ import {
   closeOtherEndpointsInTabs,
   closeAllEndpointsInTabs,
   updateEndpointInTabs,
+  syncOpenEndpointsInTabs,
   setEndpointDraftInState,
   clearEndpointDraftInState,
   isEndpointDirtyInState,
@@ -978,5 +979,38 @@ test('switchWorkspaceTabs and removeWorkspaceTabs integrate with storage', () =>
   const cleaned = removeWorkspaceTabs(result.workspaceTabs, 'ws-2', mockStorage);
   assert.equal(cleaned['ws-2'], undefined);
   assert.equal(getStoredWorkspaceTabs('ws-2', mockStorage), null);
+});
+
+test('syncOpenEndpointsInTabs: refreshes matching open tabs and activeEndpoint without opening closed endpoints', () => {
+  const ep1 = createMockEndpoint('ep1', 'Login');
+  const ep2 = createMockEndpoint('ep2', 'Profile');
+  const ep3 = createMockEndpoint('ep3', 'Closed Ep');
+
+  const initial: TabState = {
+    openEndpoints: [ep1, ep2],
+    activeEndpointId: 'ep1',
+    activeEndpoint: ep1,
+    endpointDrafts: {},
+    endpointResponses: {},
+  };
+
+  const updatedEp1: Endpoint = {
+    ...ep1,
+    version: 2,
+    config: { ...ep1.config, url: '{{BASE_URL}}/client/api/v1/login' },
+  };
+  const updatedEp3: Endpoint = {
+    ...ep3,
+    version: 3,
+    config: { ...ep3.config, url: '{{BASE_URL}}/client/api/v1/closed' },
+  };
+
+  const synced = syncOpenEndpointsInTabs(initial, [updatedEp1, updatedEp3]);
+  assert.equal(synced.openEndpoints.length, 2);
+  assert.equal(synced.openEndpoints[0].version, 2);
+  assert.equal(synced.openEndpoints[0].config.url, '{{BASE_URL}}/client/api/v1/login');
+  assert.equal(synced.openEndpoints[1].id, 'ep2');
+  assert.equal(synced.activeEndpoint?.version, 2);
+  assert.equal(synced.activeEndpoint?.config.url, '{{BASE_URL}}/client/api/v1/login');
 });
 

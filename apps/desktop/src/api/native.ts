@@ -10,6 +10,8 @@ import type {
   FixConnectRequest,
   FixSessionEvent,
 } from '@api-lab/api-types';
+import { substituteVariables } from '../utils/responseViewerUtils.ts';
+import { normalizeSubstitutedHttpUrl } from '../utils/swaggerParser.ts';
 
 async function isTauri(): Promise<boolean> {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -30,7 +32,10 @@ export async function executeNativeHttp(
   // Fallback for browser dev mode: direct fetch where possible
   const start = performance.now();
   try {
-    const res = await fetch(req.url, {
+    const resolvedUrl = normalizeSubstitutedHttpUrl(
+      substituteVariables(req.url, variables)
+    );
+    const res = await fetch(resolvedUrl, {
       method: req.method,
       headers: req.headers,
       body: req.body,

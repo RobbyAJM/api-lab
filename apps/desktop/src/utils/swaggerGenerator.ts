@@ -5,10 +5,21 @@
 
 import {
   parseSwaggerSpec,
+  combineSwaggerUrl,
+  splitSwaggerUrl,
+  normalizeSubstitutedHttpUrl,
+  normalizeBaseUrlTemplate,
   type ParsedSwaggerSpec,
   type SwaggerDoc,
 } from './swaggerParser.ts';
 import { executeNativeHttp } from '../api/native.ts';
+
+export {
+  combineSwaggerUrl,
+  splitSwaggerUrl,
+  normalizeSubstitutedHttpUrl,
+  normalizeBaseUrlTemplate,
+};
 
 export interface PlannedSwaggerEndpoint {
   name: string;
@@ -17,6 +28,7 @@ export interface PlannedSwaggerEndpoint {
   config: {
     method: string;
     url: string;
+    swagger_path?: string;
     summary?: string;
     query_params: [string, string, string?][];
     path_variables?: [string, string, string?][];
@@ -37,6 +49,7 @@ export interface PlannedSwaggerHierarchy {
   rootFolderName: string;
   swaggerUrl: string;
   baseUrl: string;
+  swaggerPath?: string;
   serviceFolders: PlannedSwaggerServiceFolder[];
   totalEndpoints: number;
 }
@@ -56,26 +69,6 @@ export const DEFAULT_SWAGGER_BASE_URL = 'https://httpbin.dmuth.org';
 export const DEFAULT_SWAGGER_PATH = 'openapi.json';
 export const DEFAULT_SWAGGER_URL = `${DEFAULT_SWAGGER_BASE_URL}/${DEFAULT_SWAGGER_PATH}`;
 export const DEFAULT_SWAGGER_FOLDER_NAME = 'Swagger APIs';
-
-export function combineSwaggerUrl(baseUrl: string, path: string): string {
-  let cleanBase = (baseUrl || '').trim();
-  if (
-    cleanBase &&
-    !cleanBase.startsWith('http://') &&
-    !cleanBase.startsWith('https://') &&
-    !cleanBase.startsWith('{{')
-  ) {
-    cleanBase = `http://${cleanBase}`;
-  }
-  cleanBase = cleanBase.replace(/\/+$/, '');
-
-  let cleanPath = (path || '').trim();
-  cleanPath = cleanPath.replace(/^\/+/, '');
-
-  if (!cleanBase) return cleanPath ? `/${cleanPath}` : '';
-  if (!cleanPath) return cleanBase;
-  return `${cleanBase}/${cleanPath}`;
-}
 
 export function getDefaultSwaggerConfig() {
   return {
@@ -99,6 +92,8 @@ export interface ApiCaller {
 export function planSwaggerHierarchy(options: {
   folderName: string;
   swaggerUrl: string;
+  baseUrl?: string;
+  swaggerPath?: string;
   spec: ParsedSwaggerSpec;
 }): PlannedSwaggerHierarchy {
   const rootFolderName = options.folderName.trim() || options.spec.title || 'Swagger APIs';
@@ -117,6 +112,7 @@ export function planSwaggerHierarchy(options: {
         config: {
           method: ep.method,
           url: ep.fullUrl,
+          swagger_path: ep.routePath ?? ep.path,
           summary: ep.summary,
           query_params: ep.queryParams,
           path_variables: ep.pathVariables,
@@ -136,10 +132,17 @@ export function planSwaggerHierarchy(options: {
     });
   }
 
+  const trimmedSwaggerUrl = options.swaggerUrl.trim();
+  const split = splitSwaggerUrl(trimmedSwaggerUrl);
+  const resolvedBaseUrl = options.baseUrl?.trim() || split.baseUrl || options.spec.baseUrl;
+  const resolvedSwaggerPath =
+    options.swaggerPath !== undefined ? options.swaggerPath.trim() : split.swaggerPath;
+
   return {
     rootFolderName,
-    swaggerUrl: options.swaggerUrl.trim(),
-    baseUrl: options.spec.baseUrl,
+    swaggerUrl: trimmedSwaggerUrl,
+    baseUrl: resolvedBaseUrl,
+    swaggerPath: resolvedSwaggerPath,
     serviceFolders,
     totalEndpoints,
   };
@@ -163,11 +166,20 @@ export async function executeSwaggerHierarchyCreation(
     return { rootFolderId: '', createdServiceFoldersCount: 0, createdEndpointsCount: 0 };
   }
 
-  // 1. Create root folder with swagger_url stored directly on the folder
+  // 1. Create root folder with swagger_url and separated swagger settings stored directly on the folder
+  const rootSettings: Record<string, any> = {};
+  if (planned.baseUrl && planned.baseUrl.trim()) {
+    rootSettings.swagger_base_url = planned.baseUrl.trim();
+  }
+  if (planned.swaggerPath !== undefined && planned.swaggerPath.trim()) {
+    rootSettings.swagger_path = planned.swaggerPath.trim();
+  }
+
   const rootFolder = await api.post(`/collections/${collectionId}/folders`, {
     name: planned.rootFolderName,
     parent_folder_id: null,
     swagger_url: planned.swaggerUrl,
+    ...(Object.keys(rootSettings).length > 0 ? { settings: rootSettings } : {}),
   });
 
   const rootFolderId = rootFolder.id;
@@ -266,12 +278,8 @@ export function substituteUrlVariables(url: string, variables?: Record<string, s
 }
 
 export function normalizeSwaggerUrl(url: string, variables?: Record<string, string>): string {
-  let effective = substituteUrlVariables((url || '').trim(), variables);
-  if (!effective) return '';
-  if (!effective.startsWith('http://') && !effective.startsWith('https://') && !effective.startsWith('{{')) {
-    effective = `http://${effective}`;
-  }
-  return effective;
+  const substituted = substituteUrlVariables((url || '').trim(), variables);
+  return normalizeSubstitutedHttpUrl(substituted);
 }
 
 /**
@@ -381,6 +389,7 @@ export async function generateSwaggerCollection(options: {
   folderName: string;
   swaggerUrl: string;
   baseUrl?: string;
+  swaggerPath?: string;
   variables?: Record<string, string>;
   timeoutMs?: number;
   onProgress?: (info: SwaggerProgressInfo | string) => void;
@@ -428,6 +437,8 @@ export async function generateSwaggerCollection(options: {
   const planned = planSwaggerHierarchy({
     folderName: options.folderName,
     swaggerUrl: options.swaggerUrl,
+    baseUrl: options.baseUrl,
+    swaggerPath: options.swaggerPath,
     spec,
   });
 

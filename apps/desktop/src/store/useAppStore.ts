@@ -22,6 +22,7 @@ import {
   closeOtherEndpointsInTabs,
   closeAllEndpointsInTabs,
   updateEndpointInTabs,
+  syncOpenEndpointsInTabs,
   setEndpointDraftInState,
   clearEndpointDraftInState,
   isEndpointDirtyInState,
@@ -172,6 +173,7 @@ interface AppState {
   removeWorkspaceTabState: (workspaceId: string) => void;
   setActiveEnvironmentId: (id: string | null) => void;
   setActiveEndpoint: (endpoint: Endpoint | null) => void;
+  syncOpenEndpoints: (updatedEndpoints: Endpoint[]) => void;
   setLastHttpResponse: (res: HttpExecutionResponse | null, endpointId?: string) => void;
   setLastGrpcResponse: (res: GrpcExecutionResponse | null, endpointId?: string) => void;
   getHttpResponse: (endpointId: string) => HttpExecutionResponse | null;
@@ -816,6 +818,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
     state.openEndpoint(endpoint);
+  },
+
+  syncOpenEndpoints: (updatedEndpoints) => {
+    if (!updatedEndpoints || updatedEndpoints.length === 0) return;
+    set((s) => {
+      const tabState = syncOpenEndpointsInTabs(
+        {
+          openEndpoints: s.openEndpoints,
+          activeEndpointId: s.activeEndpointId,
+          activeEndpoint: s.activeEndpoint,
+          endpointDrafts: s.endpointDrafts,
+          endpointResponses: s.endpointResponses,
+        },
+        updatedEndpoints
+      );
+      if (s.activeWorkspaceId) {
+        setStoredWorkspaceTabs(s.activeWorkspaceId, tabState);
+      }
+      return tabState;
+    });
   },
 
   setLastHttpResponse: (res, endpointId = get().activeEndpointId || '') => set((state) => ({

@@ -5,6 +5,7 @@ import {
   generateSampleFromSchema,
   generateSampleFromSpecification,
   deriveBaseUrl,
+  extractUrlPathname,
   resolveRef,
   resolveSwaggerSamplePayload,
   resolveSwaggerSampleResult,
@@ -977,4 +978,54 @@ test('resolveSwaggerSampleParams: correctly resolves GET query parameters and en
     'SORT_DIRECTION_ASC',
     'SORT_DIRECTION_DESC',
   ]);
+});
+
+test('deriveBaseUrl: honors customBaseUrl with ports or {{VAR}} even when spec host is localhost', () => {
+  const docWithLocalhost: SwaggerDoc = {
+    swagger: '2.0',
+    host: 'localhost',
+    paths: {
+      '/client/api/v1/login': {
+        post: { operationId: 'Login', tags: ['ClientAuthAPI'] },
+      },
+    },
+  };
+
+  // Explicit localhost:8080 overrides doc.host="localhost" and keeps port
+  assert.equal(
+    deriveBaseUrl(docWithLocalhost, 'http://localhost:8080/swagger.json', 'localhost:8080'),
+    'http://localhost:8080'
+  );
+
+  // Explicit variable template is preserved verbatim (never resolved/prefixed with http://)
+  assert.equal(
+    deriveBaseUrl(docWithLocalhost, '{{BASE_URL}}/swagger.json', '{{BASE_URL}}'),
+    '{{BASE_URL}}'
+  );
+
+  // Fallback without customBaseUrl handles scheme-less localhost:8080 and {{BASE_URL}}
+  const docNoHost: SwaggerDoc = { swagger: '2.0' };
+  assert.equal(
+    deriveBaseUrl(docNoHost, 'localhost:8080/swagger.json'),
+    'http://localhost:8080'
+  );
+  assert.equal(
+    deriveBaseUrl(docNoHost, '{{BASE_URL}}/swagger.json'),
+    '{{BASE_URL}}'
+  );
+
+  // parseSwaggerSpec propagates routePath and template fullUrl
+  const parsed = parseSwaggerSpec(docWithLocalhost, '{{BASE_URL}}/swagger.json', '{{BASE_URL}}');
+  const loginEp = parsed.services[0].endpoints[0];
+  assert.equal(loginEp.fullUrl, '{{BASE_URL}}/client/api/v1/login');
+  assert.equal(loginEp.routePath, '/client/api/v1/login');
+});
+
+test('extractUrlPathname: handles {{VAR}} bases, scheme-less host:port, and full URLs', () => {
+  assert.equal(extractUrlPathname('{{BASE_URL}}/client/api/v1/login'), '/client/api/v1/login');
+  assert.equal(extractUrlPathname('{{BASE_URL}}/client/api/v1/login?a=1'), '/client/api/v1/login');
+  assert.equal(extractUrlPathname('{{BASE_URL}}'), '/');
+  assert.equal(extractUrlPathname('http://{{HOST}}:{{PORT}}/v1/users/'), '/v1/users');
+  assert.equal(extractUrlPathname('localhost:8080/client/api/v1/login'), '/client/api/v1/login');
+  assert.equal(extractUrlPathname('https://api.example.com:8443/v2/orders'), '/v2/orders');
 });

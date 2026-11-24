@@ -9,8 +9,12 @@ import {
   getFolderGrpcUrl,
   isSwaggerFolder,
   getFolderSwaggerUrl,
+  getFolderSwaggerConfig,
   canAddEndpointToFolder,
   findSwaggerFolderForEndpoint,
+  resolveInheritedSwaggerConfig,
+  buildEffectiveSwaggerEndpointUrl,
+  cascadeUpdateFolderSwaggerBaseUrl,
   getSidebarItemType,
   resolveRootFolderId,
   resolveInheritedGrpcAddress,
@@ -746,6 +750,176 @@ test('resolveInheritedGrpcAddress: updates address when folder reflection grpc_u
   assert.equal(res.isInherited, true);
   assert.equal(res.inheritedAddress, '{{LOCAL_GRPC_PORT}}');
   assert.equal(res.folderId, 'f-refl');
+});
+
+test('getFolderSwaggerConfig & resolveInheritedSwaggerConfig: reads explicit settings and splits legacy swagger_url', () => {
+  const modernFolder: CollectionFolder = {
+    id: 'f-modern',
+    collection_id: 'c',
+    parent_folder_id: null,
+    name: 'NuTrade',
+    swagger_url: '{{BASE_URL}}/swagger/combined/nutrade.swagger.json',
+    settings: {
+      swagger_base_url: '{{BASE_URL}}',
+      swagger_path: 'swagger/combined/nutrade.swagger.json',
+    },
+    sort_order: 0,
+    created_at: '',
+    updated_at: '',
+  };
+
+  const serviceSubfolder: CollectionFolder = {
+    id: 'f-sub',
+    collection_id: 'c',
+    parent_folder_id: 'f-modern',
+    name: 'ClientAuthAPI',
+    sort_order: 1,
+    created_at: '',
+    updated_at: '',
+  };
+
+  const legacyFolder: CollectionFolder = {
+    id: 'f-legacy',
+    collection_id: 'c',
+    parent_folder_id: null,
+    name: 'Legacy Swagger',
+    swagger_url: 'http://localhost:8080/openapi.json',
+    sort_order: 2,
+    created_at: '',
+    updated_at: '',
+  };
+
+  assert.deepEqual(getFolderSwaggerConfig(modernFolder), {
+    baseUrl: '{{BASE_URL}}',
+    swaggerPath: 'swagger/combined/nutrade.swagger.json',
+    swaggerUrl: '{{BASE_URL}}/swagger/combined/nutrade.swagger.json',
+  });
+
+  assert.deepEqual(getFolderSwaggerConfig(legacyFolder), {
+    baseUrl: 'http://localhost:8080',
+    swaggerPath: 'openapi.json',
+    swaggerUrl: 'http://localhost:8080/openapi.json',
+  });
+
+  const inherited = resolveInheritedSwaggerConfig(
+    { folder_id: 'f-sub' },
+    [modernFolder, serviceSubfolder]
+  );
+  assert.equal(inherited.isInherited, true);
+  assert.equal(inherited.baseUrl, '{{BASE_URL}}');
+  assert.equal(inherited.swaggerPath, 'swagger/combined/nutrade.swagger.json');
+  assert.equal(inherited.folderId, 'f-modern');
+  assert.equal(inherited.folderName, 'NuTrade');
+});
+
+test('buildEffectiveSwaggerEndpointUrl: applies live baseUrl template without resolving variables or duplicating prefixes', () => {
+  // Broken localhost URL inherits {{BASE_URL}} on-the-fly
+  assert.equal(
+    buildEffectiveSwaggerEndpointUrl('http://localhost/client/api/v1/login', '{{BASE_URL}}'),
+    '{{BASE_URL}}/client/api/v1/login'
+  );
+
+  // Scheme-less host:port gets http:// and preserves query string
+  assert.equal(
+    buildEffectiveSwaggerEndpointUrl(
+      'http://localhost/client/api/v1/users?page=2&limit=50',
+      'localhost:8080'
+    ),
+    'http://localhost:8080/client/api/v1/users?page=2&limit=50'
+  );
+
+  // Uses stored swagger_path when present even if baseUrl changes from prefixed path to {{BASE_URL}}
+  assert.equal(
+    buildEffectiveSwaggerEndpointUrl(
+      'http://old-gateway:9000/gw/client/api/v1/login?debug=1',
+      '{{BASE_URL}}',
+      '/client/api/v1/login'
+    ),
+    '{{BASE_URL}}/client/api/v1/login?debug=1'
+  );
+
+  // Legacy endpoint with path-prefixed base URL avoids duplicating /api
+  assert.equal(
+    buildEffectiveSwaggerEndpointUrl(
+      'http://localhost:8080/api/users',
+      'http://localhost:8080/api'
+    ),
+    'http://localhost:8080/api/users'
+  );
+});
+
+test('cascadeUpdateFolderSwaggerBaseUrl: cascades variable baseUrl template to descendant HTTP endpoints only', async () => {
+  const folders: CollectionFolder[] = [
+    {
+      id: 'f-root',
+      collection_id: 'c',
+      parent_folder_id: null,
+      name: 'NuTrade',
+      swagger_url: '{{BASE_URL}}/swagger.json',
+      sort_order: 0,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-svc',
+      collection_id: 'c',
+      parent_folder_id: 'f-root',
+      name: 'ClientAuthAPI',
+      sort_order: 1,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'f-other',
+      collection_id: 'c',
+      parent_folder_id: null,
+      name: 'Other',
+      sort_order: 2,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const endpoints: Endpoint[] = [
+    {
+      id: 'ep-1',
+      collection_id: 'c',
+      folder_id: 'f-svc',
+      name: 'Login',
+      protocol: 'http',
+      config: { method: 'POST', url: 'http://localhost/client/api/v1/login?v=1' },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'ep-2',
+      collection_id: 'c',
+      folder_id: 'f-other',
+      name: 'Other Ep',
+      protocol: 'http',
+      config: { method: 'GET', url: 'https://other.api/health' },
+      sort_order: 0,
+      version: 1,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const patches: { path: string; body: any }[] = [];
+  const res = await cascadeUpdateFolderSwaggerBaseUrl('f-root', '{{BASE_URL}}', folders, endpoints, {
+    patch: async (path, body) => {
+      patches.push({ path, body });
+      return { ...endpoints[0], config: body.config, version: 2 };
+    },
+  });
+
+  assert.equal(res.updatedCount, 1);
+  assert.equal(res.updatedEndpoints.length, 1);
+  assert.equal(patches.length, 1);
+  assert.equal(patches[0].path, '/endpoints/ep-1');
+  assert.equal(patches[0].body.config.url, '{{BASE_URL}}/client/api/v1/login?v=1');
 });
 
 

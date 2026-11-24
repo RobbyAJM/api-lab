@@ -377,6 +377,40 @@ export function updateEndpointInTabs(state: TabState, updated: Endpoint): TabSta
 }
 
 /**
+ * Bulk-synchronizes open endpoint tabs (and activeEndpoint) with updated server records
+ * without opening tabs that are not already open.
+ */
+export function syncOpenEndpointsInTabs(state: TabState, updatedEndpoints: Endpoint[]): TabState {
+  if (!updatedEndpoints || updatedEndpoints.length === 0) return state;
+  const byId = new Map<string, Endpoint>(updatedEndpoints.map((ep) => [ep.id, ep]));
+
+  let changed = false;
+  const nextOpen = state.openEndpoints.map((ep) => {
+    const replacement = byId.get(ep.id);
+    if (replacement) {
+      changed = true;
+      return replacement;
+    }
+    return ep;
+  });
+
+  const nextActive =
+    state.activeEndpointId && byId.has(state.activeEndpointId)
+      ? byId.get(state.activeEndpointId)!
+      : state.activeEndpoint;
+
+  if (!changed && nextActive === state.activeEndpoint) {
+    return state;
+  }
+
+  return {
+    ...state,
+    openEndpoints: nextOpen,
+    activeEndpoint: nextActive,
+  };
+}
+
+/**
  * Records or updates an unsaved draft for a specific endpoint.
  */
 export function setEndpointDraftInState(

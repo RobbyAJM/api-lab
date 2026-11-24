@@ -29,7 +29,8 @@ export interface ParsedHttpEndpoint {
   name: string;
   method: string; // 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   path: string; // e.g. '/manager/api/v1/users' or '/manager/api/v1/users/:id'
-  fullUrl: string; // e.g. 'http://localhost:9090/manager/api/v1/users/:id'
+  routePath?: string; // Path relative to folder Base URL (includes doc.basePath when applicable)
+  fullUrl: string; // e.g. 'http://localhost:9090/manager/api/v1/users/:id' or '{{BASE_URL}}/manager/api/v1/users/:id'
   serviceTag: string; // e.g. 'UserAPI' or 'Default'
   operationId?: string;
   summary?: string;
@@ -688,34 +689,156 @@ export function extractSwaggerSpecification(
 }
 
 /**
+ * Normalizes a Base URL template while preserving {{VAR}} variable placeholders.
+ * Bare host:port values (e.g. "localhost:8080") default to http://, and trailing slashes are removed.
+ */
+export function normalizeBaseUrlTemplate(baseUrl: string): string {
+  let clean = (baseUrl || '').trim();
+  if (!clean) return '';
+  if (
+    !/^https?:\/\//i.test(clean) &&
+    !clean.startsWith('{{')
+  ) {
+    clean = `http://${clean}`;
+  }
+  return clean.replace(/\/+$/, '');
+}
+
+/**
+ * Combines a Base URL (supporting ports and {{VAR}} templates) and a Swagger JSON path.
+ */
+export function combineSwaggerUrl(baseUrl: string, path: string): string {
+  const cleanBase = normalizeBaseUrlTemplate(baseUrl);
+  const cleanPath = (path || '').trim().replace(/^\/+/, '');
+
+  if (!cleanBase) return cleanPath ? `/${cleanPath}` : '';
+  if (!cleanPath) return cleanBase;
+  return `${cleanBase}/${cleanPath}`;
+}
+
+/**
+ * Splits a combined Swagger URL (including scheme-less host:port and {{VAR}} templates)
+ * into separate Base URL and Swagger JSON Path parts.
+ */
+export function splitSwaggerUrl(swaggerUrl: string): { baseUrl: string; swaggerPath: string } {
+  const trimmed = (swaggerUrl || '').trim();
+  if (!trimmed) {
+    return { baseUrl: '', swaggerPath: '' };
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    const schemeEnd = trimmed.indexOf('://') + 3;
+    const slashIdx = trimmed.indexOf('/', schemeEnd);
+    if (slashIdx === -1) {
+      return { baseUrl: trimmed.replace(/\/+$/, ''), swaggerPath: '' };
+    }
+    return {
+      baseUrl: trimmed.slice(0, slashIdx),
+      swaggerPath: trimmed.slice(slashIdx + 1).replace(/^\/+/, ''),
+    };
+  }
+
+  if (trimmed.startsWith('/')) {
+    return {
+      baseUrl: '',
+      swaggerPath: trimmed.replace(/^\/+/, ''),
+    };
+  }
+
+  const slashIdx = trimmed.indexOf('/');
+  if (slashIdx === -1) {
+    return { baseUrl: trimmed, swaggerPath: '' };
+  }
+
+  return {
+    baseUrl: trimmed.slice(0, slashIdx),
+    swaggerPath: trimmed.slice(slashIdx + 1).replace(/^\/+/, ''),
+  };
+}
+
+/**
+ * Normalizes a URL after {{VAR}} substitution:
+ * - Prepends http:// when scheme is missing (e.g. "localhost:8080/api/login")
+ * - Collapses accidental duplicate slashes at the authority/path boundary (e.g. "http://localhost:8080//api/login")
+ * - Leaves unresolved leading {{VAR}} templates untouched.
+ */
+export function normalizeSubstitutedHttpUrl(rawUrl: string): string {
+  let effective = (rawUrl || '').trim();
+  if (!effective) return '';
+  if (effective.startsWith('{{')) {
+    return effective;
+  }
+  if (!/^https?:\/\//i.test(effective)) {
+    effective = `http://${effective}`;
+  }
+
+  const schemeIdx = effective.indexOf('://');
+  if (schemeIdx === -1) return effective;
+  const afterScheme = effective.slice(schemeIdx + 3);
+  const slashIdx = afterScheme.indexOf('/');
+  if (slashIdx === -1) return effective;
+
+  const authority = effective.slice(0, schemeIdx + 3 + slashIdx);
+  const rest = afterScheme.slice(slashIdx);
+  const qhIdx = rest.search(/[?#]/);
+  const pathPart = qhIdx === -1 ? rest : rest.slice(0, qhIdx);
+  const suffix = qhIdx === -1 ? '' : rest.slice(qhIdx);
+  const cleanPath = pathPart.replace(/^\/+/, '/');
+  return `${authority}${cleanPath}${suffix}`;
+}
+
+function getSpecBasePath(doc: SwaggerDoc): string {
+  const bp = (doc.basePath || '').trim().replace(/\/+$/, '');
+  if (bp) {
+    return bp.startsWith('/') ? bp : `/${bp}`;
+  }
+  if (doc.servers && doc.servers.length > 0 && doc.servers[0].url) {
+    const serverUrl = doc.servers[0].url.trim();
+    if (serverUrl.startsWith('/')) {
+      return serverUrl.replace(/\/+$/, '');
+    }
+  }
+  return '';
+}
+
+/**
  * Derives the base URL from swagger doc + source URL.
  */
 export function deriveBaseUrl(doc: SwaggerDoc, sourceUrl: string, customBaseUrl?: string): string {
   if (customBaseUrl && customBaseUrl.trim()) {
-    let clean = customBaseUrl.trim();
-    if (!clean.startsWith('http://') && !clean.startsWith('https://') && !clean.startsWith('{{')) {
-      clean = `http://${clean}`;
-    }
-    clean = clean.replace(/\/+$/, '');
-    const bp = (doc.basePath || '').replace(/\/+$/, '');
+    const clean = normalizeBaseUrlTemplate(customBaseUrl);
+    const bp = getSpecBasePath(doc);
     if (bp && !clean.endsWith(bp)) {
-      return `${clean}${bp.startsWith('/') ? '' : '/'}${bp}`;
+      return `${clean}${bp}`;
     }
     return clean;
   }
 
   let origin = 'http://localhost';
-  try {
-    const parsed = new URL(sourceUrl);
-    origin = parsed.origin;
-  } catch {
-    // ignore
+  const trimmedSource = (sourceUrl || '').trim();
+  if (trimmedSource.startsWith('{{')) {
+    const split = splitSwaggerUrl(trimmedSource);
+    if (split.baseUrl) {
+      origin = split.baseUrl.replace(/\/+$/, '');
+    }
+  } else if (trimmedSource) {
+    try {
+      const parseable = /^https?:\/\//i.test(trimmedSource)
+        ? trimmedSource
+        : `http://${trimmedSource}`;
+      const parsed = new URL(parseable);
+      if (parsed.origin && parsed.origin !== 'null') {
+        origin = parsed.origin;
+      }
+    } catch {
+      // ignore
+    }
   }
 
   // 1. Swagger 2.0 host and basePath
   if (doc.host) {
     const scheme =
-      (doc.schemes && doc.schemes[0]) || (sourceUrl.startsWith('https') ? 'https' : 'http');
+      (doc.schemes && doc.schemes[0]) || (trimmedSource.startsWith('https') ? 'https' : 'http');
     const basePath = (doc.basePath || '').replace(/\/$/, '');
     return `${scheme}://${doc.host}${basePath}`;
   }
@@ -761,6 +884,8 @@ export function parseSwaggerSpec(
   const title = doc.info?.title || 'Swagger API';
   const version = doc.info?.version || '1.0';
   const baseUrl = deriveBaseUrl(doc, sourceUrl, customBaseUrl);
+  const specBasePath = getSpecBasePath(doc);
+  const normalizedCustomBase = customBaseUrl?.trim() ? normalizeBaseUrlTemplate(customBaseUrl) : '';
 
   const servicesMap = new Map<string, ParsedHttpEndpoint[]>();
   let totalEndpoints = 0;
@@ -891,7 +1016,12 @@ export function parseSwaggerSpec(
       // Format endpoint name: operationId > rawPath (e.g. /api/v1/user/{id}/update)
       let epName = (operation.operationId || rawPath).trim();
 
-      const fullUrl = `${baseUrl}${normalizedPath.startsWith('/') ? '' : '/'}${normalizedPath}`;
+      const pathWithSlash = normalizedPath.startsWith('/') ? normalizedPath : `/${normalizedPath}`;
+      const routePath =
+        specBasePath && (!normalizedCustomBase || !normalizedCustomBase.endsWith(specBasePath))
+          ? `${specBasePath}${pathWithSlash}`
+          : pathWithSlash;
+      const fullUrl = `${baseUrl}${pathWithSlash}`;
 
       const specification = extractSwaggerSpecification(operation, doc, allParams);
 
@@ -899,6 +1029,7 @@ export function parseSwaggerSpec(
         name: epName,
         method,
         path: normalizedPath,
+        routePath,
         fullUrl,
         serviceTag: primaryTag,
         operationId: operation.operationId,
@@ -952,16 +1083,38 @@ export function parseSwaggerSpec(
 }
 
 export function extractUrlPathname(u: string): string {
-  if (!u) return '/';
-  try {
-    const parsed = new URL(u);
-    return parsed.pathname.replace(/\/+$/, '') || '/';
-  } catch {
-    const withoutQuery = u.split('?')[0];
-    const withoutHost = withoutQuery.replace(/^[a-zA-Z]+:\/\/[^\/]+/, '');
-    const clean = (withoutHost.startsWith('/') ? withoutHost : `/${withoutHost}`).replace(/\/+$/, '');
-    return clean || '/';
+  const trimmed = (u || '').trim();
+  if (!trimmed) return '/';
+
+  const qhIdx = trimmed.search(/[?#]/);
+  const withoutQuery = qhIdx === -1 ? trimmed : trimmed.slice(0, qhIdx);
+  if (!withoutQuery) return '/';
+
+  const schemeIdx = withoutQuery.indexOf('://');
+  if (schemeIdx !== -1) {
+    const afterScheme = withoutQuery.slice(schemeIdx + 3);
+    const slashIdx = afterScheme.indexOf('/');
+    if (slashIdx === -1) return '/';
+    return afterScheme.slice(slashIdx).replace(/\/+$/, '') || '/';
   }
+
+  if (withoutQuery.startsWith('/')) {
+    return withoutQuery.replace(/\/+$/, '') || '/';
+  }
+
+  const slashIdx = withoutQuery.indexOf('/');
+  if (slashIdx === -1) {
+    if (
+      withoutQuery.includes('{{') ||
+      withoutQuery.includes(':') ||
+      withoutQuery.includes('.')
+    ) {
+      return '/';
+    }
+    return `/${withoutQuery}`;
+  }
+
+  return withoutQuery.slice(slashIdx).replace(/\/+$/, '') || '/';
 }
 
 export function matchPathSegments(pattern: string, actual: string): boolean {

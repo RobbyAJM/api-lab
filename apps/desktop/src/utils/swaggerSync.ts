@@ -4,7 +4,13 @@
  */
 
 import type { CollectionFolder, Endpoint } from '@api-lab/api-types';
-import type { ParsedSwaggerSpec, ParsedSwaggerService, ParsedHttpEndpoint } from './swaggerParser.ts';
+import {
+  extractUrlPathname,
+  matchPathSegments,
+  type ParsedSwaggerSpec,
+  type ParsedSwaggerService,
+  type ParsedHttpEndpoint,
+} from './swaggerParser.ts';
 import { computePayloadFieldDiff, type PayloadFieldDiff } from './grpcReflectionSync.ts';
 
 export interface SwaggerEndpointDiffSummary {
@@ -112,8 +118,32 @@ export function reconcileHttpPayload(
   return { updatedPayload: result, changed };
 }
 
+function matchesByMethodAndPath(existingEp: Endpoint, freshEp: ParsedHttpEndpoint): boolean {
+  const curMethod = existingEp.config?.method?.toUpperCase();
+  const curUrl = existingEp.config?.url;
+  if (!curMethod || !curUrl) return false;
+  if (curMethod !== freshEp.method.toUpperCase()) return false;
+
+  const curBaseAndPath = curUrl.split('?')[0];
+  const freshBaseAndPath = freshEp.fullUrl.split('?')[0];
+  if (curUrl === freshEp.fullUrl || curBaseAndPath === freshBaseAndPath) {
+    return true;
+  }
+
+  // Fallback: match by normalized pathname so Base URL changes (e.g. localhost -> {{BASE_URL}})
+  // reconcile as updates rather than destructive delete + recreate.
+  const curPath = existingEp.config?.swagger_path
+    ? String(existingEp.config.swagger_path).replace(/\/+$/, '') || '/'
+    : extractUrlPathname(curUrl);
+  const freshPath = (freshEp.routePath || extractUrlPathname(freshEp.fullUrl)).replace(/\/+$/, '') || '/';
+  if (curPath === freshPath) {
+    return true;
+  }
+  return matchPathSegments(freshPath, curPath);
+}
+
 /**
- * Matches an existing endpoint to a fresh parsed endpoint by name or method+path.
+ * Matches an existing endpoint to a fresh parsed endpoint by name, full URL, or method+pathname.
  */
 function findMatchingEndpoint(
   existingEp: Endpoint,
@@ -123,19 +153,43 @@ function findMatchingEndpoint(
   const byName = freshEndpoints.find((f) => f.name === existingEp.name);
   if (byName) return byName;
 
-  // 2. Method + URL match (matching hostname + path ignoring query params)
+  // 2. Method + exact base+path match
   const curMethod = existingEp.config?.method?.toUpperCase();
   const curUrl = existingEp.config?.url;
   if (curMethod && curUrl) {
     const curBaseAndPath = curUrl.split('?')[0];
-    return freshEndpoints.find(
+    const byUrl = freshEndpoints.find(
       (f) =>
         f.method.toUpperCase() === curMethod &&
         (f.fullUrl === curUrl || f.fullUrl.split('?')[0] === curBaseAndPath)
     );
+    if (byUrl) return byUrl;
   }
 
-  return undefined;
+  // 3. Method + pathname match (resilient to Base URL or variable template changes)
+  return freshEndpoints.find((f) => matchesByMethodAndPath(existingEp, f));
+}
+
+function findMatchingExistingEndpoint(
+  freshEp: ParsedHttpEndpoint,
+  existingEndpoints: Endpoint[]
+): Endpoint | undefined {
+  const byName = existingEndpoints.find((ep) => ep.name === freshEp.name);
+  if (byName) return byName;
+
+  const freshBaseAndPath = freshEp.fullUrl.split('?')[0];
+  const byUrl = existingEndpoints.find((ep) => {
+    const curMethod = ep.config?.method?.toUpperCase();
+    const curUrl = ep.config?.url;
+    if (!curMethod || !curUrl) return false;
+    return (
+      curMethod === freshEp.method.toUpperCase() &&
+      (curUrl === freshEp.fullUrl || curUrl.split('?')[0] === freshBaseAndPath)
+    );
+  });
+  if (byUrl) return byUrl;
+
+  return existingEndpoints.find((ep) => matchesByMethodAndPath(ep, freshEp));
 }
 
 function extractQueryParamKeys(params: any, url?: string): string[] {
@@ -239,16 +293,7 @@ export function planSwaggerSync(
 
     // Endpoints to create or update
     for (const fep of freshService.endpoints) {
-      const match = folderEndpoints.find((ep) => {
-        if (ep.name === fep.name) return true;
-        const curMethod = ep.config?.method?.toUpperCase();
-        const curUrl = ep.config?.url;
-        if (!curMethod || !curUrl) return false;
-        return (
-          curMethod === fep.method.toUpperCase() &&
-          (curUrl === fep.fullUrl || curUrl.split('?')[0] === fep.fullUrl.split('?')[0])
-        );
-      });
+      const match = findMatchingExistingEndpoint(fep, folderEndpoints);
 
       if (!match) {
         let samplePayload: any = undefined;
@@ -353,6 +398,7 @@ export function planSwaggerSync(
             newConfig: {
               ...match.config,
               url: targetUrl,
+              swagger_path: fep.routePath ?? fep.path,
               method: fep.method,
               summary: fep.summary ?? match.config?.summary,
               specification: fep.specification ?? match.config?.specification,
@@ -435,6 +481,7 @@ export async function executeSwaggerSync(
   createdServicesCount: number;
   createdEndpointsCount: number;
   updatedEndpointsCount: number;
+  updatedEndpoints: Endpoint[];
 }> {
   if (signal?.aborted) {
     return {
@@ -443,6 +490,7 @@ export async function executeSwaggerSync(
       createdServicesCount: 0,
       createdEndpointsCount: 0,
       updatedEndpointsCount: 0,
+      updatedEndpoints: [],
     };
   }
 
@@ -451,6 +499,7 @@ export async function executeSwaggerSync(
   let createdServicesCount = 0;
   let createdEndpointsCount = 0;
   let updatedEndpointsCount = 0;
+  const updatedEndpoints: Endpoint[] = [];
 
   // 1. Delete endpoints
   for (const d of plan.endpointsToDelete) {
@@ -499,6 +548,7 @@ export async function executeSwaggerSync(
           config: {
             method: ep.method,
             url: ep.fullUrl,
+            swagger_path: ep.routePath ?? ep.path,
             summary: ep.summary,
             query_params: ep.queryParams,
             path_variables: ep.pathVariables,
@@ -506,6 +556,7 @@ export async function executeSwaggerSync(
             header_descriptions: ep.headerDescriptions,
             body_type: ep.bodyType,
             body: ep.body,
+            specification: ep.specification,
           },
         });
       }
@@ -524,6 +575,7 @@ export async function executeSwaggerSync(
       config: {
         method: c.endpoint.method,
         url: c.endpoint.fullUrl,
+        swagger_path: c.endpoint.routePath ?? c.endpoint.path,
         summary: c.endpoint.summary,
         query_params: c.endpoint.queryParams,
         path_variables: c.endpoint.pathVariables,
@@ -531,6 +583,7 @@ export async function executeSwaggerSync(
         header_descriptions: c.endpoint.headerDescriptions,
         body_type: c.endpoint.bodyType,
         body: c.endpoint.body,
+        specification: c.endpoint.specification,
       },
     });
   }
@@ -592,7 +645,10 @@ export async function executeSwaggerSync(
       if (u.newName) {
         patchBody.name = u.newName;
       }
-      await api.patch(`/endpoints/${u.endpoint.id}`, patchBody);
+      const updated = await api.patch(`/endpoints/${u.endpoint.id}`, patchBody);
+      if (updated && typeof updated === 'object' && updated.id) {
+        updatedEndpoints.push(updated as Endpoint);
+      }
       updatedEndpointsCount++;
       done++;
 
@@ -618,5 +674,6 @@ export async function executeSwaggerSync(
     createdServicesCount,
     createdEndpointsCount,
     updatedEndpointsCount,
+    updatedEndpoints,
   };
 }

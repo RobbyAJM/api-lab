@@ -5,6 +5,38 @@ use reqwest::Method;
 use rust_core::dto::{HttpExecutionRequest, HttpExecutionResponse};
 use rust_core::variable::substitute_variables;
 
+#[must_use]
+pub fn normalize_http_url(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let lower = trimmed.to_ascii_lowercase();
+    let with_scheme = if lower.starts_with("http://") || lower.starts_with("https://") {
+        trimmed.to_string()
+    } else {
+        format!("http://{trimmed}")
+    };
+
+    let Some(scheme_idx) = with_scheme.find("://") else {
+        return with_scheme;
+    };
+    let after_scheme = &with_scheme[scheme_idx + 3..];
+    let Some(slash_idx) = after_scheme.find('/') else {
+        return with_scheme;
+    };
+
+    let authority = &with_scheme[..scheme_idx + 3 + slash_idx];
+    let rest = &after_scheme[slash_idx..];
+    let (path_part, suffix) = match rest.find(['?', '#']) {
+        Some(idx) => (&rest[..idx], &rest[idx..]),
+        None => (rest, ""),
+    };
+    let trimmed_leading = path_part.trim_start_matches('/');
+    format!("{authority}/{trimmed_leading}{suffix}")
+}
+
 pub async fn run_http(
     req: HttpExecutionRequest,
     variables: HashMap<String, String>,
@@ -13,7 +45,7 @@ pub async fn run_http(
 
     // Variable interpolation
     let url = match substitute_variables(&req.url, &variables) {
-        Ok(u) => u,
+        Ok(u) => normalize_http_url(&u),
         Err(e) => {
             return HttpExecutionResponse {
                 status_code: 0,
@@ -396,6 +428,27 @@ pub async fn run_http(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_normalize_http_url_adds_scheme_and_collapses_duplicate_slashes() {
+        assert_eq!(
+            normalize_http_url("localhost:8080/client/api/v1/login"),
+            "http://localhost:8080/client/api/v1/login"
+        );
+        assert_eq!(
+            normalize_http_url("http://localhost:8080//client/api/v1/login"),
+            "http://localhost:8080/client/api/v1/login"
+        );
+        assert_eq!(
+            normalize_http_url("https://staging.example.com///v1/auth?redirect=https://app.local/cb"),
+            "https://staging.example.com/v1/auth?redirect=https://app.local/cb"
+        );
+        assert_eq!(
+            normalize_http_url("localhost:8080"),
+            "http://localhost:8080"
+        );
+        assert_eq!(normalize_http_url("   "), "");
+    }
 
     #[tokio::test]
     async fn test_undefined_variable_returns_error() {

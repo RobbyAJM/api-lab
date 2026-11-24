@@ -7,6 +7,7 @@ import { X, Radio, ArrowDownUp, ArrowLeftRight, AlertTriangle, Plus } from 'luci
 import { closeAllContextMenus, CONTEXT_MENU_CLOSE_EVENT } from '../../utils/contextMenu';
 import { getHttpMethodColor } from '../../utils/httpMethodUtils';
 import { isTabConflicted } from '../../utils/conflictDetector';
+import { extractUrlPathname } from '../../utils/swaggerParser';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
 import { useFixSessionStore } from '../../store/useFixSessionStore';
 import { disconnectFixSession } from '../../utils/fixSessionManager';
@@ -173,11 +174,7 @@ export const EndpointTabBar: React.FC = () => {
               (ep.config?.specification && tabDisplayName.includes(' ') && ep.config?.url)
             ) {
               if (ep.config?.url) {
-                try {
-                  tabDisplayName = new URL(ep.config.url).pathname;
-                } catch {
-                  tabDisplayName = ep.config.url.split('?')[0].replace(/^https?:\/\/[^\/]+/, '') || ep.name;
-                }
+                tabDisplayName = extractUrlPathname(ep.config.url) || ep.name;
               }
             }
 

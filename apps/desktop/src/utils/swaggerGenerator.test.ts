@@ -6,6 +6,9 @@ import {
   generateSwaggerCollection,
   substituteUrlVariables,
   combineSwaggerUrl,
+  splitSwaggerUrl,
+  normalizeSubstitutedHttpUrl,
+  normalizeSwaggerUrl,
   DEFAULT_SWAGGER_URL,
   DEFAULT_SWAGGER_BASE_URL,
   DEFAULT_SWAGGER_PATH,
@@ -333,5 +336,121 @@ test('executeSwaggerHierarchyCreation: respects abort signal and halts endpoint 
 
   assert.equal(result.createdEndpointsCount, 0);
   assert.equal(calls.length, 0);
+});
+
+test('splitSwaggerUrl: separates full URLs, ports, scheme-less hosts, variables, and query strings', () => {
+  assert.deepEqual(splitSwaggerUrl('https://httpbin.dmuth.org/openapi.json'), {
+    baseUrl: 'https://httpbin.dmuth.org',
+    swaggerPath: 'openapi.json',
+  });
+  assert.deepEqual(
+    splitSwaggerUrl('http://localhost:8080/swagger/combined/nutrade.swagger.json'),
+    {
+      baseUrl: 'http://localhost:8080',
+      swaggerPath: 'swagger/combined/nutrade.swagger.json',
+    }
+  );
+  assert.deepEqual(splitSwaggerUrl('{{BASE_URL}}/swagger/doc.json'), {
+    baseUrl: '{{BASE_URL}}',
+    swaggerPath: 'swagger/doc.json',
+  });
+  assert.deepEqual(splitSwaggerUrl('http://{{HOST}}:{{PORT}}/v2/api-docs'), {
+    baseUrl: 'http://{{HOST}}:{{PORT}}',
+    swaggerPath: 'v2/api-docs',
+  });
+  assert.deepEqual(splitSwaggerUrl('localhost:8080/openapi.json?v=2'), {
+    baseUrl: 'localhost:8080',
+    swaggerPath: 'openapi.json?v=2',
+  });
+  assert.deepEqual(splitSwaggerUrl('{{SWAGGER_URL}}'), {
+    baseUrl: '{{SWAGGER_URL}}',
+    swaggerPath: '',
+  });
+  assert.deepEqual(splitSwaggerUrl(''), { baseUrl: '', swaggerPath: '' });
+});
+
+test('normalizeSubstitutedHttpUrl & normalizeSwaggerUrl: normalizes scheme-less hosts and trailing-slash variable joins', () => {
+  assert.equal(
+    normalizeSubstitutedHttpUrl('localhost:8080/client/api/v1/login'),
+    'http://localhost:8080/client/api/v1/login'
+  );
+  assert.equal(
+    normalizeSubstitutedHttpUrl('http://localhost:8080//client/api/v1/login'),
+    'http://localhost:8080/client/api/v1/login'
+  );
+  assert.equal(
+    normalizeSubstitutedHttpUrl('https://staging.api.com///v1/auth?next=https://app.local/cb'),
+    'https://staging.api.com/v1/auth?next=https://app.local/cb'
+  );
+  assert.equal(
+    normalizeSubstitutedHttpUrl('{{BASE_URL}}/client/api/v1/login'),
+    '{{BASE_URL}}/client/api/v1/login'
+  );
+  assert.equal(
+    normalizeSwaggerUrl('{{BASE_URL}}/swagger/doc.json', { BASE_URL: 'localhost:8080/' }),
+    'http://localhost:8080/swagger/doc.json'
+  );
+});
+
+test('generateSwaggerCollection: persists variable baseUrl template and swaggerPath separately on root folder', async () => {
+  const mockDoc = {
+    swagger: '2.0',
+    host: 'localhost',
+    info: { title: 'NuTrade', version: '1.0' },
+    paths: {
+      '/client/api/v1/login': {
+        post: {
+          operationId: 'Login',
+          tags: ['ClientAuthAPI'],
+        },
+      },
+    },
+  };
+
+  let fetchedUrl = '';
+  const mockFetch: any = async (url: string) => {
+    fetchedUrl = url;
+    return {
+      ok: true,
+      json: async () => mockDoc,
+    };
+  };
+
+  const folderCalls: any[] = [];
+  const createdEndpoints: any[] = [];
+  const mockApi = {
+    post: async (path: string, body: any) => {
+      if (path.includes('/folders')) {
+        folderCalls.push(body);
+        return { id: `folder-${folderCalls.length}`, ...body };
+      }
+      if (path.includes('/endpoints/batch')) {
+        createdEndpoints.push(...body.endpoints);
+      }
+      return { id: 'ep-1', ...body };
+    },
+  };
+
+  await generateSwaggerCollection({
+    collectionId: 'coll-var',
+    folderName: 'NuTrade',
+    swaggerUrl: '{{BASE_URL}}/swagger/doc.json',
+    baseUrl: '{{BASE_URL}}',
+    swaggerPath: 'swagger/doc.json',
+    variables: { BASE_URL: 'localhost:8080' },
+    apiCaller: mockApi,
+    fetchFn: mockFetch,
+  });
+
+  // Fetch used resolved variable with normalized scheme
+  assert.equal(fetchedUrl, 'http://localhost:8080/swagger/doc.json');
+  // Root folder persisted raw variable template (never baked value) and separate path
+  assert.equal(folderCalls[0].swagger_url, '{{BASE_URL}}/swagger/doc.json');
+  assert.equal(folderCalls[0].settings.swagger_base_url, '{{BASE_URL}}');
+  assert.equal(folderCalls[0].settings.swagger_path, 'swagger/doc.json');
+  // Generated endpoint preserves {{BASE_URL}} template and swagger_path
+  assert.equal(createdEndpoints.length, 1);
+  assert.equal(createdEndpoints[0].config.url, '{{BASE_URL}}/client/api/v1/login');
+  assert.equal(createdEndpoints[0].config.swagger_path, '/client/api/v1/login');
 });
 

@@ -4,6 +4,7 @@ import { apiRequest } from '../../api/client';
 import {
   generateSwaggerCollection,
   combineSwaggerUrl,
+  normalizeSwaggerUrl,
   DEFAULT_SWAGGER_BASE_URL,
   DEFAULT_SWAGGER_PATH,
   DEFAULT_SWAGGER_FOLDER_NAME,
@@ -37,6 +38,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
   const [errorText, setErrorText] = useState<string | null>(null);
   const [successInfo, setSuccessInfo] = useState<string | null>(null);
   const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
+  const [previewVariables, setPreviewVariables] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!isOpen) {
@@ -44,7 +46,10 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
       return;
     }
     abortRef.current = { aborted: false };
-    resolveVariables().then(setActiveVariables);
+    resolveVariables().then(({ vars, preview }) => {
+      setActiveVariables(vars);
+      setPreviewVariables(preview);
+    });
   }, [activeEnvironmentId, isOpen]);
 
   if (!isOpen) return null;
@@ -57,39 +62,37 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
     }
   }
 
-  async function resolveVariables(): Promise<Record<string, string>> {
+  async function resolveVariables(): Promise<{
+    vars: Record<string, string>;
+    preview: Record<string, string>;
+  }> {
     const vars: Record<string, string> = {};
+    const preview: Record<string, string> = {};
     if (activeEnvironmentId) {
       const envVars = queryClient.getQueryData<VariableResponse[]>([
         'variables',
         activeEnvironmentId,
       ]);
-      if (envVars) {
-        for (const v of envVars) {
-          vars[v.key] = v.value;
-        }
-      } else {
-        try {
-          const fetched = await apiRequest<VariableResponse[]>(
-            `/environments/${activeEnvironmentId}/variables`
-          );
-          for (const v of fetched) {
-            vars[v.key] = v.value;
-          }
-        } catch {
-          // ignore
-        }
+      const source =
+        envVars ||
+        (await apiRequest<VariableResponse[]>(
+          `/environments/${activeEnvironmentId}/variables`
+        ).catch(() => [] as VariableResponse[]));
+      for (const v of source) {
+        vars[v.key] = v.value;
+        preview[v.key] = v.is_sensitive ? '••••••' : v.value;
       }
     }
-    return vars;
+    return { vars, preview };
   }
 
   const fullSwaggerUrl = combineSwaggerUrl(baseUrl, swaggerPath);
+  const resolvedPreviewUrl = normalizeSwaggerUrl(fullSwaggerUrl, previewVariables);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!baseUrl.trim() || !swaggerPath.trim() || !folderName.trim()) {
-      setErrorText('Please specify folder name, base URL / hostname, and Swagger path');
+      setErrorText('Please specify folder name, Base URL, and Swagger JSON Path');
       return;
     }
 
@@ -99,7 +102,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
     setProgressInfo({ message: 'Fetching Swagger specification...', percent: 10 });
 
     try {
-      const activeVars = await resolveVariables();
+      const { vars: activeVars } = await resolveVariables();
       const apiCaller = {
         post: (path: string, body: any) =>
           apiRequest(path, {
@@ -113,6 +116,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
         folderName: folderName.trim(),
         swaggerUrl: fullSwaggerUrl,
         baseUrl: baseUrl.trim(),
+        swaggerPath: swaggerPath.trim(),
         variables: activeVars,
         timeoutMs: 60_000,
         signal: abortRef.current,
@@ -130,12 +134,14 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
         return;
       }
 
-      // Link Swagger URL to generated root folder in collection settings
+      // Link Swagger URL and separated settings to generated root folder in collection settings
       try {
         const coll = await apiRequest<any>(`/collections/${collectionId}`);
         const currentSources = coll.settings?.swagger_sources || {};
         currentSources[result.rootFolderId] = {
           swagger_url: fullSwaggerUrl,
+          base_url: baseUrl.trim(),
+          swagger_path: swaggerPath.trim(),
         };
         await apiRequest(`/collections/${collectionId}`, {
           method: 'PATCH',
@@ -228,7 +234,7 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
 
           <div>
             <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-              Base URL / Hostname
+              Base URL
             </label>
             <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-600 transition h-8 flex items-center">
               <VariableInput
@@ -236,30 +242,41 @@ export const GenerateSwaggerModal: React.FC<GenerateSwaggerModalProps> = ({
                 onChange={setBaseUrl}
                 variables={activeVariables}
                 disabled={loading}
-                placeholder="https://httpbin.dmuth.org or localhost:9091"
+                placeholder="https://httpbin.dmuth.org or localhost:8080 or {{BASE_URL}}"
                 className="w-full h-full"
               />
             </div>
             <p className="mt-1 text-[10px] text-zinc-500">
-              Supports ports (e.g. localhost:9091) and variables like {'{{API_HOST}}'}.
+              Supports ports (e.g. localhost:8080) and variables like <code className="font-mono text-zinc-400">{'{{BASE_URL}}'}</code> resolved on-the-fly per environment.
             </p>
           </div>
 
           <div>
             <label className="block text-[11px] font-medium text-zinc-400 mb-1">
-              Swagger / OpenAPI Path
+              Swagger JSON Path
             </label>
-            <input
-              type="text"
-              value={swaggerPath}
-              onChange={(e) => setSwaggerPath(e.target.value)}
-              disabled={loading}
-              placeholder="openapi.json"
-              className="w-full bg-zinc-950 border border-zinc-800 rounded px-2.5 py-1.5 font-mono text-xs text-zinc-200 focus:outline-none focus:border-zinc-600 font-medium"
-            />
-            <p className="mt-1 text-[10px] text-zinc-500 truncate">
-              Resolved: <span className="font-mono text-zinc-400">{fullSwaggerUrl || '—'}</span>
-            </p>
+            <div className="w-full bg-zinc-950 border border-zinc-800 rounded focus-within:border-zinc-600 transition h-8 flex items-center">
+              <VariableInput
+                value={swaggerPath}
+                onChange={setSwaggerPath}
+                variables={activeVariables}
+                disabled={loading}
+                placeholder="openapi.json or swagger/doc.json"
+                className="w-full h-full"
+              />
+            </div>
+            <div className="mt-1 text-[10px] text-zinc-500 font-mono space-y-0.5">
+              <div className="truncate">
+                <span className="font-sans text-zinc-400 mr-1">Spec URL:</span>
+                <span className="text-zinc-300">{fullSwaggerUrl || '—'}</span>
+              </div>
+              {fullSwaggerUrl.includes('{{') && resolvedPreviewUrl && resolvedPreviewUrl !== fullSwaggerUrl && (
+                <div className="truncate">
+                  <span className="font-sans text-zinc-400 mr-1">Active Env:</span>
+                  <span className="text-emerald-400/90">{resolvedPreviewUrl}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           {loading && progressInfo && (

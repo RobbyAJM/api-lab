@@ -1,6 +1,7 @@
 import type { Endpoint, HttpExecutionResponse, GrpcExecutionResponse } from '@api-lab/api-types';
 import { getGrpcStatusLabel, formatExecutionError } from './grpcSpecification.ts';
 import { getEffectiveEndpointConfig } from './tabManager.ts';
+import { normalizeSubstitutedHttpUrl } from './swaggerParser.ts';
 
 /**
  * Formats byte size into human-readable B / KB / MB.
@@ -266,6 +267,9 @@ export function formatCopyTrace(options: FormatCopyTraceOptions): string {
       if (fallbackAddr) {
         url = url.replace(/\{\{\s*[\w.-]+\s*\}\}/g, fallbackAddr);
       }
+    }
+    if (!url.includes('{{')) {
+      url = normalizeSubstitutedHttpUrl(url);
     }
     lines.push(`Endpoint: ${url}`);
 
