@@ -204,3 +204,46 @@ test('createHoverTimerController: debounces, cancels prior timers, and executes 
   assert.equal(lastVal, 'third');
 });
 
+test('resolveVariableMeta: resolves gRPC address variables across environment switches and sensitive flags', () => {
+  const localVars: VariableResponse[] = [
+    {
+      id: 'g-1',
+      environment_id: 'env-local',
+      key: 'GRPC_ADDR',
+      value: 'localhost:50051',
+      is_sensitive: false,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+  const prodVars: VariableResponse[] = [
+    {
+      id: 'g-2',
+      environment_id: 'env-prod',
+      key: 'GRPC_ADDR',
+      value: 'https://grpc.internal.example.com:443',
+      is_sensitive: true,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  const localMeta = resolveVariableMeta('GRPC_ADDR', localVars, {
+    id: 'env-local',
+    name: 'Local',
+  });
+  assert.equal(localMeta.exists, true);
+  assert.equal(localMeta.value, 'localhost:50051');
+  assert.equal(localMeta.isSensitive, false);
+  assert.equal(localMeta.environmentName, 'Local');
+
+  const prodMeta = resolveVariableMeta('GRPC_ADDR', prodVars, {
+    id: 'env-prod',
+    name: 'Production',
+  });
+  assert.equal(prodMeta.exists, true);
+  assert.equal(prodMeta.value, 'https://grpc.internal.example.com:443');
+  assert.equal(prodMeta.isSensitive, true);
+  assert.equal(prodMeta.environmentName, 'Production');
+});
+

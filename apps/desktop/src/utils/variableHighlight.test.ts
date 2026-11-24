@@ -206,5 +206,51 @@ test('tokenizeVariables: variable positions align with original text substring i
   assert.equal(reconstructed, text);
 });
 
+test('tokenizeVariables: tokenizes locked gRPC server addresses with host and port variables', () => {
+  const env = [
+    {
+      id: 'v1',
+      environment_id: 'env-local',
+      key: 'GRPC_HOST',
+      value: 'localhost',
+      is_sensitive: false,
+      created_at: '',
+      updated_at: '',
+    },
+    {
+      id: 'v2',
+      environment_id: 'env-local',
+      key: 'GRPC_ADDR',
+      value: '127.0.0.1:50051',
+      is_sensitive: false,
+      created_at: '',
+      updated_at: '',
+    },
+  ];
+
+  // Single variable gRPC address
+  const single = tokenizeVariables('{{GRPC_ADDR}}', env);
+  assert.deepEqual(single, [
+    {
+      text: '{{GRPC_ADDR}}',
+      isVariable: true,
+      name: 'GRPC_ADDR',
+      isDefined: true,
+      value: '127.0.0.1:50051',
+    },
+  ]);
+
+  // Host variable with explicit port and undefined port variable
+  const split = tokenizeVariables('{{GRPC_HOST}}:{{GRPC_PORT}}', env);
+  assert.equal(split.length, 3);
+  assert.equal(split[0].isVariable, true);
+  assert.equal(split[0].name, 'GRPC_HOST');
+  assert.equal(split[0].isDefined, true);
+  assert.deepEqual(split[1], { text: ':', isVariable: false });
+  assert.equal(split[2].isVariable, true);
+  assert.equal(split[2].name, 'GRPC_PORT');
+  assert.equal(split[2].isDefined, false);
+});
+
 
 

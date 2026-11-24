@@ -36,6 +36,7 @@ import { EndpointConflictAlert } from './EndpointConflictAlert';
 import { ConflictDiffModal } from './ConflictDiffModal';
 import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
+import { LockedVariableText } from '../common/LockedVariableText';
 import { Select } from '../common/Select';
 import { resolveInheritedGrpcAddress, getFolderPath } from '../../utils/folderTree';
 import { KeyValueTable } from '../common/KeyValueTable';
@@ -137,7 +138,29 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
     initialConfig.max_msg_size_mb !== undefined ? String(initialConfig.max_msg_size_mb) : '4'
   );
 
-  const [activeVariables, setActiveVariables] = useState<Record<string, string>>({});
+  // Subscribe reactively to active environment variables so edits/environment switches update immediately
+  const { data: envVars = [] } = useQuery<VariableResponse[]>({
+    queryKey: ['variables', activeEnvironmentId],
+    queryFn: () =>
+      activeEnvironmentId
+        ? apiRequest<VariableResponse[]>(`/environments/${activeEnvironmentId}/variables`)
+        : Promise.resolve([]),
+    enabled: !!activeEnvironmentId,
+  });
+
+  const [hookVariableOverrides, setHookVariableOverrides] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setHookVariableOverrides({});
+  }, [activeEnvironmentId, envVars]);
+
+  const activeVariables = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const v of envVars) {
+      map[v.key] = v.value;
+    }
+    Object.assign(map, hookVariableOverrides);
+    return map;
+  }, [envVars, hookVariableOverrides]);
 
   async function resolveVariables(): Promise<Record<string, string>> {
     const activeVars: Record<string, string> = {};
@@ -152,20 +175,17 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           activeVars[v.key] = v.value;
         }
       } catch {
-        const envVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
-        if (envVars) {
-          for (const v of envVars) {
+        const cachedVars = queryClient.getQueryData<VariableResponse[]>(['variables', activeEnvironmentId]);
+        if (cachedVars) {
+          for (const v of cachedVars) {
             activeVars[v.key] = v.value;
           }
         }
       }
     }
+    Object.assign(activeVars, hookVariableOverrides);
     return activeVars;
   }
-
-  useEffect(() => {
-    resolveVariables().then(setActiveVariables);
-  }, [activeEnvironmentId]);
 
   // Fetch parent collection for inherited settings
   const { data: collection } = useQuery<Collection>({
@@ -898,7 +918,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       );
       setHookTests(afterResult.tests);
       setHookLogs((prev) => [...prev, ...afterResult.logs]);
-      setActiveVariables(afterResult.variables);
+      setHookVariableOverrides(afterResult.variables);
 
       // Sync variables modified by pm.environment.set to the active environment (Bug 2 Fix)
       const syncRes = await syncEnvironmentVariables(
@@ -913,7 +933,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       );
       if (syncRes.syncedCount > 0) {
         queryClient.invalidateQueries({ queryKey: ['variables', activeEnvironmentId] });
-        resolveVariables().then(setActiveVariables);
         setStatusMessage(`Saved ${syncRes.syncedKeys.join(', ')} to environment`);
       } else if (afterResult.error) {
         setStatusMessage(afterResult.error);
@@ -1056,7 +1075,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       );
       setHookTests(afterResult.tests);
       setHookLogs((prev) => [...prev, ...afterResult.logs]);
-      setActiveVariables(afterResult.variables);
+      setHookVariableOverrides(afterResult.variables);
 
       // Sync variables modified by stream hook to the active environment (Bug 2 Fix)
       const syncRes = await syncEnvironmentVariables(
@@ -1071,7 +1090,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
       );
       if (syncRes.syncedCount > 0) {
         queryClient.invalidateQueries({ queryKey: ['variables', activeEnvironmentId] });
-        resolveVariables().then(setActiveVariables);
         setStatusMessage(`Saved ${syncRes.syncedKeys.join(', ')} to environment`);
       } else if (afterResult.error) {
         setStatusMessage(afterResult.error);
@@ -1235,11 +1253,15 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             <div className="flex-1 h-full flex items-center min-w-0">
               {inheritedInfo.isInherited ? (
                 <div
-                  className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-950/80 border border-zinc-800 rounded text-xs font-mono text-zinc-300 w-full select-all cursor-default"
+                  className="flex items-center gap-1.5 px-2 py-0.5 bg-zinc-950/80 border border-zinc-800 rounded text-xs font-mono text-zinc-300 w-full min-w-0 cursor-default"
                   title={`Server address is locked by gRPC reflection folder "${inheritedInfo.folderName}"`}
                 >
                   <Lock size={11} className="text-emerald-400 flex-shrink-0" />
-                  <span className="truncate">{effectiveServerAddress}</span>
+                  <LockedVariableText
+                    value={effectiveServerAddress}
+                    variables={envVars.length > 0 ? envVars : activeVariables}
+                    className="truncate"
+                  />
                 </div>
               ) : (
                 <VariableInput
@@ -1250,7 +1272,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
                       setUseTls(true);
                     }
                   }}
-                  variables={activeVariables}
+                  variables={envVars.length > 0 ? envVars : activeVariables}
                   placeholder="localhost:50051 or {{GRPC_ADDR}}"
                   className="w-full h-full text-xs font-mono bg-transparent border-0 focus:outline-none"
                 />

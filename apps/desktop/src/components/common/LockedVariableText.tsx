@@ -87,6 +87,7 @@ export const LockedVariableText: React.FC<LockedVariableTextProps> = ({
             <span
               key={idx}
               data-var-name={token.name}
+              title=""
               onMouseEnter={(e) => {
                 cancelClear();
                 const rect = e.currentTarget.getBoundingClientRect();
