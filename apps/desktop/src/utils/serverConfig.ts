@@ -85,10 +85,72 @@ export function getWsBaseUrl(): string {
   return `ws://${apiBase}`;
 }
 
+export interface ServerVersionInfo {
+  service?: string;
+  version: string;
+  api_version?: string;
+  git_sha?: string;
+}
+
 export interface ServerConnectionTestResult {
   ok: boolean;
   message: string;
   statusCode?: number;
+  serverVersion?: string;
+  serverGitSha?: string;
+}
+
+/**
+ * Safely parses a JSON payload returned by `GET /api/v1/version`.
+ */
+export function parseServerVersionResponse(payload: unknown): ServerVersionInfo | null {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+  const data = payload as Record<string, unknown>;
+  if (typeof data.version !== 'string') {
+    return null;
+  }
+  const version = data.version.trim().replace(/^v/i, '').trim();
+  if (!version) {
+    return null;
+  }
+  return {
+    version,
+    service: typeof data.service === 'string' ? data.service : undefined,
+    api_version: typeof data.api_version === 'string' ? data.api_version : undefined,
+    git_sha: typeof data.git_sha === 'string' ? data.git_sha : undefined,
+  };
+}
+
+/**
+ * Queries `GET /api/v1/version` on the configured backend server.
+ * Returns `null` cleanly if the server is unreachable or predates the version endpoint.
+ */
+export async function fetchServerVersion(
+  url?: string,
+  fetchImpl: typeof fetch = fetch
+): Promise<ServerVersionInfo | null> {
+  const normalized = normalizeServerUrl(url ?? getServerUrl());
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    const res = await fetchImpl(`${normalized}/api/v1/version`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      return null;
+    }
+    const payload = await res.json();
+    return parseServerVersionResponse(payload);
+  } catch {
+    clearTimeout(timeoutId);
+    return null;
+  }
 }
 
 /**
@@ -121,10 +183,14 @@ export async function testServerConnection(url: string): Promise<ServerConnectio
     clearTimeout(timeoutId);
 
     if (res.status === 200 || res.status === 204 || res.status === 401) {
+      const versionInfo = await fetchServerVersion(normalized);
+      const versionSuffix = versionInfo ? ` · v${versionInfo.version}` : '';
       return {
         ok: true,
         statusCode: res.status,
-        message: `Successfully connected to server (${normalized})`,
+        serverVersion: versionInfo?.version,
+        serverGitSha: versionInfo?.git_sha,
+        message: `Successfully connected to server (${normalized}${versionSuffix})`,
       };
     }
 

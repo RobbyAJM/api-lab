@@ -20,6 +20,8 @@ import { DiceBearPlayground } from './DiceBearPlayground';
 import { THEMES } from '../../utils/theme';
 import { getServerUrl, setServerUrl, testServerConnection } from '../../utils/serverConfig';
 import { getAllShortcuts } from '../../utils/shortcuts';
+import { formatVersionLabel } from '../../utils/appVersion';
+import { useClientVersion, useServerVersion } from '../../hooks/useAppVersion';
 import type { UserSummary } from '@api-lab/api-types';
 
 export const AppSettingsModal: React.FC = () => {
@@ -51,6 +53,15 @@ export const AppSettingsModal: React.FC = () => {
   const [serverUrlInput, setServerUrlInput] = useState('');
   const [testingConn, setTestingConn] = useState(false);
   const [connStatus, setConnStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [testedServerVersion, setTestedServerVersion] = useState<{
+    version: string;
+    gitSha?: string;
+  } | null>(null);
+
+  const clientVersion = useClientVersion();
+  const { data: serverVersionInfo, isFetching: isFetchingServerVersion } = useServerVersion(
+    appSettingsOpen ? getServerUrl() : undefined
+  );
 
   // Shortcuts Tab State
   const [shortcutSearch, setShortcutSearch] = useState('');
@@ -67,6 +78,7 @@ export const AppSettingsModal: React.FC = () => {
       setProfileError(null);
       setServerUrlInput(getServerUrl());
       setConnStatus(null);
+      setTestedServerVersion(null);
     }
   }, [appSettingsOpen, user]);
 
@@ -112,11 +124,21 @@ export const AppSettingsModal: React.FC = () => {
     try {
       const res = await testServerConnection(serverUrlInput);
       if (res.ok) {
-        setConnStatus({ ok: true, message: 'Successfully connected to API Lab server.' });
+        if (res.serverVersion) {
+          setTestedServerVersion({ version: res.serverVersion, gitSha: res.serverGitSha });
+        } else {
+          setTestedServerVersion(null);
+        }
+        setConnStatus({
+          ok: true,
+          message: res.message || 'Successfully connected to API Lab server.',
+        });
       } else {
+        setTestedServerVersion(null);
         setConnStatus({ ok: false, message: res.message || 'Server responded with an error.' });
       }
     } catch (err: any) {
+      setTestedServerVersion(null);
       setConnStatus({ ok: false, message: err?.message || 'Connection failed.' });
     } finally {
       setTestingConn(false);
@@ -433,6 +455,39 @@ export const AppSettingsModal: React.FC = () => {
                   >
                     Save URL
                   </button>
+                </div>
+
+                {/* Client & Server Versions */}
+                <div className="pt-4 mt-4 border-t border-zinc-800/80 space-y-2">
+                  <div className="text-[11px] font-medium text-zinc-400">Version Info</div>
+                  <div className="divide-y divide-zinc-800/60 border border-zinc-800/80 rounded bg-zinc-900/40 text-xs">
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="text-zinc-400">Desktop Client</span>
+                      <span className="font-mono text-zinc-200 tabular-nums">
+                        {formatVersionLabel(clientVersion)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <span className="text-zinc-400">Backend Server</span>
+                      <span className="font-mono text-zinc-200 tabular-nums">
+                        {testedServerVersion
+                          ? `${formatVersionLabel(testedServerVersion.version)}${
+                              testedServerVersion.gitSha && testedServerVersion.gitSha !== 'unknown'
+                                ? ` (${testedServerVersion.gitSha})`
+                                : ''
+                            }`
+                          : serverVersionInfo
+                          ? `${formatVersionLabel(serverVersionInfo.version)}${
+                              serverVersionInfo.git_sha && serverVersionInfo.git_sha !== 'unknown'
+                                ? ` (${serverVersionInfo.git_sha})`
+                                : ''
+                            }`
+                          : isFetchingServerVersion
+                          ? 'Checking...'
+                          : 'Unavailable'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

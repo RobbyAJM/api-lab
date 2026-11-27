@@ -17,6 +17,7 @@ pub fn create_router(state: SharedState) -> Router {
 
     let api_routes = Router::new()
         .route("/health", get(|| async { "ok" }))
+        .route("/version", get(crate::version::get_version))
         // Auth
         .route("/auth/register", post(auth::register))
         .route("/invitations/accept", post(auth::accept_invitation))
