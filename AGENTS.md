@@ -53,14 +53,14 @@ Vendored skills live under `.opencode/skills/`:
 
 - Ensure every implemented or modified function is independently testable without launching the app. Refactor into standalone functions when necessary.
 - Run relevant tests and verify the changes work correctly.
-- **Client / Desktop Versioning:** Whenever committing changes, always include client/desktop version updates (`apps/desktop/src-tauri/tauri.conf.json`, synced via `pnpm version:sync` and consumed by both Tauri and `apps/desktop/vite.config.ts`). Do not omit or leave version changes unstaged.
+- **Client / Server Versioning:** Version increments apply to both **client and server**. Whenever committing changes, always include client/server version updates (`apps/desktop/src-tauri/tauri.conf.json`, synced via `pnpm run version:sync` and consumed by both Tauri and `apps/desktop/vite.config.ts`, as well as workspace/server version updates in `Cargo.toml` / git tags consumed by `apps/server/build.rs` when applicable). Do not omit or leave version changes unstaged.
 
 ---
 
 ## Development & Verification Commands
 
 ```bash
-# Sync Desktop Client Version (apps/desktop/src-tauri/tauri.conf.json)
+# Sync Client / Server Version (apps/desktop/src-tauri/tauri.conf.json from latest git tag)
 pnpm run version:sync
 
 # Frontend Unit Tests (143+ tests)
