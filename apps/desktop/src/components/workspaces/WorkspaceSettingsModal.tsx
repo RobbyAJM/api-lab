@@ -146,12 +146,12 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm select-none overlay-backdrop-enter"
       onClick={(e) => {
         if (e.target === e.currentTarget) setWorkspaceModalOpen(false);
       }}
     >
-      <div className="flex flex-col h-[620px] w-[980px] max-w-[95vw] rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-zinc-100">
+      <div className="flex flex-col h-[620px] w-[980px] max-w-[95vw] rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden overlay-modal-enter text-zinc-100">
         {/* Top Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80 bg-zinc-950">
           <h1 className="text-xl font-bold tracking-tight text-white">Workspaces</h1>
@@ -384,8 +384,8 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
         {/* Create Workspace Inline Sub-dialog */}
         {showCreateWs && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
-            <div className="w-96 rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs overlay-backdrop-enter">
+            <div className="w-96 rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4 overlay-modal-enter">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-white">Create new workspace</h3>
                 <button
@@ -436,10 +436,10 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
         {/* Join Workspace Inline Sub-dialog */}
         {showJoinWs && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs overlay-backdrop-enter">
             <form
               onSubmit={handleJoinSubmit}
-              className="w-96 rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4"
+              className="w-96 rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4 overlay-modal-enter"
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-white">Join workspace</h3>
@@ -507,8 +507,8 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
         {/* Delete Workspace Sub-dialog */}
         {deletingWs && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs">
-            <div className="w-96 rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4">
+          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs overlay-backdrop-enter">
+            <div className="w-96 rounded-lg border border-zinc-800 bg-zinc-950 p-5 shadow-2xl space-y-4 overlay-modal-enter">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-red-400">Delete workspace</h3>
                 <button

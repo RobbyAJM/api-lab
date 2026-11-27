@@ -18,6 +18,10 @@ import {
 } from '../../utils/fixHighlight';
 import { calculateFixPopoverPosition } from '../../utils/fixParsedMessage';
 import { Z_INDEX } from '../../utils/floatingPosition';
+import {
+  composeOverlayClassName,
+  getPopoverMotionClass,
+} from '../../utils/overlayMotion';
 import type { VariableSource } from '../../utils/variableHighlight';
 import {
   createHoverTimerController,
@@ -411,7 +415,10 @@ function FixRawFieldTooltip({
       role="tooltip"
       data-tauri-no-drag=""
       style={style}
-      className="pointer-events-none rounded-sm border border-zinc-700 bg-zinc-950 px-2.5 py-2 shadow-2xl shadow-black/60 space-y-1"
+      className={composeOverlayClassName(
+        'pointer-events-none rounded-sm border border-zinc-700 bg-zinc-950 px-2.5 py-2 shadow-2xl shadow-black/60 space-y-1',
+        getPopoverMotionClass(position.placement, 'tooltip')
+      )}
     >
       <div className="flex items-center gap-1.5 min-w-0">
         {info.tag !== undefined && (
@@ -525,7 +532,10 @@ function FixRawVariableCompletionMenu({
       aria-label="Insert environment variable"
       data-tauri-no-drag=""
       style={style}
-      className="overflow-y-auto rounded-sm border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60"
+      className={composeOverlayClassName(
+        'overflow-y-auto rounded-sm border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60',
+        getPopoverMotionClass(position.placement, 'popover')
+      )}
     >
       {completion.items.map((name, index) => (
         <button

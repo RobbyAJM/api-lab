@@ -28,11 +28,11 @@ export const ConflictDiffModal: React.FC<ConflictDiffModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs select-none p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs select-none p-4 overlay-backdrop-enter"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl flex flex-col overflow-hidden text-xs text-zinc-300"
+        className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-lg shadow-2xl flex flex-col overflow-hidden text-xs text-zinc-300 overlay-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

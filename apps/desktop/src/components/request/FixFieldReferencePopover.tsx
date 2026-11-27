@@ -6,6 +6,10 @@ import {
   type FixFieldReference,
 } from '../../utils/fixParsedMessage';
 import { Z_INDEX } from '../../utils/floatingPosition';
+import {
+  composeOverlayClassName,
+  getPopoverMotionClass,
+} from '../../utils/overlayMotion';
 
 export function FieldReferenceButton({
   label,
@@ -107,7 +111,10 @@ export function FieldReferencePopover({
       data-tauri-no-drag=""
       tabIndex={-1}
       style={style}
-      className="overflow-y-auto border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60 outline-none"
+      className={composeOverlayClassName(
+        'overflow-y-auto border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60 outline-none',
+        getPopoverMotionClass(position.placement, 'popover')
+      )}
     >
       <div className="sticky top-0 z-10 flex items-start justify-between gap-3 border-b border-zinc-800 bg-zinc-950 px-3 py-2">
         <div className="min-w-0">

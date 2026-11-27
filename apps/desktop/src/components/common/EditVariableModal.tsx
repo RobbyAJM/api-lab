@@ -104,7 +104,7 @@ export const EditVariableModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 font-sans"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 font-sans overlay-backdrop-enter"
       onClick={closeEditVariableModal}
       onKeyDown={(e) => {
         if (e.key === 'Escape') closeEditVariableModal();
@@ -115,7 +115,7 @@ export const EditVariableModal: React.FC = () => {
       }}
     >
       <div
-        className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col text-zinc-100"
+        className="w-full max-w-md bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col text-zinc-100 overlay-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

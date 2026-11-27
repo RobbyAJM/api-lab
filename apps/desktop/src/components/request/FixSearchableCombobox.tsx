@@ -3,6 +3,10 @@ import { createPortal } from 'react-dom';
 import { Check, Search, X } from 'lucide-react';
 import { calculateFixPopoverPosition } from '../../utils/fixParsedMessage';
 import { Z_INDEX } from '../../utils/floatingPosition';
+import {
+  composeOverlayClassName,
+  getPopoverMotionClass,
+} from '../../utils/overlayMotion';
 
 export interface FixComboboxOption {
   value: string;
@@ -203,6 +207,7 @@ export const FixSearchableCombobox: React.FC<FixSearchableComboboxProps> = ({
       {renderTrigger({ open, toggle, triggerRef })}
       {open &&
         panelStyle &&
+        position &&
         createPortal(
           <div
             ref={panelRef}
@@ -210,7 +215,10 @@ export const FixSearchableCombobox: React.FC<FixSearchableComboboxProps> = ({
             aria-label={ariaLabel}
             data-tauri-no-drag=""
             style={panelStyle}
-            className="flex flex-col overflow-hidden rounded-sm border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60"
+            className={composeOverlayClassName(
+              'flex flex-col overflow-hidden rounded-sm border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60',
+              getPopoverMotionClass(position.placement, 'popover')
+            )}
           >
             <div className="relative flex items-center border-b border-zinc-800 bg-zinc-950 px-2 py-1.5 flex-shrink-0">
               <Search size={11} className="text-zinc-500 flex-shrink-0 mr-1.5" />

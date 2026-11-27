@@ -155,11 +155,11 @@ export const CommandPaletteModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 flex items-start justify-center pt-24 p-4"
+      className="fixed inset-0 z-50 bg-black/75 flex items-start justify-center pt-24 p-4 overlay-backdrop-enter"
       onClick={() => setCommandPaletteOpen(false)}
     >
       <div
-        className="w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col overlay-palette-enter"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >

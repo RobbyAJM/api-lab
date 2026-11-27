@@ -51,11 +51,11 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 overlay-backdrop-enter"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150"
+        className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl overflow-hidden overlay-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

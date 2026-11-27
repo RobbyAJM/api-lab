@@ -20,6 +20,15 @@
   --color-primary-hover: 217 119 6;
   --color-secondary: 249 115 22;
   --color-secondary-hover: 234 88 12;
+
+  /* Crisp Operate-mode overlay motion tokens (0ms delay) */
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-duration-backdrop: 110ms;
+  --motion-duration-modal: 130ms;
+  --motion-duration-palette: 110ms;
+  --motion-duration-popover: 95ms;
+  --motion-duration-tooltip: 85ms;
+  --motion-duration-reduced: 60ms;
 }
 
 body {
@@ -109,5 +118,126 @@ input, textarea, select {
     transparent 100%
   );
   animation: responseProgressMove 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Crisp Operate-mode overlay opening animations (GPU-composited only, no retained transform) */
+@keyframes overlayFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes overlayModalEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlayPaletteEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlayPopoverEnterBottom {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlayPopoverEnterTop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlayTooltipEnterBottom {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -3px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes overlayTooltipEnterTop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 3px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.overlay-backdrop-enter {
+  animation: overlayFadeIn var(--motion-duration-backdrop) ease-out;
+}
+
+.overlay-modal-enter {
+  animation: overlayModalEnter var(--motion-duration-modal) var(--motion-ease-out);
+}
+
+.overlay-palette-enter {
+  animation: overlayPaletteEnter var(--motion-duration-palette) var(--motion-ease-out);
+  transform-origin: top center;
+}
+
+.overlay-popover-enter-bottom {
+  animation: overlayPopoverEnterBottom var(--motion-duration-popover) var(--motion-ease-out);
+  transform-origin: top;
+}
+
+.overlay-popover-enter-top {
+  animation: overlayPopoverEnterTop var(--motion-duration-popover) var(--motion-ease-out);
+  transform-origin: bottom;
+}
+
+.overlay-tooltip-enter-bottom {
+  animation: overlayTooltipEnterBottom var(--motion-duration-tooltip) ease-out;
+  transform-origin: top;
+}
+
+.overlay-tooltip-enter-top {
+  animation: overlayTooltipEnterTop var(--motion-duration-tooltip) ease-out;
+  transform-origin: bottom;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-backdrop-enter,
+  .overlay-modal-enter,
+  .overlay-palette-enter,
+  .overlay-popover-enter-bottom,
+  .overlay-popover-enter-top,
+  .overlay-tooltip-enter-bottom,
+  .overlay-tooltip-enter-top {
+    animation: overlayFadeIn var(--motion-duration-reduced) ease-out;
+  }
 }
 

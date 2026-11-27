@@ -100,7 +100,7 @@ export const ThemePickerModal: React.FC = () => {
   return (
     <div
       onClick={createBackdropClickHandler(() => setThemeModalOpen(false))}
-      className="fixed inset-0 z-50 bg-black/15 flex items-end sm:items-center justify-start p-4 select-none"
+      className="fixed inset-0 z-50 bg-black/15 flex items-end sm:items-center justify-start p-4 select-none overlay-backdrop-enter"
     >
       <div
         ref={dialogRef}
@@ -117,7 +117,7 @@ export const ThemePickerModal: React.FC = () => {
               }
             : undefined
         }
-        className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl flex flex-col max-h-[500px] overflow-hidden text-zinc-100"
+        className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl flex flex-col max-h-[500px] overflow-hidden text-zinc-100 overlay-modal-enter"
       >
         {/* Header - Draggable */}
         <div

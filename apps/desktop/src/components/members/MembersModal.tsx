@@ -158,11 +158,11 @@ export const MembersModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 overlay-backdrop-enter"
       onClick={() => setMembersModalOpen(false)}
     >
       <div
-        className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl flex flex-col max-h-[600px] text-zinc-100"
+        className="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-md shadow-2xl flex flex-col max-h-[600px] text-zinc-100 overlay-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

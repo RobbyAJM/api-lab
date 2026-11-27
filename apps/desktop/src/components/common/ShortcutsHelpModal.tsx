@@ -15,11 +15,11 @@ export const ShortcutsHelpModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overlay-backdrop-enter"
       onClick={() => setShortcutsHelpOpen(false)}
     >
       <div
-        className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col"
+        className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden flex flex-col overlay-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

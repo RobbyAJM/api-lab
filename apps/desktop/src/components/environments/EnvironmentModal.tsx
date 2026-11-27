@@ -231,11 +231,11 @@ export const EnvironmentModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 font-sans"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 font-sans overlay-backdrop-enter"
       onClick={() => setEnvModalOpen(false)}
     >
       <div
-        className="w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl flex flex-col h-[650px] text-zinc-100 overflow-hidden"
+        className="w-full max-w-4xl bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl flex flex-col h-[650px] text-zinc-100 overflow-hidden overlay-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

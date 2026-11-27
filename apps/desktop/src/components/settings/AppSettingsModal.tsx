@@ -156,12 +156,12 @@ export const AppSettingsModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm select-none overlay-backdrop-enter"
       onClick={(e) => {
         if (e.target === e.currentTarget) setAppSettingsOpen(false);
       }}
     >
-      <div className="flex h-[650px] w-[960px] max-w-[96vw] max-h-[92vh] rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      <div className="flex h-[650px] w-[960px] max-w-[96vw] max-h-[92vh] rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl overflow-hidden overlay-modal-enter">
         {/* Left Sidebar Tabs */}
         <div className="w-48 bg-zinc-900/60 border-r border-zinc-800/80 flex flex-col p-2 space-y-1 flex-shrink-0">
           <div className="px-3 py-2 text-xs font-semibold text-zinc-400 uppercase tracking-wider">

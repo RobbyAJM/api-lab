@@ -180,11 +180,11 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overlay-backdrop-enter"
       onClick={handleRequestClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-md w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-100 relative"
+        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-md w-full overflow-hidden shadow-2xl overlay-modal-enter relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -336,11 +336,11 @@ export const GenerateGrpcModal: React.FC<GenerateGrpcModalProps> = ({
       {/* Stop Generation Confirmation Dialog */}
       {showCancelConfirm && (
         <div
-          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 font-sans animate-in fade-in duration-100"
+          className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-4 font-sans overlay-backdrop-enter"
           onClick={() => setShowCancelConfirm(false)}
         >
           <div
-            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-4 space-y-3.5"
+            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-4 space-y-3.5 overlay-modal-enter"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">

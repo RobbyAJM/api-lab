@@ -90,9 +90,9 @@ export const BackendUnavailableModal: React.FC = () => {
     <div
       role="alertdialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 select-none"
+      className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 select-none overlay-backdrop-enter"
     >
-      <div className="bg-zinc-900 border border-zinc-800 rounded-md p-6 max-w-md w-full shadow-2xl space-y-4 text-zinc-200">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-md p-6 max-w-md w-full shadow-2xl space-y-4 text-zinc-200 overlay-modal-enter">
         {/* Header with Server Alert Icon */}
         <div className="flex items-start gap-3.5">
           <div className="w-10 h-10 rounded-full bg-red-950/70 border border-red-800/60 text-red-400 flex items-center justify-center flex-shrink-0 mt-0.5">

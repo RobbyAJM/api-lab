@@ -321,11 +321,11 @@ export const EndpointTabBar: React.FC = () => {
       {/* Active FIX Session Close Confirmation */}
       {confirmFixEndpoint && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans"
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans overlay-backdrop-enter"
           onClick={() => setConfirmFixEndpoint(null)}
         >
           <div
-            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-5 space-y-4"
+            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-5 space-y-4 overlay-modal-enter"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">
@@ -373,11 +373,11 @@ export const EndpointTabBar: React.FC = () => {
       {/* Unsaved Changes Confirmation Dialog */}
       {confirmEndpoint && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans"
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans overlay-backdrop-enter"
           onClick={() => setConfirmEndpoint(null)}
         >
           <div
-            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-5 space-y-4"
+            className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-5 space-y-4 overlay-modal-enter"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3">

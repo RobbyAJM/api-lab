@@ -183,11 +183,11 @@ export const SwaggerFolderSettingsModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overlay-backdrop-enter"
       onClick={closeSwaggerSettingsModal}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-md w-full overflow-hidden shadow-2xl animate-in zoom-in-95 duration-100"
+        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-md w-full overflow-hidden shadow-2xl overlay-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}

@@ -7,6 +7,10 @@ import {
   type FloatingAnchorRect,
   type FloatingPositionResult,
 } from '../../utils/floatingPosition';
+import {
+  composeOverlayClassName,
+  getPopoverMotionClass,
+} from '../../utils/overlayMotion';
 
 export interface FloatingPortalProps {
   isOpen: boolean;
@@ -27,6 +31,7 @@ export interface FloatingPortalProps {
   estimatedHeight?: number;
   zIndex?: number;
   className?: string;
+  animate?: boolean;
   role?: React.AriaRole;
   ariaLabel?: string;
   closeOnOutsideClick?: boolean;
@@ -103,6 +108,7 @@ export const FloatingPortal: React.FC<FloatingPortalProps> = ({
   estimatedHeight,
   zIndex = Z_INDEX.DROPDOWN,
   className = '',
+  animate = true,
   role,
   ariaLabel,
   closeOnOutsideClick = true,
@@ -329,6 +335,11 @@ export const FloatingPortal: React.FC<FloatingPortalProps> = ({
     ...(activePosition.minWidth !== undefined ? { minWidth: activePosition.minWidth } : {}),
   };
 
+  const resolvedClassName = composeOverlayClassName(
+    className,
+    animate && getPopoverMotionClass(activePosition.placement, 'popover')
+  );
+
   return createPortal(
     <div
       ref={setPanelNode}
@@ -336,7 +347,7 @@ export const FloatingPortal: React.FC<FloatingPortalProps> = ({
       aria-label={ariaLabel}
       data-tauri-no-drag=""
       style={style}
-      className={className}
+      className={resolvedClassName}
       onClick={(e) => {
         e.stopPropagation();
         onClick?.(e);

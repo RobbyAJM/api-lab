@@ -8,6 +8,10 @@ import {
   type BoundingBox,
 } from '../../utils/variableHover';
 import { Z_INDEX } from '../../utils/floatingPosition';
+import {
+  composeOverlayClassName,
+  getPopoverMotionClass,
+} from '../../utils/overlayMotion';
 import type { VariableResponse } from '@api-lab/api-types';
 import type { VariableSource } from '../../utils/variableHighlight';
 import {
@@ -103,7 +107,12 @@ export const VariableHoverCard: React.FC<VariableHoverCardProps> = ({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
-      <div className="bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden font-sans text-xs text-zinc-100 animate-in fade-in zoom-in-95 duration-100 select-none">
+      <div
+        className={composeOverlayClassName(
+          'bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl overflow-hidden font-sans text-xs text-zinc-100 select-none',
+          getPopoverMotionClass(pos.placement, 'tooltip')
+        )}
+      >
         {/* Header */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-zinc-900 border-b border-zinc-800 text-[11px]">
         <div className="flex items-center gap-1.5 font-mono min-w-0">

@@ -213,11 +213,11 @@ export const CollectionSettingsModal: React.FC<CollectionSettingsModalProps> = (
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans select-none animate-in fade-in duration-100"
+      className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 font-sans select-none overlay-backdrop-enter"
       onClick={handleClose}
     >
       <div
-        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-150"
+        className="bg-zinc-900 border border-zinc-800 rounded-md max-w-xl w-full overflow-hidden shadow-2xl flex flex-col max-h-[85vh] overlay-modal-enter"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
