@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, Trash2 } from 'lucide-react';
 import { apiRequest } from '../../api/client';
 import { useAppStore } from '../../store/useAppStore';
 import type { NotificationItem } from '@api-lab/api-types';
+import { FloatingPortal } from '../common/FloatingPortal';
 import {
   filterNotifications,
   countUnreadNotifications,
@@ -14,6 +15,7 @@ export const NotificationPopover: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<'direct' | 'watching' | 'all'>('direct');
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const queryClient = useQueryClient();
   const token = useAppStore((s) => s.token);
 
@@ -47,26 +49,13 @@ export const NotificationPopover: React.FC = () => {
     },
   });
 
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [open]);
-
   const counts = countUnreadNotifications(notifications);
   const filtered = filterNotifications(notifications, tab);
 
   return (
     <div ref={containerRef} className="relative flex items-center">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className="relative p-1.5 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 rounded transition group focus:outline-none"
@@ -81,121 +70,129 @@ export const NotificationPopover: React.FC = () => {
         )}
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-80 rounded-md border border-zinc-800 bg-zinc-900 shadow-xl z-50 flex flex-col overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100">
-          {/* Header */}
-          <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
-            <span className="text-xs font-semibold text-zinc-100">Notifications</span>
-            {counts.all > 0 && (
-              <button
-                type="button"
-                onClick={() => markAllReadMutation.mutate()}
-                className="text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition"
-                title="Mark all as read"
-              >
-                <Check size={12} />
-                <span>Mark all read</span>
-              </button>
-            )}
-          </div>
-
-          {/* Sub-tabs */}
-          <div className="flex items-center px-2 pt-1 border-b border-zinc-800/60 bg-zinc-900/50 gap-1 text-xs">
+      <FloatingPortal
+        isOpen={open}
+        anchorRef={triggerRef}
+        ignoreRefs={[containerRef]}
+        onClose={() => setOpen(false)}
+        align="right"
+        width={320}
+        offset={6}
+        maxHeight={420}
+        className="rounded-md border border-zinc-800 bg-zinc-900 shadow-xl flex flex-col overflow-hidden select-none"
+      >
+        {/* Header */}
+        <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between flex-shrink-0">
+          <span className="text-xs font-semibold text-zinc-100">Notifications</span>
+          {counts.all > 0 && (
             <button
               type="button"
-              onClick={() => setTab('direct')}
-              className={`px-2.5 py-1.5 border-b-2 text-xs font-medium transition flex items-center gap-1.5 ${
-                tab === 'direct'
-                  ? 'border-blue-500 text-zinc-100'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-300'
-              }`}
+              onClick={() => markAllReadMutation.mutate()}
+              className="text-[11px] text-zinc-400 hover:text-zinc-200 flex items-center gap-1 transition"
+              title="Mark all as read"
             >
-              <span>Direct</span>
-              <span className="text-[10px] opacity-70">{counts.direct}</span>
+              <Check size={12} />
+              <span>Mark all read</span>
             </button>
-            <button
-              type="button"
-              onClick={() => setTab('watching')}
-              className={`px-2.5 py-1.5 border-b-2 text-xs font-medium transition flex items-center gap-1.5 ${
-                tab === 'watching'
-                  ? 'border-blue-500 text-zinc-100'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-300'
-              }`}
-            >
-              <span>Watching</span>
-              <span className="text-[10px] opacity-70">{counts.watching}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('all')}
-              className={`px-2.5 py-1.5 border-b-2 text-xs font-medium transition flex items-center gap-1.5 ${
-                tab === 'all'
-                  ? 'border-blue-500 text-zinc-100'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-300'
-              }`}
-            >
-              <span>All</span>
-              <span className="text-[10px] opacity-70">{notifications.length}</span>
-            </button>
-          </div>
-
-          {/* Body */}
-          <div className="max-h-80 overflow-y-auto divide-y divide-zinc-800/50">
-            {filtered.length > 0 ? (
-              filtered.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => {
-                    if (!item.read) markReadMutation.mutate(item.id);
-                  }}
-                  className={`px-3 py-2.5 flex items-start gap-2.5 transition group cursor-pointer ${
-                    item.read ? 'hover:bg-zinc-800/30' : 'bg-zinc-800/25 hover:bg-zinc-800/50'
-                  }`}
-                >
-                  <div className="pt-0.5">
-                    <span
-                      className={`block w-2 h-2 rounded-full ${
-                        item.read ? 'bg-transparent' : 'bg-amber-400'
-                      }`}
-                    />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-xs font-medium text-zinc-200 truncate">
-                        {item.title}
-                      </span>
-                      <span className="text-[10px] text-zinc-500 flex-shrink-0">
-                        {formatNotificationTime(item.created_at)}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-zinc-400 line-clamp-2 mt-0.5 leading-relaxed">
-                      {item.message}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteMutation.mutate(item.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-red-400 transition"
-                    title="Delete notification"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              ))
-            ) : (
-              <div className="py-8 px-4 text-center">
-                <p className="text-xs text-zinc-300 font-medium">You're all caught up 🎉</p>
-                <p className="text-[11px] text-zinc-500 mt-1">No notifications in this category</p>
-              </div>
-            )}
-          </div>
+          )}
         </div>
-      )}
+
+        {/* Sub-tabs */}
+        <div className="flex items-center px-2 pt-1 border-b border-zinc-800/60 bg-zinc-900/50 gap-1 text-xs flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setTab('direct')}
+            className={`px-2.5 py-1.5 border-b-2 text-xs font-medium transition flex items-center gap-1.5 ${
+              tab === 'direct'
+                ? 'border-blue-500 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-300'
+            }`}
+          >
+            <span>Direct</span>
+            <span className="text-[10px] opacity-70">{counts.direct}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('watching')}
+            className={`px-2.5 py-1.5 border-b-2 text-xs font-medium transition flex items-center gap-1.5 ${
+              tab === 'watching'
+                ? 'border-blue-500 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-300'
+            }`}
+          >
+            <span>Watching</span>
+            <span className="text-[10px] opacity-70">{counts.watching}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab('all')}
+            className={`px-2.5 py-1.5 border-b-2 text-xs font-medium transition flex items-center gap-1.5 ${
+              tab === 'all'
+                ? 'border-blue-500 text-zinc-100'
+                : 'border-transparent text-zinc-400 hover:text-zinc-300'
+            }`}
+          >
+            <span>All</span>
+            <span className="text-[10px] opacity-70">{notifications.length}</span>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 min-h-0 max-h-80 overflow-y-auto divide-y divide-zinc-800/50">
+          {filtered.length > 0 ? (
+            filtered.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => {
+                  if (!item.read) markReadMutation.mutate(item.id);
+                }}
+                className={`px-3 py-2.5 flex items-start gap-2.5 transition group cursor-pointer ${
+                  item.read ? 'hover:bg-zinc-800/30' : 'bg-zinc-800/25 hover:bg-zinc-800/50'
+                }`}
+              >
+                <div className="pt-0.5">
+                  <span
+                    className={`block w-2 h-2 rounded-full ${
+                      item.read ? 'bg-transparent' : 'bg-amber-400'
+                    }`}
+                  />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs font-medium text-zinc-200 truncate">
+                      {item.title}
+                    </span>
+                    <span className="text-[10px] text-zinc-500 flex-shrink-0">
+                      {formatNotificationTime(item.created_at)}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 line-clamp-2 mt-0.5 leading-relaxed">
+                    {item.message}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteMutation.mutate(item.id);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-zinc-500 hover:text-red-400 transition"
+                  title="Delete notification"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="py-8 px-4 text-center">
+              <p className="text-xs text-zinc-300 font-medium">You're all caught up 🎉</p>
+              <p className="text-[11px] text-zinc-500 mt-1">No notifications in this category</p>
+            </div>
+          )}
+        </div>
+      </FloatingPortal>
     </div>
   );
 };

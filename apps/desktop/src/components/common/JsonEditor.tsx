@@ -14,6 +14,7 @@ import {
   getChildFoldLines,
 } from '../../utils/codeFolding';
 import { VariableHoverCard } from './VariableHoverCard';
+import { FloatingPortal } from './FloatingPortal';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { Environment, VariableResponse } from '@api-lab/api-types';
 
@@ -34,6 +35,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   variables,
   suggestions = [],
 }) => {
+  const editorBodyRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
   const lineNumbersRef = useRef<HTMLDivElement>(null);
@@ -470,7 +472,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
         </div>
 
         {/* Text Area & Overlay */}
-        <div className="relative flex-1 h-full overflow-hidden">
+        <div ref={editorBodyRef} className="relative flex-1 h-full overflow-hidden">
           {/* Syntax Highlight Overlay */}
           <pre
             ref={preRef}
@@ -499,35 +501,67 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
             className="absolute inset-0 w-full h-full m-0 py-3 px-3 font-mono text-xs leading-5 bg-transparent text-transparent caret-white resize-none focus:outline-none selection:bg-primary/40 whitespace-pre"
           />
 
-          {completion && (
-            <div className="absolute z-20 left-3 top-3 min-w-44 max-w-64 border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden">
-              {completion.items.map((item, index) => (
-                <button
-                  key={item}
-                  type="button"
-          onMouseDown={(e) => {
-                    e.preventDefault();
-                    const textarea = textareaRef.current;
-                    if (!textarea) return;
-                    const before = value.slice(0, completion.start);
-                    const after = value.slice(textarea.selectionStart);
-                    const inserted = `${completion.hasOpeningQuote ? '' : '"'}${item}": `;
-                    setCompletion(null);
-                    onChange(`${before}${inserted}${after}`);
-                    requestAnimationFrame(() => {
-                      const next = completion.start + inserted.length;
-                      textarea.setSelectionRange(next, next);
-                      textarea.focus();
-                    });
-                  }}
-                  className={`block w-full text-left px-2.5 py-1.5 font-mono text-[11px] ${index === completion.selected ? 'bg-primary/20 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
-                >
-                  {item}
-                </button>
-              ))}
-              <div className="border-t border-zinc-800 px-2 py-1 text-[10px] text-zinc-500">Enter / Tab to insert</div>
-            </div>
-          )}
+          <FloatingPortal
+            isOpen={Boolean(completion)}
+            anchorRef={editorBodyRef}
+            getAnchorRect={() => {
+              const rect = editorBodyRef.current?.getBoundingClientRect();
+              if (!rect) return null;
+              return {
+                left: rect.left + 12,
+                right: rect.left + 12,
+                top: rect.top + 12,
+                bottom: rect.top + 12,
+                width: 0,
+                height: 0,
+              };
+            }}
+            onClose={() => setCompletion(null)}
+            minWidth={176}
+            maxWidth={256}
+            maxHeight={260}
+            offset={0}
+            role="listbox"
+            restoreFocusOnEscape={false}
+            onMouseDown={(e) => e.preventDefault()}
+            className="flex flex-col border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden"
+          >
+            {completion && (
+              <>
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  {completion.items.map((item, index) => (
+                    <button
+                      key={item}
+                      type="button"
+                      role="option"
+                      aria-selected={index === completion.selected}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        const textarea = textareaRef.current;
+                        if (!textarea) return;
+                        const before = value.slice(0, completion.start);
+                        const after = value.slice(textarea.selectionStart);
+                        const inserted = `${completion.hasOpeningQuote ? '' : '"'}${item}": `;
+                        setCompletion(null);
+                        onChange(`${before}${inserted}${after}`);
+                        requestAnimationFrame(() => {
+                          const next = completion.start + inserted.length;
+                          textarea.setSelectionRange(next, next);
+                          textarea.focus();
+                        });
+                      }}
+                      className={`block w-full text-left px-2.5 py-1.5 font-mono text-[11px] ${index === completion.selected ? 'bg-primary/20 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-zinc-800 px-2 py-1 text-[10px] text-zinc-500 flex-shrink-0">
+                  Enter / Tab to insert
+                </div>
+              </>
+            )}
+          </FloatingPortal>
 
           {/* Variable Hover Card */}
           {hoverState && (

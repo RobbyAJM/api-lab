@@ -1,31 +1,19 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Settings, LogOut } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { Avatar } from '../common/Avatar';
 import { Skeleton } from '../common/Skeleton';
+import { FloatingPortal } from '../common/FloatingPortal';
 
 export const ProfileDropdown: React.FC = () => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const user = useAppStore((s) => s.user);
   const logout = useAppStore((s) => s.logout);
   const openAuthModal = useAppStore((s) => s.openAuthModal);
   const setAppSettingsOpen = useAppStore((s) => s.setAppSettingsOpen);
   const setAppSettingsTab = useAppStore((s) => s.setAppSettingsTab);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    if (open) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [open]);
 
   const token = useAppStore((s) => s.token);
 
@@ -51,6 +39,7 @@ export const ProfileDropdown: React.FC = () => {
   return (
     <div ref={containerRef} className="relative flex items-center">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((prev) => !prev)}
         className="flex items-center gap-1.5 p-0.5 rounded-full hover:ring-2 hover:ring-zinc-600 transition focus:outline-none"
@@ -60,46 +49,53 @@ export const ProfileDropdown: React.FC = () => {
         <Avatar avatar={user.avatar} name={user.name} size={24} />
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-64 rounded-md border border-zinc-800 bg-zinc-900 shadow-xl z-50 overflow-hidden select-none animate-in fade-in zoom-in-95 duration-100">
-          {/* User Info Header */}
-          <div className="px-3.5 py-3 border-b border-zinc-800 flex items-center gap-3 bg-zinc-900/60">
-            <Avatar avatar={user.avatar} name={user.name} size={36} />
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-semibold text-zinc-100 truncate">{user.name}</div>
-              <div className="text-[11px] text-zinc-400 truncate">{user.email}</div>
-            </div>
-          </div>
-
-          {/* Menu Options */}
-          <div className="py-1">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                setAppSettingsTab('profile');
-                setAppSettingsOpen(true);
-              }}
-              className="w-full px-3.5 py-2 flex items-center gap-2.5 text-xs text-zinc-300 hover:bg-zinc-800/80 hover:text-zinc-100 transition"
-            >
-              <Settings size={14} className="text-zinc-400" />
-              <span>App settings</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                logout();
-              }}
-              className="w-full px-3.5 py-2 flex items-center gap-2.5 text-xs text-zinc-300 hover:bg-zinc-800/80 hover:text-red-400 transition"
-            >
-              <LogOut size={14} className="text-zinc-400" />
-              <span>Sign out</span>
-            </button>
+      <FloatingPortal
+        isOpen={open}
+        anchorRef={triggerRef}
+        ignoreRefs={[containerRef]}
+        onClose={() => setOpen(false)}
+        align="right"
+        width={256}
+        offset={6}
+        className="rounded-md border border-zinc-800 bg-zinc-900 shadow-xl overflow-hidden select-none"
+      >
+        {/* User Info Header */}
+        <div className="px-3.5 py-3 border-b border-zinc-800 flex items-center gap-3 bg-zinc-900/60">
+          <Avatar avatar={user.avatar} name={user.name} size={36} />
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-semibold text-zinc-100 truncate">{user.name}</div>
+            <div className="text-[11px] text-zinc-400 truncate">{user.email}</div>
           </div>
         </div>
-      )}
+
+        {/* Menu Options */}
+        <div className="py-1">
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              setAppSettingsTab('profile');
+              setAppSettingsOpen(true);
+            }}
+            className="w-full px-3.5 py-2 flex items-center gap-2.5 text-xs text-zinc-300 hover:bg-zinc-800/80 hover:text-zinc-100 transition"
+          >
+            <Settings size={14} className="text-zinc-400" />
+            <span>App settings</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              logout();
+            }}
+            className="w-full px-3.5 py-2 flex items-center gap-2.5 text-xs text-zinc-300 hover:bg-zinc-800/80 hover:text-red-400 transition"
+          >
+            <LogOut size={14} className="text-zinc-400" />
+            <span>Sign out</span>
+          </button>
+        </div>
+      </FloatingPortal>
     </div>
   );
 };

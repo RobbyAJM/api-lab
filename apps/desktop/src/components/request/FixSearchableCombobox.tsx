@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, Search, X } from 'lucide-react';
 import { calculateFixPopoverPosition } from '../../utils/fixParsedMessage';
+import { Z_INDEX } from '../../utils/floatingPosition';
 
 export interface FixComboboxOption {
   value: string;
@@ -190,7 +191,7 @@ export const FixSearchableCombobox: React.FC<FixSearchableComboboxProps> = ({
           left: position.left,
           width: position.width,
           maxHeight: position.maxHeight,
-          zIndex: 95,
+          zIndex: Z_INDEX.COMBOBOX,
           ...(position.placement === 'below'
             ? { top: anchorRect.bottom + 4 }
             : { bottom: window.innerHeight - anchorRect.top + 4 }),
@@ -207,6 +208,7 @@ export const FixSearchableCombobox: React.FC<FixSearchableComboboxProps> = ({
             ref={panelRef}
             role="dialog"
             aria-label={ariaLabel}
+            data-tauri-no-drag=""
             style={panelStyle}
             className="flex flex-col overflow-hidden rounded-sm border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60"
           >

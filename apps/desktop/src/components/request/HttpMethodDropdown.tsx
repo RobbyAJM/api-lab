@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
+import { FloatingPortal } from '../common/FloatingPortal';
 import {
   HTTP_METHODS,
   HttpMethod,
@@ -52,18 +53,6 @@ export function HttpMethodDropdown({
     }
   }, [isOpen, selectedIndex]);
 
-  // Outside click to dismiss
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
-
   // Keyboard navigation when open
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (disabled) return;
@@ -84,6 +73,7 @@ export function HttpMethodDropdown({
 
     if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       setIsOpen(false);
       triggerRef.current?.focus();
     } else if (e.key === 'ArrowDown') {
@@ -151,47 +141,51 @@ export function HttpMethodDropdown({
         />
       </button>
 
-      {isOpen && (
-        <div
-          role="listbox"
-          aria-label="HTTP Methods"
-          className="absolute top-[calc(100%+4px)] left-0 z-50 w-36 bg-zinc-950 border border-zinc-800 rounded p-1 space-y-0.5 font-mono shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-100"
-        >
-          {HTTP_METHODS.map((m, idx) => {
-            const isSelected = m === normMethod;
-            const isHighlighted = idx === highlightedIndex;
-            return (
-              <button
-                key={m}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => selectMethod(m)}
-                onMouseEnter={() => setHighlightedIndex(idx)}
-                className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition cursor-pointer select-none border ${
-                  isHighlighted
-                    ? 'bg-zinc-900 border-zinc-700/60 text-zinc-100'
-                    : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
-                }`}
-              >
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span
-                    className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${getHttpMethodBadgeClass(
-                      m,
-                      isSelected
-                    )}`}
-                  >
-                    {m}
-                  </span>
-                </div>
-                {isSelected && (
-                  <Check size={12} className="text-primary flex-shrink-0 ml-1.5" />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <FloatingPortal
+        isOpen={isOpen}
+        anchorRef={triggerRef}
+        ignoreRefs={[containerRef]}
+        onClose={() => setIsOpen(false)}
+        width={144}
+        offset={4}
+        role="listbox"
+        ariaLabel="HTTP Methods"
+        className="bg-zinc-950 border border-zinc-800 rounded p-1 space-y-0.5 font-mono shadow-2xl focus:outline-none overflow-y-auto"
+      >
+        {HTTP_METHODS.map((m, idx) => {
+          const isSelected = m === normMethod;
+          const isHighlighted = idx === highlightedIndex;
+          return (
+            <button
+              key={m}
+              type="button"
+              role="option"
+              aria-selected={isSelected}
+              onClick={() => selectMethod(m)}
+              onMouseEnter={() => setHighlightedIndex(idx)}
+              className={`w-full flex items-center justify-between px-2 py-1 rounded text-xs transition cursor-pointer select-none border ${
+                isHighlighted
+                  ? 'bg-zinc-900 border-zinc-700/60 text-zinc-100'
+                  : 'bg-transparent border-transparent text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${getHttpMethodBadgeClass(
+                    m,
+                    isSelected
+                  )}`}
+                >
+                  {m}
+                </span>
+              </div>
+              {isSelected && (
+                <Check size={12} className="text-primary flex-shrink-0 ml-1.5" />
+              )}
+            </button>
+          );
+        })}
+      </FloatingPortal>
     </div>
   );
 }

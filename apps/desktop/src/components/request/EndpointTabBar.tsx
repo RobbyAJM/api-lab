@@ -9,6 +9,7 @@ import { getHttpMethodColor } from '../../utils/httpMethodUtils';
 import { isTabConflicted } from '../../utils/conflictDetector';
 import { extractUrlPathname } from '../../utils/swaggerParser';
 import { EnvironmentDropdown } from '../environments/EnvironmentDropdown';
+import { FloatingPortal } from '../common/FloatingPortal';
 import { useFixSessionStore } from '../../store/useFixSessionStore';
 import { disconnectFixSession } from '../../utils/fixSessionManager';
 import { isFixSessionActive } from '../../utils/fixSession';
@@ -255,48 +256,67 @@ export const EndpointTabBar: React.FC = () => {
       </div>
 
       {/* Right-click Context Menu */}
-      {contextMenu && (
-        <div
-          style={{ top: `${contextMenu.y}px`, left: `${contextMenu.x}px` }}
-          className="fixed z-50 bg-zinc-900 border border-zinc-800 rounded shadow-xl py-1 w-44 text-xs select-none font-sans"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => {
-              const tid = contextMenu.tabId;
-              const endpoint = openEndpoints.find((item) => item.id === tid);
-              setContextMenu(null);
-              if (endpoint) handleAttemptClose(endpoint);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center justify-between"
-          >
-            <span>Close Tab</span>
-            <kbd className="text-[10px] text-zinc-500 font-mono">Ctrl+W</kbd>
-          </button>
-          <button
-            onClick={() => {
-              const tid = contextMenu.tabId;
-              setContextMenu(null);
-              closeOtherEndpoints(tid);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center justify-between"
-          >
-            <span>Close All Other Tabs</span>
-            <kbd className="text-[10px] text-zinc-500 font-mono">Ctrl+Alt+T</kbd>
-          </button>
-          <div className="h-px bg-zinc-800 my-1" />
-          <button
-            onClick={() => {
-              setContextMenu(null);
-              closeAllEndpoints();
-            }}
-            className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center justify-between"
-          >
-            <span>Close All Tabs</span>
-            <kbd className="text-[10px] text-red-500/70 font-mono">Ctrl+Shift+W</kbd>
-          </button>
-        </div>
-      )}
+      <FloatingPortal
+        isOpen={Boolean(contextMenu)}
+        getAnchorRect={() =>
+          contextMenu
+            ? {
+                left: contextMenu.x,
+                right: contextMenu.x,
+                top: contextMenu.y,
+                bottom: contextMenu.y,
+                width: 0,
+                height: 0,
+              }
+            : null
+        }
+        anchorKey={contextMenu ? `${contextMenu.tabId}:${contextMenu.x},${contextMenu.y}` : undefined}
+        onClose={() => setContextMenu(null)}
+        width={176}
+        offset={0}
+        role="menu"
+        restoreFocusOnEscape={false}
+        className="bg-zinc-900 border border-zinc-800 rounded shadow-xl py-1 text-xs select-none font-sans"
+      >
+        {contextMenu && (
+          <>
+            <button
+              onClick={() => {
+                const tid = contextMenu.tabId;
+                const endpoint = openEndpoints.find((item) => item.id === tid);
+                setContextMenu(null);
+                if (endpoint) handleAttemptClose(endpoint);
+              }}
+              className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center justify-between"
+            >
+              <span>Close Tab</span>
+              <kbd className="text-[10px] text-zinc-500 font-mono">Ctrl+W</kbd>
+            </button>
+            <button
+              onClick={() => {
+                const tid = contextMenu.tabId;
+                setContextMenu(null);
+                closeOtherEndpoints(tid);
+              }}
+              className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center justify-between"
+            >
+              <span>Close All Other Tabs</span>
+              <kbd className="text-[10px] text-zinc-500 font-mono">Ctrl+Alt+T</kbd>
+            </button>
+            <div className="h-px bg-zinc-800 my-1" />
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                closeAllEndpoints();
+              }}
+              className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center justify-between"
+            >
+              <span>Close All Tabs</span>
+              <kbd className="text-[10px] text-red-500/70 font-mono">Ctrl+Shift+W</kbd>
+            </button>
+          </>
+        )}
+      </FloatingPortal>
 
       {/* Active FIX Session Close Confirmation */}
       {confirmFixEndpoint && (

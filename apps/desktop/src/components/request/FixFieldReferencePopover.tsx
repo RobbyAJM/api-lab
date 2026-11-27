@@ -5,6 +5,7 @@ import {
   calculateFixPopoverPosition,
   type FixFieldReference,
 } from '../../utils/fixParsedMessage';
+import { Z_INDEX } from '../../utils/floatingPosition';
 
 export function FieldReferenceButton({
   label,
@@ -91,7 +92,7 @@ export function FieldReferencePopover({
     left: position.left,
     width: position.width,
     maxHeight: position.maxHeight,
-    zIndex: 90,
+    zIndex: Z_INDEX.HOVER_CARD,
     ...(position.placement === 'below'
       ? { top: anchor.bottom + 6 }
       : { bottom: window.innerHeight - anchor.top + 6 }),
@@ -103,6 +104,7 @@ export function FieldReferencePopover({
       role="dialog"
       aria-modal="false"
       aria-label={`FIX field ${reference.tag} ${reference.name}`}
+      data-tauri-no-drag=""
       tabIndex={-1}
       style={style}
       className="overflow-y-auto border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60 outline-none"

@@ -6,6 +6,7 @@ import { apiRequest } from '../../api/client';
 import { tokenizeVariables, getVariableTokenClassName, type VariableSource } from '../../utils/variableHighlight';
 import { findHoveredVariableToken, createHoverTimerController, type BoundingBox } from '../../utils/variableHover';
 import { VariableHoverCard } from './VariableHoverCard';
+import { FloatingPortal } from './FloatingPortal';
 import type { Environment, VariableResponse } from '@api-lab/api-types';
 
 interface VariableInputProps {
@@ -31,6 +32,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
   disabled = false,
   maskValue = false,
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const hoverTimer = useRef(createHoverTimerController()).current;
@@ -201,6 +203,7 @@ export const VariableInput: React.FC<VariableInputProps> = ({
 
   return (
     <div
+      ref={containerRef}
       onClick={() => inputRef.current?.focus()}
       className={`relative flex items-center overflow-visible font-mono text-xs cursor-text min-h-[2rem] ${className}`}
     >
@@ -302,33 +305,55 @@ export const VariableInput: React.FC<VariableInputProps> = ({
         </button>
       )}
 
-      {completionState && (
-        <div className="absolute z-30 left-0 top-full mt-1 min-w-48 max-w-80 border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden">
-          {completionState.items.map((name, index) => (
-            <button
-              key={name}
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                handleSelectCompletion(name);
-              }}
-              className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 font-mono text-[11px] ${
-                index === completionState.selected ? 'bg-primary/20 text-white' : 'text-zinc-300 hover:bg-zinc-800'
-              }`}
-            >
-              <span>{completionState.isVariable ? `{{${name}}}` : name}</span>
-              {!completionState.isVariable && (
-                <span className="text-[9px] font-sans px-1 py-0.2 rounded bg-zinc-800 text-emerald-400 border border-zinc-700">
-                  enum
-                </span>
-              )}
-            </button>
-          ))}
-          <div className="border-t border-zinc-800 px-2 py-1 text-[10px] text-zinc-500">
-            Enter / Tab to insert
-          </div>
-        </div>
-      )}
+      <FloatingPortal
+        isOpen={Boolean(completionState)}
+        anchorRef={containerRef}
+        onClose={() => setCompletionState(null)}
+        minWidth={192}
+        maxWidth={320}
+        maxHeight={260}
+        offset={4}
+        role="listbox"
+        restoreFocusOnEscape={false}
+        onMouseDown={(e) => e.preventDefault()}
+        className="flex flex-col border border-zinc-700 bg-zinc-900 shadow-xl rounded overflow-hidden"
+      >
+        {completionState && (
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              {completionState.items.map((name, index) => (
+                <button
+                  key={name}
+                  type="button"
+                  role="option"
+                  aria-selected={index === completionState.selected}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelectCompletion(name);
+                  }}
+                  className={`flex items-center justify-between w-full text-left px-2.5 py-1.5 font-mono text-[11px] ${
+                    index === completionState.selected
+                      ? 'bg-primary/20 text-white'
+                      : 'text-zinc-300 hover:bg-zinc-800'
+                  }`}
+                >
+                  <span className="truncate">
+                    {completionState.isVariable ? `{{${name}}}` : name}
+                  </span>
+                  {!completionState.isVariable && (
+                    <span className="text-[9px] font-sans px-1 py-0.2 rounded bg-zinc-800 text-emerald-400 border border-zinc-700 ml-2 flex-shrink-0">
+                      enum
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="border-t border-zinc-800 px-2 py-1 text-[10px] text-zinc-500 flex-shrink-0">
+              Enter / Tab to insert
+            </div>
+          </>
+        )}
+      </FloatingPortal>
 
       {/* Variable Hover Card */}
       {hoverState && (

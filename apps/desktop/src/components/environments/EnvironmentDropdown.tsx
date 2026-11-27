@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, Check, Settings } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import type { Environment } from '@api-lab/api-types';
 import { Skeleton } from '../common/Skeleton';
+import { FloatingPortal } from '../common/FloatingPortal';
 import {
   getEnvironmentDropdownSizeClass,
   getEnvironmentDropdownTitle,
@@ -72,31 +73,6 @@ export function EnvironmentDropdown({
     isBootstrapping
   );
 
-  // Close on outside click
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
-
-  // Keyboard navigation: Escape closes
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setIsOpen(false);
-        triggerRef.current?.focus();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
-
   const sizeClasses = getEnvironmentDropdownSizeClass(size);
 
   if (isEffectiveLoading) {
@@ -143,106 +119,109 @@ export function EnvironmentDropdown({
         />
       </button>
 
-      {isOpen && (
-        <div
-          className={`absolute z-50 mt-1.5 w-56 bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-1 font-sans animate-in fade-in zoom-in-95 duration-100 ${
-            align === 'right' ? 'right-0' : 'left-0'
-          }`}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="px-2 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider font-mono flex items-center justify-between select-none">
-            <span>Environments</span>
-            {environments.length > 0 && (
-              <span className="text-[9px] text-zinc-600 font-normal">
-                {environments.length} total
-              </span>
-            )}
-          </div>
+      <FloatingPortal
+        isOpen={isOpen}
+        anchorRef={triggerRef}
+        ignoreRefs={[containerRef]}
+        onClose={() => setIsOpen(false)}
+        align={align}
+        width={224}
+        offset={6}
+        maxHeight={320}
+        className="flex flex-col bg-zinc-950 border border-zinc-800 rounded-md shadow-2xl p-1 font-sans overflow-hidden"
+      >
+        <div className="px-2 py-1 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider font-mono flex items-center justify-between select-none flex-shrink-0">
+          <span>Environments</span>
+          {environments.length > 0 && (
+            <span className="text-[9px] text-zinc-600 font-normal">
+              {environments.length} total
+            </span>
+          )}
+        </div>
 
-          <div className="max-h-56 overflow-y-auto space-y-0.5">
-            {/* No Environment option */}
+        <div className="flex-1 min-h-0 max-h-56 overflow-y-auto space-y-0.5">
+          {/* No Environment option */}
+          <button
+            type="button"
+            onClick={() => {
+              setActiveEnvironmentId(null);
+              setIsOpen(false);
+              triggerRef.current?.focus();
+            }}
+            className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs transition text-left cursor-pointer ${
+              !activeEnvironmentId
+                ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 flex-shrink-0" />
+              <span className="truncate font-mono">No Environment</span>
+            </div>
+            {!activeEnvironmentId && (
+              <Check size={12} className="text-primary flex-shrink-0 ml-1" />
+            )}
+          </button>
+
+          {/* List of environments */}
+          {environments.map((env) => {
+            const isSelected = env.id === activeEnvironmentId;
+            return (
+              <button
+                key={env.id}
+                type="button"
+                onClick={() => {
+                  setActiveEnvironmentId(env.id);
+                  setIsOpen(false);
+                  triggerRef.current?.focus();
+                }}
+                className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs transition text-left cursor-pointer ${
+                  isSelected
+                    ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
+                    : 'text-zinc-300 hover:text-white hover:bg-zinc-900/60 border border-transparent'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                      isSelected ? 'bg-emerald-400' : 'bg-zinc-600'
+                    }`}
+                  />
+                  <span className="truncate font-mono font-medium">{env.name}</span>
+                  {env.is_default && (
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-zinc-500 font-mono">
+                      def
+                    </span>
+                  )}
+                </div>
+                {isSelected && (
+                  <Check size={12} className="text-primary flex-shrink-0 ml-1" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {showManageShortcut && (
+          <div className="flex-shrink-0">
+            <div className="h-px bg-zinc-800/80 my-1" />
             <button
               type="button"
               onClick={() => {
-                setActiveEnvironmentId(null);
                 setIsOpen(false);
-                triggerRef.current?.focus();
+                setEnvModalOpen(true);
               }}
-              className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs transition text-left cursor-pointer ${
-                !activeEnvironmentId
-                  ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
-                  : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60 border border-transparent'
-              }`}
+              className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80 transition cursor-pointer"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-600 flex-shrink-0" />
-                <span className="truncate font-mono">No Environment</span>
+              <div className="flex items-center gap-1.5">
+                <Settings size={12} className="text-zinc-400" />
+                <span>Manage Environments</span>
               </div>
-              {!activeEnvironmentId && (
-                <Check size={12} className="text-primary flex-shrink-0 ml-1" />
-              )}
+              <span className="text-[10px] text-zinc-600 font-mono">Ctrl+E</span>
             </button>
-
-            {/* List of environments */}
-            {environments.map((env) => {
-              const isSelected = env.id === activeEnvironmentId;
-              return (
-                <button
-                  key={env.id}
-                  type="button"
-                  onClick={() => {
-                    setActiveEnvironmentId(env.id);
-                    setIsOpen(false);
-                    triggerRef.current?.focus();
-                  }}
-                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs transition text-left cursor-pointer ${
-                    isSelected
-                      ? 'bg-zinc-900 text-white font-medium border border-zinc-800'
-                      : 'text-zinc-300 hover:text-white hover:bg-zinc-900/60 border border-transparent'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                        isSelected ? 'bg-emerald-400' : 'bg-zinc-600'
-                      }`}
-                    />
-                    <span className="truncate font-mono font-medium">{env.name}</span>
-                    {env.is_default && (
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-zinc-500 font-mono">
-                        def
-                      </span>
-                    )}
-                  </div>
-                  {isSelected && (
-                    <Check size={12} className="text-primary flex-shrink-0 ml-1" />
-                  )}
-                </button>
-              );
-            })}
           </div>
-
-          {showManageShortcut && (
-            <>
-              <div className="h-px bg-zinc-800/80 my-1" />
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  setEnvModalOpen(true);
-                }}
-                className="w-full flex items-center justify-between px-2 py-1.5 rounded text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80 transition cursor-pointer"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Settings size={12} className="text-zinc-400" />
-                  <span>Manage Environments</span>
-                </div>
-                <span className="text-[10px] text-zinc-600 font-mono">Ctrl+E</span>
-              </button>
-            </>
-          )}
-        </div>
-      )}
+        )}
+      </FloatingPortal>
     </div>
   );
 }

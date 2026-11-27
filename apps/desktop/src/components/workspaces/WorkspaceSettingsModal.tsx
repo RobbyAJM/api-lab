@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore } from '../../store/useAppStore';
 import { apiRequest } from '../../api/client';
 import { Avatar } from '../common/Avatar';
+import { FloatingPortal } from '../common/FloatingPortal';
 import { filterWorkspaces, getWorkspaceInitials } from '../../utils/workspacePicker';
 import { validateInvitationToken, formatJoinErrorMessage } from '../../utils/workspaceJoin';
 import type { WorkspaceSummary } from '@api-lab/api-types';
@@ -42,7 +43,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
   // Action popover state
   const [menuWsId, setMenuWsId] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   // Create workspace dialog state
   const [showCreateWs, setShowCreateWs] = useState(false);
@@ -55,20 +56,6 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
   // Delete workspace dialog state
   const [deletingWs, setDeletingWs] = useState<WorkspaceSummary | null>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuWsId(null);
-      }
-    }
-    if (menuWsId) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [menuWsId]);
 
   // Create Workspace Mutation
   const createWsMutation = useMutation({
@@ -153,6 +140,9 @@ export const WorkspaceSettingsModal: React.FC = () => {
   };
 
   const filteredWorkspaces = filterWorkspaces(workspaces, search);
+  const activeMenuWs = menuWsId
+    ? filteredWorkspaces.find((w) => w.id === menuWsId) ?? null
+    : null;
 
   return (
     <div
@@ -311,47 +301,20 @@ export const WorkspaceSettingsModal: React.FC = () => {
                         <div className="relative">
                           <button
                             type="button"
-                            onClick={() => setMenuWsId(menuWsId === ws.id ? null : ws.id)}
+                            onClick={(e) => {
+                              if (menuWsId === ws.id) {
+                                setMenuWsId(null);
+                                menuTriggerRef.current = null;
+                              } else {
+                                menuTriggerRef.current = e.currentTarget;
+                                setMenuWsId(ws.id);
+                              }
+                            }}
                             className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 transition"
                             title="More options"
                           >
                             <MoreHorizontal size={14} />
                           </button>
-
-                          {menuWsId === ws.id && (
-                            <div
-                              ref={menuRef}
-                              className="absolute right-0 top-full mt-1 w-44 rounded-md border border-zinc-800 bg-zinc-900 shadow-xl z-50 py-1 text-left text-xs"
-                            >
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMenuWsId(null);
-                                  setActiveWorkspaceId(ws.id);
-                                  setWorkspaceModalOpen(false);
-                                  setMembersModalOpen(true, 'general');
-                                }}
-                                className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-zinc-800 text-zinc-300 hover:text-white transition"
-                              >
-                                <Settings size={12} />
-                                <span>Configure workspace</span>
-                              </button>
-
-                              {workspaces.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setMenuWsId(null);
-                                    setDeletingWs(ws);
-                                  }}
-                                  className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-zinc-800 text-red-400 hover:text-red-300 transition"
-                                >
-                                  <Trash2 size={12} />
-                                  <span>Delete workspace</span>
-                                </button>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
                     </td>
@@ -367,6 +330,57 @@ export const WorkspaceSettingsModal: React.FC = () => {
             </div>
           )}
         </div>
+
+        <FloatingPortal
+          isOpen={Boolean(activeMenuWs)}
+          anchorRef={menuTriggerRef}
+          anchorKey={menuWsId ?? undefined}
+          onClose={() => {
+            setMenuWsId(null);
+            menuTriggerRef.current = null;
+          }}
+          align="right"
+          width={176}
+          offset={4}
+          role="menu"
+          className="rounded-md border border-zinc-800 bg-zinc-900 shadow-xl py-1 text-left text-xs"
+        >
+          {activeMenuWs && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setMenuWsId(null);
+                  menuTriggerRef.current = null;
+                  setActiveWorkspaceId(activeMenuWs.id);
+                  setWorkspaceModalOpen(false);
+                  setMembersModalOpen(true, 'general');
+                }}
+                className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-zinc-800 text-zinc-300 hover:text-white transition"
+              >
+                <Settings size={12} />
+                <span>Configure workspace</span>
+              </button>
+
+              {workspaces.length > 1 && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setMenuWsId(null);
+                    menuTriggerRef.current = null;
+                    setDeletingWs(activeMenuWs);
+                  }}
+                  className="w-full px-3 py-1.5 flex items-center gap-2 hover:bg-zinc-800 text-red-400 hover:text-red-300 transition"
+                >
+                  <Trash2 size={12} />
+                  <span>Delete workspace</span>
+                </button>
+              )}
+            </>
+          )}
+        </FloatingPortal>
 
         {/* Create Workspace Inline Sub-dialog */}
         {showCreateWs && (

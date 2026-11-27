@@ -40,6 +40,7 @@ import {
 } from '../../utils/responseViewerUtils';
 import { FormattedBodyViewer } from './FormattedBodyViewer';
 import { ConfirmDeleteModal } from '../common/ConfirmDeleteModal';
+import { Select } from '../common/Select';
 
 export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
   const queryClient = useQueryClient();
@@ -656,15 +657,17 @@ export const ResponseViewer: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) =
                   )}
                 </div>
 
-                <select
+                <Select
                   value={directionFilter}
-                  onChange={(e) => setDirectionFilter(e.target.value as MessageDirectionFilter)}
-                  className="bg-zinc-900 border border-zinc-800 text-zinc-300 px-2 py-0.5 rounded text-xs focus:outline-none cursor-pointer"
-                >
-                  <option value="all">All Messages</option>
-                  <option value="in">Inbound (↓)</option>
-                  <option value="out">Outbound (↑)</option>
-                </select>
+                  onChange={(val) => setDirectionFilter(val as MessageDirectionFilter)}
+                  options={[
+                    { value: 'all', label: 'All Messages' },
+                    { value: 'in', label: 'Inbound (↓)' },
+                    { value: 'out', label: 'Outbound (↑)' },
+                  ]}
+                  size="xs"
+                  className="w-32"
+                />
 
                 <button
                   type="button"

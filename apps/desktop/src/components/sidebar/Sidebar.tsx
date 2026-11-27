@@ -34,6 +34,7 @@ import {
 import { GenerateGrpcModal } from './GenerateGrpcModal';
 import { GenerateSwaggerModal } from './GenerateSwaggerModal';
 import { Select } from '../common/Select';
+import { FloatingPortal } from '../common/FloatingPortal';
 import { CollectionSettingsModal } from '../collections/CollectionSettingsModal';
 import { SyncReflectionModal } from '../collections/SyncReflectionModal';
 import { SyncSwaggerModal } from '../collections/SyncSwaggerModal';
@@ -699,69 +700,84 @@ const CollectionNode: React.FC<{
       </div>
 
       {/* Right-click Context Menu (Fix for Bug 2) */}
-      {contextMenuPos && (
-        <div
-          style={{ top: `${contextMenuPos.y}px`, left: `${contextMenuPos.x}px` }}
-          className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
-          onClick={(e) => e.stopPropagation()}
+      <FloatingPortal
+        isOpen={Boolean(contextMenuPos)}
+        getAnchorRect={() =>
+          contextMenuPos
+            ? {
+                left: contextMenuPos.x,
+                right: contextMenuPos.x,
+                top: contextMenuPos.y,
+                bottom: contextMenuPos.y,
+                width: 0,
+                height: 0,
+              }
+            : null
+        }
+        anchorKey={contextMenuPos ? `${contextMenuPos.x},${contextMenuPos.y}` : undefined}
+        onClose={() => setContextMenuPos(null)}
+        width={176}
+        offset={0}
+        role="menu"
+        restoreFocusOnEscape={false}
+        className="bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 text-xs select-none"
+      >
+        <button
+          onClick={() => {
+            setContextMenuPos(null);
+            setIsRenaming(true);
+            setRenameValue(collection.name);
+          }}
+          className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
         >
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setIsRenaming(true);
-              setRenameValue(collection.name);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <Edit2 size={12} className="text-zinc-400" />
-            <span>Rename</span>
-          </button>
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setShowSettingsModal(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <Settings size={12} className="text-zinc-400" />
-            <span>Setting</span>
-          </button>
-          <div className="h-px bg-zinc-800 my-1" />
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setIsOpen(true);
-              setShowAddEndpoint(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <Plus size={12} className="text-zinc-400" />
-            <span>Add Endpoint</span>
-          </button>
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setIsOpen(true);
-              setShowAddFolder(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-          >
-            <Folder size={12} className="text-amber-400" />
-            <span>Add Folder</span>
-          </button>
-          <div className="h-px bg-zinc-800 my-1" />
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              onDelete();
-            }}
-            className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-2"
-          >
-            <Trash2 size={12} />
-            <span>Delete Collection</span>
-          </button>
-        </div>
-      )}
+          <Edit2 size={12} className="text-zinc-400" />
+          <span>Rename</span>
+        </button>
+        <button
+          onClick={() => {
+            setContextMenuPos(null);
+            setShowSettingsModal(true);
+          }}
+          className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+        >
+          <Settings size={12} className="text-zinc-400" />
+          <span>Setting</span>
+        </button>
+        <div className="h-px bg-zinc-800 my-1" />
+        <button
+          onClick={() => {
+            setContextMenuPos(null);
+            setIsOpen(true);
+            setShowAddEndpoint(true);
+          }}
+          className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+        >
+          <Plus size={12} className="text-zinc-400" />
+          <span>Add Endpoint</span>
+        </button>
+        <button
+          onClick={() => {
+            setContextMenuPos(null);
+            setIsOpen(true);
+            setShowAddFolder(true);
+          }}
+          className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+        >
+          <Folder size={12} className="text-amber-400" />
+          <span>Add Folder</span>
+        </button>
+        <div className="h-px bg-zinc-800 my-1" />
+        <button
+          onClick={() => {
+            setContextMenuPos(null);
+            onDelete();
+          }}
+          className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-2"
+        >
+          <Trash2 size={12} />
+          <span>Delete Collection</span>
+        </button>
+      </FloatingPortal>
 
       {showAddFolder && (
         <div className="p-1.5 pl-4 flex gap-1 bg-zinc-900/60 border-t border-zinc-800">
@@ -1171,118 +1187,137 @@ const FolderTreeNodeComponent: React.FC<{
       </div>
 
       {/* Right-click Context Menu */}
-      {folderContextMenuPos && (
-        <div
-          style={{ top: `${folderContextMenuPos.y}px`, left: `${folderContextMenuPos.x}px` }}
-          className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 w-44 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {isReflection && (
-            <>
-              {onSyncReflection && (
-                <button
-                  onClick={() => {
-                    setFolderContextMenuPos(null);
-                    onSyncReflection(node.folder.id);
-                  }}
-                  className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-                >
-                  <RefreshCw size={12} className="text-secondary" />
-                  <span>Sync Reflection</span>
-                </button>
-              )}
+      <FloatingPortal
+        isOpen={Boolean(folderContextMenuPos)}
+        getAnchorRect={() =>
+          folderContextMenuPos
+            ? {
+                left: folderContextMenuPos.x,
+                right: folderContextMenuPos.x,
+                top: folderContextMenuPos.y,
+                bottom: folderContextMenuPos.y,
+                width: 0,
+                height: 0,
+              }
+            : null
+        }
+        anchorKey={
+          folderContextMenuPos
+            ? `${folderContextMenuPos.x},${folderContextMenuPos.y}`
+            : undefined
+        }
+        onClose={() => setFolderContextMenuPos(null)}
+        width={176}
+        offset={0}
+        role="menu"
+        restoreFocusOnEscape={false}
+        className="bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 text-xs select-none"
+      >
+        {isReflection && (
+          <>
+            {onSyncReflection && (
               <button
                 onClick={() => {
                   setFolderContextMenuPos(null);
-                  openReflectionSettingsModal(node.folder.id, collectionId);
+                  onSyncReflection(node.folder.id);
                 }}
                 className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
               >
-                <Settings size={12} className="text-zinc-400" />
-                <span>Settings</span>
+                <RefreshCw size={12} className="text-secondary" />
+                <span>Sync Reflection</span>
               </button>
-              <div className="h-px bg-zinc-800 my-1" />
-            </>
-          )}
-          {isSwagger && (
-            <>
-              {onSyncSwagger && (
-                <button
-                  onClick={() => {
-                    setFolderContextMenuPos(null);
-                    onSyncSwagger(node.folder.id);
-                  }}
-                  className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-                >
-                  <RefreshCw size={12} className="text-emerald-400" />
-                  <span>Sync Swagger</span>
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  setFolderContextMenuPos(null);
-                  openSwaggerSettingsModal(node.folder.id, collectionId);
-                }}
-                className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-              >
-                <Settings size={12} className="text-zinc-400" />
-                <span>Settings</span>
-              </button>
-              <div className="h-px bg-zinc-800 my-1" />
-            </>
-          )}
-          {!isReflection && !isSwagger && (
-            <>
-              <button
-                onClick={() => {
-                  setFolderContextMenuPos(null);
-                  openFolderSettingsModal(node.folder.id, collectionId);
-                }}
-                className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
-              >
-                <Settings size={12} className="text-zinc-400" />
-                <span>Settings</span>
-              </button>
-              <div className="h-px bg-zinc-800 my-1" />
-            </>
-          )}
-          {canAddEndpoint && (
+            )}
             <button
               onClick={() => {
                 setFolderContextMenuPos(null);
-                setIsOpen(true);
-                setShowAddSubEndpoint(true);
+                openReflectionSettingsModal(node.folder.id, collectionId);
               }}
               className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
             >
-              <Plus size={12} className="text-zinc-400" />
-              <span>Add Endpoint</span>
+              <Settings size={12} className="text-zinc-400" />
+              <span>Settings</span>
             </button>
-          )}
+            <div className="h-px bg-zinc-800 my-1" />
+          </>
+        )}
+        {isSwagger && (
+          <>
+            {onSyncSwagger && (
+              <button
+                onClick={() => {
+                  setFolderContextMenuPos(null);
+                  onSyncSwagger(node.folder.id);
+                }}
+                className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+              >
+                <RefreshCw size={12} className="text-emerald-400" />
+                <span>Sync Swagger</span>
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setFolderContextMenuPos(null);
+                openSwaggerSettingsModal(node.folder.id, collectionId);
+              }}
+              className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+            >
+              <Settings size={12} className="text-zinc-400" />
+              <span>Settings</span>
+            </button>
+            <div className="h-px bg-zinc-800 my-1" />
+          </>
+        )}
+        {!isReflection && !isSwagger && (
+          <>
+            <button
+              onClick={() => {
+                setFolderContextMenuPos(null);
+                openFolderSettingsModal(node.folder.id, collectionId);
+              }}
+              className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+            >
+              <Settings size={12} className="text-zinc-400" />
+              <span>Settings</span>
+            </button>
+            <div className="h-px bg-zinc-800 my-1" />
+          </>
+        )}
+        {canAddEndpoint && (
           <button
             onClick={() => {
               setFolderContextMenuPos(null);
               setIsOpen(true);
-              setShowAddSubFolder(true);
+              setShowAddSubEndpoint(true);
             }}
             className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
           >
-            <Folder size={12} className="text-amber-400" />
-            <span>Add Subfolder</span>
+            <Plus size={12} className="text-zinc-400" />
+            <span>Add Endpoint</span>
           </button>
-          <div className="h-px bg-zinc-800 my-1" />
-          <button
-            onClick={() => {
-              setFolderContextMenuPos(null);
-              setShowDeleteFolderModal(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-2"
-          >
-            <Trash2 size={12} />
-            <span>Delete Folder</span>
-          </button>
-        </div>
-      )}
+        )}
+        <button
+          onClick={() => {
+            setFolderContextMenuPos(null);
+            setIsOpen(true);
+            setShowAddSubFolder(true);
+          }}
+          className="w-full px-3 py-1.5 text-left text-zinc-200 hover:bg-zinc-800 flex items-center gap-2"
+        >
+          <Folder size={12} className="text-amber-400" />
+          <span>Add Subfolder</span>
+        </button>
+        <div className="h-px bg-zinc-800 my-1" />
+        <button
+          onClick={() => {
+            setFolderContextMenuPos(null);
+            setShowDeleteFolderModal(true);
+          }}
+          className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-2"
+        >
+          <Trash2 size={12} />
+          <span>Delete Folder</span>
+        </button>
+      </FloatingPortal>
 
       {showAddSubFolder && (
         <div className="p-1 pl-4 flex gap-1 bg-zinc-900/60 border-t border-zinc-800 my-1 rounded">
@@ -1516,24 +1551,39 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
       </div>
 
       {/* Right-click Context Menu */}
-      {contextMenuPos && (
-        <div
-          style={{ top: `${contextMenuPos.y}px`, left: `${contextMenuPos.x}px` }}
-          className="fixed z-50 bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 w-40 text-xs select-none animate-in fade-in zoom-in-95 duration-100"
-          onClick={(e) => e.stopPropagation()}
+      <FloatingPortal
+        isOpen={Boolean(contextMenuPos)}
+        getAnchorRect={() =>
+          contextMenuPos
+            ? {
+                left: contextMenuPos.x,
+                right: contextMenuPos.x,
+                top: contextMenuPos.y,
+                bottom: contextMenuPos.y,
+                width: 0,
+                height: 0,
+              }
+            : null
+        }
+        anchorKey={contextMenuPos ? `${contextMenuPos.x},${contextMenuPos.y}` : undefined}
+        onClose={() => setContextMenuPos(null)}
+        width={160}
+        offset={0}
+        role="menu"
+        restoreFocusOnEscape={false}
+        className="bg-zinc-900 border border-zinc-700 rounded-md shadow-xl py-1 text-xs select-none"
+      >
+        <button
+          onClick={() => {
+            setContextMenuPos(null);
+            setShowDeleteModal(true);
+          }}
+          className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-2"
         >
-          <button
-            onClick={() => {
-              setContextMenuPos(null);
-              setShowDeleteModal(true);
-            }}
-            className="w-full px-3 py-1.5 text-left text-red-400 hover:bg-red-950/40 flex items-center gap-2"
-          >
-            <Trash2 size={12} />
-            <span>Delete Endpoint</span>
-          </button>
-        </div>
-      )}
+          <Trash2 size={12} />
+          <span>Delete Endpoint</span>
+        </button>
+      </FloatingPortal>
 
       <ConfirmDeleteModal
         isOpen={showDeleteModal}

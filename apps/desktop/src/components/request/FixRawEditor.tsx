@@ -17,6 +17,7 @@ import {
   type FixRawHoverInfo,
 } from '../../utils/fixHighlight';
 import { calculateFixPopoverPosition } from '../../utils/fixParsedMessage';
+import { Z_INDEX } from '../../utils/floatingPosition';
 import type { VariableSource } from '../../utils/variableHighlight';
 import {
   createHoverTimerController,
@@ -399,7 +400,7 @@ function FixRawFieldTooltip({
     position: 'fixed',
     left: position.left,
     maxWidth: position.width,
-    zIndex: 90,
+    zIndex: Z_INDEX.HOVER_CARD,
     ...(position.placement === 'below'
       ? { top: rect.bottom + 6 }
       : { bottom: window.innerHeight - rect.top + 6 }),
@@ -408,6 +409,7 @@ function FixRawFieldTooltip({
   return createPortal(
     <div
       role="tooltip"
+      data-tauri-no-drag=""
       style={style}
       className="pointer-events-none rounded-sm border border-zinc-700 bg-zinc-950 px-2.5 py-2 shadow-2xl shadow-black/60 space-y-1"
     >
@@ -511,7 +513,7 @@ function FixRawVariableCompletionMenu({
     left: position.left,
     width: position.width,
     maxHeight: position.maxHeight,
-    zIndex: 95,
+    zIndex: Z_INDEX.COMBOBOX,
     ...(position.placement === 'below'
       ? { top: completion.anchor.bottom + 4 }
       : { bottom: window.innerHeight - completion.anchor.top + 4 }),
@@ -521,6 +523,7 @@ function FixRawVariableCompletionMenu({
     <div
       role="listbox"
       aria-label="Insert environment variable"
+      data-tauri-no-drag=""
       style={style}
       className="overflow-y-auto rounded-sm border border-zinc-700 bg-zinc-950 shadow-2xl shadow-black/60"
     >

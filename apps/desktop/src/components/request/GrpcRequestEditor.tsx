@@ -38,6 +38,7 @@ import { JsonEditor } from '../common/JsonEditor';
 import { VariableInput } from '../common/VariableInput';
 import { LockedVariableText } from '../common/LockedVariableText';
 import { Select } from '../common/Select';
+import { FloatingPortal } from '../common/FloatingPortal';
 import { resolveInheritedGrpcAddress, getFolderPath } from '../../utils/folderTree';
 import { KeyValueTable } from '../common/KeyValueTable';
 import { ScriptEditorPane } from './ScriptEditorPane';
@@ -352,7 +353,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   const [isMethodPickerOpen, setIsMethodPickerOpen] = useState(false);
   const [methodSearchQuery, setMethodSearchQuery] = useState('');
-  const methodPickerRef = useRef<HTMLDivElement>(null);
+  const methodPickerTriggerRef = useRef<HTMLButtonElement>(null);
   const methodSearchInputRef = useRef<HTMLInputElement>(null);
 
   // Track previous endpoint id to only reinitialize state when switching to a different endpoint without remount
@@ -529,18 +530,6 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
 
   // Filtered services for method picker dropdown
   const filteredServices = filterGrpcServices(discoveredServices, methodSearchQuery);
-
-  // Close method picker dropdown on outside click
-  useEffect(() => {
-    if (!isMethodPickerOpen) return;
-    function handleClickOutside(e: MouseEvent) {
-      if (methodPickerRef.current && !methodPickerRef.current.contains(e.target as Node)) {
-        setIsMethodPickerOpen(false);
-      }
-    }
-    window.addEventListener('mousedown', handleClickOutside);
-    return () => window.removeEventListener('mousedown', handleClickOutside);
-  }, [isMethodPickerOpen]);
 
   // Auto-fetch sample message struct for specification tab
   useEffect(() => {
@@ -1286,6 +1275,7 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
           {/* Right Segment: Combined Service & Method Selector Trigger */}
           <div className="flex-1 relative min-w-0 pr-1">
             <button
+              ref={methodPickerTriggerRef}
               type="button"
               onClick={() => setIsMethodPickerOpen(!isMethodPickerOpen)}
               className="w-full h-8 flex items-center justify-between px-2 text-xs font-mono text-left hover:bg-zinc-850/60 rounded transition"
@@ -1308,109 +1298,113 @@ export const GrpcRequestEditor: React.FC<{ endpoint: Endpoint }> = ({ endpoint }
             </button>
 
             {/* Floating Dropdown (Image 2 + Search) */}
-            {isMethodPickerOpen && (
-              <div
-                ref={methodPickerRef}
-                className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-zinc-950 border border-zinc-800 rounded shadow-xl overflow-hidden text-xs select-none max-h-80 flex flex-col font-mono"
-              >
-                {/* Search Bar */}
-                <div className="p-2 border-b border-zinc-800/80 bg-zinc-900/70 flex items-center gap-2">
-                  <Search size={13} className="text-zinc-500 flex-shrink-0" />
-                  <input
-                    ref={methodSearchInputRef}
-                    type="text"
-                    value={methodSearchQuery}
-                    onChange={(e) => setMethodSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setIsMethodPickerOpen(false);
-                      }
-                    }}
-                    placeholder="Search service or method..."
-                    className="w-full bg-transparent text-xs font-mono text-zinc-100 placeholder-zinc-500 focus:outline-none"
-                  />
-                  {methodSearchQuery && (
-                    <button
-                      type="button"
-                      onClick={() => setMethodSearchQuery('')}
-                      className="p-0.5 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X size={12} />
-                    </button>
-                  )}
-                </div>
-
-                <div className="overflow-y-auto p-1 flex-1 space-y-2">
-                  {discoveredServices.length === 0 ? (
-                    <div className="p-4 text-center text-zinc-500 font-sans">
-                      {discovering
-                        ? 'Discovering services via reflection...'
-                        : 'No services found. Click ↻ below to query reflection.'}
-                    </div>
-                  ) : filteredServices.length === 0 ? (
-                    <div className="p-4 text-center text-zinc-500 font-sans">
-                      No methods matching "{methodSearchQuery}"
-                    </div>
-                  ) : (
-                    filteredServices.map((svc) => (
-                      <div key={svc.name} className="space-y-0.5">
-                        <div className="text-[11px] font-semibold text-zinc-400 px-2.5 pt-2 pb-0.5 truncate">
-                          {svc.name}
-                        </div>
-                        {svc.methods.map((m) => {
-                          const isSelected = selectedService === svc.name && selectedMethod === m.name;
-                          return (
-                            <button
-                              key={m.name}
-                              type="button"
-                              onClick={() => {
-                                setSelectedService(svc.name);
-                                setSelectedMethod(m.name);
-                                setIsMethodPickerOpen(false);
-                              }}
-                              className={`w-full flex items-center gap-2 px-3 py-1.5 rounded text-left transition ${
-                                isSelected
-                                  ? 'bg-zinc-800 text-white font-semibold'
-                                  : 'text-zinc-300 hover:text-white hover:bg-zinc-900'
-                              }`}
-                            >
-                              <ArrowDownUp size={12} className={isSelected ? 'text-primary' : 'text-zinc-500'} />
-                              <span className="truncate">{m.name}</span>
-                              {m.stream_type === 'bidi_stream' ? (
-                                <span className="ml-auto text-[10px] text-amber-400 font-sans px-1 rounded bg-amber-950/60 border border-amber-800/50">
-                                  bidi
-                                </span>
-                              ) : m.stream_type === 'omni_stream' ? (
-                                <span className="ml-auto text-[10px] text-amber-400 font-sans px-1 rounded bg-amber-950/60 border border-amber-800/50">
-                                  omni
-                                </span>
-                              ) : null}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Footer: Using server reflection. ↻ (Image 2) */}
-                <div className="border-t border-zinc-800/80 px-3 py-2 bg-zinc-900/60 flex items-center justify-between text-[11px] text-zinc-400 font-sans">
-                  <span>Using server reflection.</span>
+            <FloatingPortal
+              isOpen={isMethodPickerOpen}
+              anchorRef={methodPickerTriggerRef}
+              onClose={() => setIsMethodPickerOpen(false)}
+              matchTriggerWidth="exact"
+              maxHeight={320}
+              offset={6}
+              className="bg-zinc-950 border border-zinc-800 rounded shadow-xl overflow-hidden text-xs select-none flex flex-col font-mono"
+            >
+              {/* Search Bar */}
+              <div className="p-2 border-b border-zinc-800/80 bg-zinc-900/70 flex items-center gap-2 flex-shrink-0">
+                <Search size={13} className="text-zinc-500 flex-shrink-0" />
+                <input
+                  ref={methodSearchInputRef}
+                  type="text"
+                  value={methodSearchQuery}
+                  onChange={(e) => setMethodSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') {
+                      e.stopPropagation();
+                      setIsMethodPickerOpen(false);
+                    }
+                  }}
+                  placeholder="Search service or method..."
+                  className="w-full bg-transparent text-xs font-mono text-zinc-100 placeholder-zinc-500 focus:outline-none"
+                />
+                {methodSearchQuery && (
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDiscover();
-                    }}
-                    disabled={discovering}
-                    className="p-1 hover:text-white rounded hover:bg-zinc-800 text-zinc-400 transition"
-                    title="Refresh server reflection"
+                    onClick={() => setMethodSearchQuery('')}
+                    className="p-0.5 text-zinc-500 hover:text-zinc-300"
                   >
-                    <RefreshCw size={12} className={discovering ? 'animate-spin text-primary' : ''} />
+                    <X size={12} />
                   </button>
-                </div>
+                )}
               </div>
-            )}
+
+              <div className="overflow-y-auto p-1 flex-1 min-h-0 space-y-2">
+                {discoveredServices.length === 0 ? (
+                  <div className="p-4 text-center text-zinc-500 font-sans">
+                    {discovering
+                      ? 'Discovering services via reflection...'
+                      : 'No services found. Click ↻ below to query reflection.'}
+                  </div>
+                ) : filteredServices.length === 0 ? (
+                  <div className="p-4 text-center text-zinc-500 font-sans">
+                    No methods matching "{methodSearchQuery}"
+                  </div>
+                ) : (
+                  filteredServices.map((svc) => (
+                    <div key={svc.name} className="space-y-0.5">
+                      <div className="text-[11px] font-semibold text-zinc-400 px-2.5 pt-2 pb-0.5 truncate">
+                        {svc.name}
+                      </div>
+                      {svc.methods.map((m) => {
+                        const isSelected = selectedService === svc.name && selectedMethod === m.name;
+                        return (
+                          <button
+                            key={m.name}
+                            type="button"
+                            onClick={() => {
+                              setSelectedService(svc.name);
+                              setSelectedMethod(m.name);
+                              setIsMethodPickerOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 py-1.5 rounded text-left transition ${
+                              isSelected
+                                ? 'bg-zinc-800 text-white font-semibold'
+                                : 'text-zinc-300 hover:text-white hover:bg-zinc-900'
+                            }`}
+                          >
+                            <ArrowDownUp size={12} className={isSelected ? 'text-primary' : 'text-zinc-500'} />
+                            <span className="truncate">{m.name}</span>
+                            {m.stream_type === 'bidi_stream' ? (
+                              <span className="ml-auto text-[10px] text-amber-400 font-sans px-1 rounded bg-amber-950/60 border border-amber-800/50">
+                                bidi
+                              </span>
+                            ) : m.stream_type === 'omni_stream' ? (
+                              <span className="ml-auto text-[10px] text-amber-400 font-sans px-1 rounded bg-amber-950/60 border border-amber-800/50">
+                                omni
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer: Using server reflection. ↻ (Image 2) */}
+              <div className="border-t border-zinc-800/80 px-3 py-2 bg-zinc-900/60 flex items-center justify-between text-[11px] text-zinc-400 font-sans flex-shrink-0">
+                <span>Using server reflection.</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDiscover();
+                  }}
+                  disabled={discovering}
+                  className="p-1 hover:text-white rounded hover:bg-zinc-800 text-zinc-400 transition"
+                  title="Refresh server reflection"
+                >
+                  <RefreshCw size={12} className={discovering ? 'animate-spin text-primary' : ''} />
+                </button>
+              </div>
+            </FloatingPortal>
           </div>
         </div>
 
