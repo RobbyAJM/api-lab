@@ -52,7 +52,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = create_router(state);
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!("API Lab Server listening on http://{addr}");
+    tracing::info!(
+        "API Lab Server v{} ({}) listening on http://{addr}",
+        api_lab_server::version::SERVER_VERSION,
+        api_lab_server::version::SERVER_GIT_SHA
+    );
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, app).await?;

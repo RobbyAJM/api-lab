@@ -63,6 +63,16 @@ import {
   NO_ENVIRONMENT_VALUE,
 } from '../../utils/environmentDropdown';
 import { createDefaultFixEndpointConfig } from '../../utils/fixSession';
+import { formatVersionLabel, formatVersionTooltip } from '../../utils/appVersion';
+import { useClientVersion, useServerVersion } from '../../hooks/useAppVersion';
+import {
+  getCollectionRowClasses,
+  getCollectionLabelClasses,
+  getTreeChevronClasses,
+  getFolderRowClasses,
+  getFolderGuideClasses,
+  getEndpointRowClasses,
+} from '../../utils/sidebarTreeStyles';
 
 function buildEndpointConfig(protocol: Protocol): Record<string, any> {
   if (protocol === 'http') {
@@ -104,6 +114,8 @@ export const Sidebar: React.FC = () => {
   const [collapseSignal, setCollapseSignal] = useState(0);
   const [isScrolling, setIsScrolling] = useState(false);
   const scrollTimeoutRef = useRef<any>(null);
+  const clientVersion = useClientVersion();
+  const { data: serverVersionInfo } = useServerVersion();
 
   const handleSidebarScroll = () => {
     setIsScrolling(true);
@@ -242,8 +254,11 @@ export const Sidebar: React.FC = () => {
           <img src={appLogo} alt="API Lab" className="w-5 h-5 rounded object-contain" />
           <span className="font-semibold text-xs text-zinc-100 tracking-tight">API Lab</span>
         </div>
-        <span className="text-[10px] font-mono text-zinc-500 font-medium">
-          v0.1.0
+        <span
+          className="text-[10px] font-mono text-zinc-500 font-medium tabular-nums"
+          title={formatVersionTooltip(clientVersion, serverVersionInfo?.version)}
+        >
+          {formatVersionLabel(clientVersion)}
         </span>
       </div>
 
@@ -613,13 +628,7 @@ const CollectionNode: React.FC<{
         setContextMenuPos({ x: e.clientX, y: e.clientY });
       }}
     >
-      <div
-        className={`flex items-center justify-between px-2 py-1 text-xs rounded-md group transition ${
-          isCollHighlighted
-            ? 'bg-zinc-900/80 border border-zinc-800/80 text-zinc-100'
-            : 'hover:bg-zinc-900/70 text-zinc-300'
-        }`}
-      >
+      <div className={getCollectionRowClasses(isCollHighlighted)}>
         {isRenaming ? (
           <div className="flex items-center gap-1 flex-1 py-0.5">
             <input
@@ -643,26 +652,16 @@ const CollectionNode: React.FC<{
         ) : (
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="flex items-center gap-1.5 text-zinc-200 font-medium truncate flex-1 text-left py-0.5"
+            className="flex items-center gap-1.5 font-medium truncate flex-1 min-w-0 text-left py-0.5"
           >
             {isExpanded ? (
-              <ChevronDown size={13} className="text-zinc-500 flex-shrink-0" />
+              <ChevronDown size={13} className={getTreeChevronClasses(isCollHighlighted)} />
             ) : (
-              <ChevronRight size={13} className="text-zinc-500 flex-shrink-0" />
+              <ChevronRight size={13} className={getTreeChevronClasses(isCollHighlighted)} />
             )}
-            <span
-              className={`truncate font-semibold ${
-                isCollHighlighted ? 'text-white' : 'text-zinc-100'
-              }`}
-            >
+            <span className={getCollectionLabelClasses(isCollHighlighted)}>
               {collection.name}
             </span>
-            {isCollHighlighted && (
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0"
-                title="Contains active endpoint"
-              />
-            )}
             {collection.settings?.auth && collection.settings.auth.auth_type !== 'none' && (
               <span title="Shared Auth configured">
                 <Shield size={11} className="text-secondary flex-shrink-0" />
@@ -671,7 +670,7 @@ const CollectionNode: React.FC<{
           </button>
         )}
 
-        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition">
+        <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0 ml-1">
           <button
             onClick={() => setShowSettingsModal(true)}
             title="Collection Setting"
@@ -903,7 +902,7 @@ const CollectionNode: React.FC<{
 
       {/* Recursive Multi-Level Tree Rendering (Feature 2) */}
       {isExpanded && (
-        <div className="pl-3 pr-1 pb-1 space-y-0.5">
+        <div className="pl-3 pb-1 space-y-0.5">
           {(isFoldersLoading || isEndpointsLoading) && folders.length === 0 && endpoints.length === 0 ? (
             <div className="pl-3 py-1 space-y-1.5" aria-busy="true" aria-label="Loading contents">
               <div className="flex items-center gap-2 py-0.5">
@@ -1107,28 +1106,19 @@ const FolderTreeNodeComponent: React.FC<{
       }}
     >
       <div
-        className={`flex items-center justify-between w-full py-1 text-xs group rounded-md px-1.5 transition ${
-          isTargetRevealed
-            ? 'bg-primary/15 text-zinc-100 ring-1 ring-primary/60 font-medium'
-            : isFolderHighlighted
-            ? 'bg-zinc-900/80 text-zinc-100 border border-zinc-800/80 font-medium'
-            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'
-        }`}
+        className={getFolderRowClasses({
+          isHighlighted: isFolderHighlighted,
+          isTargetRevealed,
+        })}
       >
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-1.5 truncate flex-1 text-left"
+          className="flex items-center gap-1.5 truncate flex-1 min-w-0 text-left"
         >
           {isAutoExpanded ? (
-            <ChevronDown
-              size={12}
-              className={isFolderHighlighted ? 'text-zinc-300 flex-shrink-0' : 'text-zinc-500 flex-shrink-0'}
-            />
+            <ChevronDown size={12} className={getTreeChevronClasses(isFolderHighlighted)} />
           ) : (
-            <ChevronRight
-              size={12}
-              className={isFolderHighlighted ? 'text-zinc-300 flex-shrink-0' : 'text-zinc-500 flex-shrink-0'}
-            />
+            <ChevronRight size={12} className={getTreeChevronClasses(isFolderHighlighted)} />
           )}
           {isReflection ? (
             <span
@@ -1151,15 +1141,9 @@ const FolderTreeNodeComponent: React.FC<{
             />
           )}
           <span className="truncate">{node.folder.name}</span>
-          {isFolderHighlighted && (
-            <span
-              className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0 ml-auto mr-1"
-              title="Contains active endpoint"
-            />
-          )}
         </button>
 
-        <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition">
+        <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0 ml-1">
           {canAddEndpoint && (
             <button
               onClick={() => setShowAddSubEndpoint(!showAddSubEndpoint)}
@@ -1355,7 +1339,12 @@ const FolderTreeNodeComponent: React.FC<{
       )}
 
       {isAutoExpanded && (
-        <div className="pl-3 space-y-0.5 border-l border-zinc-800/40 ml-2">
+        <div
+          className={getFolderGuideClasses({
+            isHighlighted: isFolderHighlighted,
+            isTargetRevealed,
+          })}
+        >
           {/* Skeleton while endpoints in folder are loading */}
           {isEndpointsLoading && node.endpoints.length === 0 && node.children.length === 0 && (
             <div className="flex items-center gap-2 py-1 px-0.5" aria-busy="true" aria-label="Loading endpoints">
@@ -1469,11 +1458,7 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
           setActiveEndpoint(endpoint);
           localStorage.setItem('api_lab_active_endpoint_id', endpoint.id);
         }}
-        className={`w-full flex items-center justify-between px-2 py-1 rounded-md text-xs transition text-left cursor-pointer ${
-          isActive
-            ? 'bg-primary/10 text-zinc-100 font-medium border-l-2 border-primary pl-1.5'
-            : 'hover:bg-zinc-800/60 text-zinc-400 hover:text-zinc-200'
-        }`}
+        className={getEndpointRowClasses(isActive)}
       >
         <div className="flex items-center gap-2 truncate flex-1 min-w-0">
           {isFix ? (
@@ -1516,20 +1501,17 @@ const EndpointItem: React.FC<{ endpoint: Endpoint }> = ({ endpoint }) => {
           <span className="truncate">{displayName}</span>
         </div>
 
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="hidden group-hover:flex items-center flex-shrink-0 ml-1">
           <button
             onClick={(e) => {
               e.stopPropagation();
               setShowDeleteModal(true);
             }}
             title="Delete Endpoint"
-            className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400 text-zinc-400 transition"
+            className="p-0.5 hover:text-red-400 text-zinc-400 transition"
           >
             <Trash2 size={11} />
           </button>
-          {isActive && (
-            <span className="w-1.5 h-1.5 rounded-full bg-primary ml-1" />
-          )}
         </div>
       </div>
 

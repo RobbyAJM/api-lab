@@ -9,6 +9,8 @@ import {
   resetServerUrl,
   getApiBaseUrl,
   getWsBaseUrl,
+  parseServerVersionResponse,
+  fetchServerVersion,
 } from './serverConfig.ts';
 
 test('normalizeServerUrl: defaults on empty input', () => {
@@ -90,4 +92,53 @@ test('getApiBaseUrl and getWsBaseUrl: maps protocols correctly', () => {
   setServerUrl('https://api.cloud.corp');
   assert.equal(getApiBaseUrl(), 'https://api.cloud.corp/api/v1');
   assert.equal(getWsBaseUrl(), 'wss://api.cloud.corp/api/v1');
+});
+
+test('parseServerVersionResponse: validates and normalizes server version JSON', () => {
+  assert.deepEqual(
+    parseServerVersionResponse({
+      service: 'api-lab-server',
+      version: 'v0.1.163',
+      api_version: 'v1',
+      git_sha: '71aadfa',
+    }),
+    {
+      service: 'api-lab-server',
+      version: '0.1.163',
+      api_version: 'v1',
+      git_sha: '71aadfa',
+    }
+  );
+  assert.equal(parseServerVersionResponse(null), null);
+  assert.equal(parseServerVersionResponse({ version: '   ' }), null);
+  assert.equal(parseServerVersionResponse({ status: 'ok' }), null);
+});
+
+test('fetchServerVersion: queries /api/v1/version and degrades gracefully on error or 404', async () => {
+  let requestedUrl = '';
+  const okFetch = (async (input: string | URL | Request) => {
+    requestedUrl = String(input);
+    return new Response(
+      JSON.stringify({
+        service: 'api-lab-server',
+        version: '0.1.163',
+        api_version: 'v1',
+        git_sha: '71aadfa',
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  }) as typeof fetch;
+
+  const info = await fetchServerVersion('localhost:8080/api/v1/', okFetch);
+  assert.equal(requestedUrl, 'http://localhost:8080/api/v1/version');
+  assert.equal(info?.version, '0.1.163');
+  assert.equal(info?.git_sha, '71aadfa');
+
+  const notFoundFetch = (async () => new Response('Not Found', { status: 404 })) as typeof fetch;
+  assert.equal(await fetchServerVersion('http://localhost:8080', notFoundFetch), null);
+
+  const errorFetch = (async () => {
+    throw new Error('ECONNREFUSED');
+  }) as typeof fetch;
+  assert.equal(await fetchServerVersion('http://localhost:8080', errorFetch), null);
 });
